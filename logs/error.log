@@ -1,0 +1,246 @@
+[2026-04-09 11:50:27 +0000] [1343466] [INFO] Starting gunicorn 23.0.0
+[2026-04-09 11:50:27 +0000] [1343466] [INFO] Listening at: http://0.0.0.0:5000 (1343466)
+[2026-04-09 11:50:27 +0000] [1343466] [INFO] Using worker: sync
+[2026-04-09 11:50:27 +0000] [1343474] [INFO] Booting worker with pid: 1343474
+[2026-04-09 11:50:27 +0000] [1343475] [INFO] Booting worker with pid: 1343475
+[2026-04-09 11:50:27 +0000] [1343476] [INFO] Booting worker with pid: 1343476
+[2026-04-09 11:50:27 +0000] [1343477] [INFO] Booting worker with pid: 1343477
+[2026-04-09 11:55:23 +0000] [1343466] [CRITICAL] WORKER TIMEOUT (pid:1343476)
+[2026-04-09 11:55:23 +0000] [1343476] [ERROR] Error handling request (no URI read)
+Traceback (most recent call last):
+  File "/root/casino/venv/lib/python3.12/site-packages/gunicorn/workers/sync.py", line 133, in handle
+    req = next(parser)
+          ^^^^^^^^^^^^
+  File "/root/casino/venv/lib/python3.12/site-packages/gunicorn/http/parser.py", line 41, in __next__
+    self.mesg = self.mesg_class(self.cfg, self.unreader, self.source_addr, self.req_count)
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/casino/venv/lib/python3.12/site-packages/gunicorn/http/message.py", line 259, in __init__
+    super().__init__(cfg, unreader, peer_addr)
+  File "/root/casino/venv/lib/python3.12/site-packages/gunicorn/http/message.py", line 60, in __init__
+    unused = self.parse(self.unreader)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/casino/venv/lib/python3.12/site-packages/gunicorn/http/message.py", line 271, in parse
+    self.get_data(unreader, buf, stop=True)
+  File "/root/casino/venv/lib/python3.12/site-packages/gunicorn/http/message.py", line 262, in get_data
+    data = unreader.read()
+           ^^^^^^^^^^^^^^^
+  File "/root/casino/venv/lib/python3.12/site-packages/gunicorn/http/unreader.py", line 36, in read
+    d = self.chunk()
+        ^^^^^^^^^^^^
+  File "/root/casino/venv/lib/python3.12/site-packages/gunicorn/http/unreader.py", line 63, in chunk
+    return self.sock.recv(self.mxchunk)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/casino/venv/lib/python3.12/site-packages/gunicorn/workers/base.py", line 204, in handle_abort
+    sys.exit(1)
+SystemExit: 1
+[2026-04-09 11:55:23 +0000] [1343476] [INFO] Worker exiting (pid: 1343476)
+[2026-04-09 11:55:23 +0000] [1343901] [INFO] Booting worker with pid: 1343901
+[2026-04-09 11:55:24 +0000] [1343466] [CRITICAL] WORKER TIMEOUT (pid:1343475)
+[2026-04-09 11:55:24 +0000] [1343475] [ERROR] Error handling request (no URI read)
+Traceback (most recent call last):
+  File "/root/casino/venv/lib/python3.12/site-packages/gunicorn/workers/sync.py", line 133, in handle
+    req = next(parser)
+          ^^^^^^^^^^^^
+  File "/root/casino/venv/lib/python3.12/site-packages/gunicorn/http/parser.py", line 41, in __next__
+    self.mesg = self.mesg_class(self.cfg, self.unreader, self.source_addr, self.req_count)
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/casino/venv/lib/python3.12/site-packages/gunicorn/http/message.py", line 259, in __init__
+    super().__init__(cfg, unreader, peer_addr)
+  File "/root/casino/venv/lib/python3.12/site-packages/gunicorn/http/message.py", line 60, in __init__
+    unused = self.parse(self.unreader)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/casino/venv/lib/python3.12/site-packages/gunicorn/http/message.py", line 271, in parse
+    self.get_data(unreader, buf, stop=True)
+  File "/root/casino/venv/lib/python3.12/site-packages/gunicorn/http/message.py", line 262, in get_data
+    data = unreader.read()
+           ^^^^^^^^^^^^^^^
+  File "/root/casino/venv/lib/python3.12/site-packages/gunicorn/http/unreader.py", line 36, in read
+    d = self.chunk()
+        ^^^^^^^^^^^^
+  File "/root/casino/venv/lib/python3.12/site-packages/gunicorn/http/unreader.py", line 63, in chunk
+    return self.sock.recv(self.mxchunk)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/casino/venv/lib/python3.12/site-packages/gunicorn/workers/base.py", line 204, in handle_abort
+    sys.exit(1)
+SystemExit: 1
+[2026-04-09 11:55:24 +0000] [1343475] [INFO] Worker exiting (pid: 1343475)
+[2026-04-09 11:55:24 +0000] [1343921] [INFO] Booting worker with pid: 1343921
+[2026-04-09 11:55:44 +0000] [1343466] [INFO] Handling signal: term
+[2026-04-09 11:55:44 +0000] [1343477] [INFO] Worker exiting (pid: 1343477)
+[2026-04-09 11:55:44 +0000] [1343474] [INFO] Worker exiting (pid: 1343474)
+[2026-04-09 11:55:44 +0000] [1343921] [INFO] Worker exiting (pid: 1343921)
+[2026-04-09 11:55:44 +0000] [1343901] [INFO] Worker exiting (pid: 1343901)
+[2026-04-09 11:55:44 +0000] [1343466] [INFO] Shutting down: Master
+[2026-04-09 11:55:44 +0000] [1343946] [INFO] Starting gunicorn 23.0.0
+[2026-04-09 11:55:44 +0000] [1343946] [INFO] Listening at: http://0.0.0.0:5000 (1343946)
+[2026-04-09 11:55:44 +0000] [1343946] [INFO] Using worker: sync
+[2026-04-09 11:55:44 +0000] [1343951] [INFO] Booting worker with pid: 1343951
+[2026-04-09 11:55:44 +0000] [1343952] [INFO] Booting worker with pid: 1343952
+[2026-04-09 11:55:44 +0000] [1343953] [INFO] Booting worker with pid: 1343953
+[2026-04-09 11:55:44 +0000] [1343954] [INFO] Booting worker with pid: 1343954
+[2026-04-09 11:57:19 +0000] [1343951] [INFO] Worker exiting (pid: 1343951)
+[2026-04-09 11:57:19 +0000] [1343952] [INFO] Worker exiting (pid: 1343952)
+[2026-04-09 11:57:19 +0000] [1343946] [INFO] Handling signal: term
+[2026-04-09 11:57:19 +0000] [1343953] [INFO] Worker exiting (pid: 1343953)
+[2026-04-09 11:57:19 +0000] [1343954] [INFO] Worker exiting (pid: 1343954)
+[2026-04-09 11:57:19 +0000] [1343946] [ERROR] Worker (pid:1343951) was sent SIGTERM!
+[2026-04-09 11:57:19 +0000] [1343946] [ERROR] Worker (pid:1343952) was sent SIGTERM!
+[2026-04-09 11:57:19 +0000] [1343946] [INFO] Shutting down: Master
+[2026-04-09 11:57:20 +0000] [1344195] [INFO] Starting gunicorn 23.0.0
+[2026-04-09 11:57:20 +0000] [1344195] [INFO] Listening at: http://0.0.0.0:5000 (1344195)
+[2026-04-09 11:57:20 +0000] [1344195] [INFO] Using worker: sync
+[2026-04-09 11:57:20 +0000] [1344201] [INFO] Booting worker with pid: 1344201
+[2026-04-09 11:57:20 +0000] [1344202] [INFO] Booting worker with pid: 1344202
+[2026-04-09 11:57:20 +0000] [1344203] [INFO] Booting worker with pid: 1344203
+[2026-04-09 11:57:20 +0000] [1344204] [INFO] Booting worker with pid: 1344204
+[2026-04-09 12:03:43 +0000] [1344195] [CRITICAL] WORKER TIMEOUT (pid:1344201)
+[2026-04-09 12:03:43 +0000] [1344201] [ERROR] Error handling request (no URI read)
+Traceback (most recent call last):
+  File "/root/casino/venv/lib/python3.12/site-packages/gunicorn/workers/sync.py", line 133, in handle
+    req = next(parser)
+          ^^^^^^^^^^^^
+  File "/root/casino/venv/lib/python3.12/site-packages/gunicorn/http/parser.py", line 41, in __next__
+    self.mesg = self.mesg_class(self.cfg, self.unreader, self.source_addr, self.req_count)
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/casino/venv/lib/python3.12/site-packages/gunicorn/http/message.py", line 259, in __init__
+    super().__init__(cfg, unreader, peer_addr)
+  File "/root/casino/venv/lib/python3.12/site-packages/gunicorn/http/message.py", line 60, in __init__
+    unused = self.parse(self.unreader)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/casino/venv/lib/python3.12/site-packages/gunicorn/http/message.py", line 271, in parse
+    self.get_data(unreader, buf, stop=True)
+  File "/root/casino/venv/lib/python3.12/site-packages/gunicorn/http/message.py", line 262, in get_data
+    data = unreader.read()
+           ^^^^^^^^^^^^^^^
+  File "/root/casino/venv/lib/python3.12/site-packages/gunicorn/http/unreader.py", line 36, in read
+    d = self.chunk()
+        ^^^^^^^^^^^^
+  File "/root/casino/venv/lib/python3.12/site-packages/gunicorn/http/unreader.py", line 63, in chunk
+    return self.sock.recv(self.mxchunk)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/casino/venv/lib/python3.12/site-packages/gunicorn/workers/base.py", line 204, in handle_abort
+    sys.exit(1)
+SystemExit: 1
+[2026-04-09 12:03:43 +0000] [1344201] [INFO] Worker exiting (pid: 1344201)
+[2026-04-09 12:03:44 +0000] [1344547] [INFO] Booting worker with pid: 1344547
+[2026-04-09 12:03:50 +0000] [1344195] [CRITICAL] WORKER TIMEOUT (pid:1344202)
+[2026-04-09 12:03:50 +0000] [1344202] [ERROR] Error handling request (no URI read)
+Traceback (most recent call last):
+  File "/root/casino/venv/lib/python3.12/site-packages/gunicorn/workers/sync.py", line 133, in handle
+    req = next(parser)
+          ^^^^^^^^^^^^
+  File "/root/casino/venv/lib/python3.12/site-packages/gunicorn/http/parser.py", line 41, in __next__
+    self.mesg = self.mesg_class(self.cfg, self.unreader, self.source_addr, self.req_count)
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/casino/venv/lib/python3.12/site-packages/gunicorn/http/message.py", line 259, in __init__
+    super().__init__(cfg, unreader, peer_addr)
+  File "/root/casino/venv/lib/python3.12/site-packages/gunicorn/http/message.py", line 60, in __init__
+    unused = self.parse(self.unreader)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/casino/venv/lib/python3.12/site-packages/gunicorn/http/message.py", line 271, in parse
+    self.get_data(unreader, buf, stop=True)
+  File "/root/casino/venv/lib/python3.12/site-packages/gunicorn/http/message.py", line 262, in get_data
+    data = unreader.read()
+           ^^^^^^^^^^^^^^^
+  File "/root/casino/venv/lib/python3.12/site-packages/gunicorn/http/unreader.py", line 36, in read
+    d = self.chunk()
+        ^^^^^^^^^^^^
+  File "/root/casino/venv/lib/python3.12/site-packages/gunicorn/http/unreader.py", line 63, in chunk
+    return self.sock.recv(self.mxchunk)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/casino/venv/lib/python3.12/site-packages/gunicorn/workers/base.py", line 204, in handle_abort
+    sys.exit(1)
+SystemExit: 1
+[2026-04-09 12:03:50 +0000] [1344202] [INFO] Worker exiting (pid: 1344202)
+[2026-04-09 12:03:50 +0000] [1344553] [INFO] Booting worker with pid: 1344553
+[2026-04-09 12:11:32 +0000] [1344195] [CRITICAL] WORKER TIMEOUT (pid:1344553)
+[2026-04-09 12:11:32 +0000] [1344553] [ERROR] Error handling request (no URI read)
+Traceback (most recent call last):
+  File "/root/casino/venv/lib/python3.12/site-packages/gunicorn/workers/sync.py", line 133, in handle
+    req = next(parser)
+          ^^^^^^^^^^^^
+  File "/root/casino/venv/lib/python3.12/site-packages/gunicorn/http/parser.py", line 41, in __next__
+    self.mesg = self.mesg_class(self.cfg, self.unreader, self.source_addr, self.req_count)
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/casino/venv/lib/python3.12/site-packages/gunicorn/http/message.py", line 259, in __init__
+    super().__init__(cfg, unreader, peer_addr)
+  File "/root/casino/venv/lib/python3.12/site-packages/gunicorn/http/message.py", line 60, in __init__
+    unused = self.parse(self.unreader)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/casino/venv/lib/python3.12/site-packages/gunicorn/http/message.py", line 271, in parse
+    self.get_data(unreader, buf, stop=True)
+  File "/root/casino/venv/lib/python3.12/site-packages/gunicorn/http/message.py", line 262, in get_data
+    data = unreader.read()
+           ^^^^^^^^^^^^^^^
+  File "/root/casino/venv/lib/python3.12/site-packages/gunicorn/http/unreader.py", line 36, in read
+    d = self.chunk()
+        ^^^^^^^^^^^^
+  File "/root/casino/venv/lib/python3.12/site-packages/gunicorn/http/unreader.py", line 63, in chunk
+    return self.sock.recv(self.mxchunk)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/casino/venv/lib/python3.12/site-packages/gunicorn/workers/base.py", line 204, in handle_abort
+    sys.exit(1)
+SystemExit: 1
+[2026-04-09 12:11:32 +0000] [1344553] [INFO] Worker exiting (pid: 1344553)
+[2026-04-09 12:11:32 +0000] [1344957] [INFO] Booting worker with pid: 1344957
+[2026-04-09 12:12:15 +0000] [1344195] [CRITICAL] WORKER TIMEOUT (pid:1344203)
+[2026-04-09 12:12:15 +0000] [1344195] [CRITICAL] WORKER TIMEOUT (pid:1344957)
+[2026-04-09 12:12:15 +0000] [1344203] [ERROR] Error handling request (no URI read)
+Traceback (most recent call last):
+  File "/root/casino/venv/lib/python3.12/site-packages/gunicorn/workers/sync.py", line 133, in handle
+    req = next(parser)
+          ^^^^^^^^^^^^
+  File "/root/casino/venv/lib/python3.12/site-packages/gunicorn/http/parser.py", line 41, in __next__
+    self.mesg = self.mesg_class(self.cfg, self.unreader, self.source_addr, self.req_count)
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/casino/venv/lib/python3.12/site-packages/gunicorn/http/message.py", line 259, in __init__
+    super().__init__(cfg, unreader, peer_addr)
+  File "/root/casino/venv/lib/python3.12/site-packages/gunicorn/http/message.py", line 60, in __init__
+    unused = self.parse(self.unreader)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/casino/venv/lib/python3.12/site-packages/gunicorn/http/message.py", line 271, in parse
+    self.get_data(unreader, buf, stop=True)
+  File "/root/casino/venv/lib/python3.12/site-packages/gunicorn/http/message.py", line 262, in get_data
+    data = unreader.read()
+           ^^^^^^^^^^^^^^^
+  File "/root/casino/venv/lib/python3.12/site-packages/gunicorn/http/unreader.py", line 36, in read
+    d = self.chunk()
+        ^^^^^^^^^^^^
+  File "/root/casino/venv/lib/python3.12/site-packages/gunicorn/http/unreader.py", line 63, in chunk
+    return self.sock.recv(self.mxchunk)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/casino/venv/lib/python3.12/site-packages/gunicorn/workers/base.py", line 204, in handle_abort
+    sys.exit(1)
+SystemExit: 1
+[2026-04-09 12:12:15 +0000] [1344203] [INFO] Worker exiting (pid: 1344203)
+[2026-04-09 12:12:15 +0000] [1344957] [ERROR] Error handling request (no URI read)
+Traceback (most recent call last):
+  File "/root/casino/venv/lib/python3.12/site-packages/gunicorn/workers/sync.py", line 133, in handle
+    req = next(parser)
+          ^^^^^^^^^^^^
+  File "/root/casino/venv/lib/python3.12/site-packages/gunicorn/http/parser.py", line 41, in __next__
+    self.mesg = self.mesg_class(self.cfg, self.unreader, self.source_addr, self.req_count)
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/casino/venv/lib/python3.12/site-packages/gunicorn/http/message.py", line 259, in __init__
+    super().__init__(cfg, unreader, peer_addr)
+  File "/root/casino/venv/lib/python3.12/site-packages/gunicorn/http/message.py", line 60, in __init__
+    unused = self.parse(self.unreader)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/casino/venv/lib/python3.12/site-packages/gunicorn/http/message.py", line 271, in parse
+    self.get_data(unreader, buf, stop=True)
+  File "/root/casino/venv/lib/python3.12/site-packages/gunicorn/http/message.py", line 262, in get_data
+    data = unreader.read()
+           ^^^^^^^^^^^^^^^
+  File "/root/casino/venv/lib/python3.12/site-packages/gunicorn/http/unreader.py", line 36, in read
+    d = self.chunk()
+        ^^^^^^^^^^^^
+  File "/root/casino/venv/lib/python3.12/site-packages/gunicorn/http/unreader.py", line 63, in chunk
+    return self.sock.recv(self.mxchunk)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/casino/venv/lib/python3.12/site-packages/gunicorn/workers/base.py", line 204, in handle_abort
+    sys.exit(1)
+SystemExit: 1
+[2026-04-09 12:12:15 +0000] [1344957] [INFO] Worker exiting (pid: 1344957)
+[2026-04-09 12:12:15 +0000] [1344986] [INFO] Booting worker with pid: 1344986
+[2026-04-09 12:12:15 +0000] [1344195] [ERROR] Worker (pid:1344957) was sent SIGKILL! Perhaps out of memory?
+[2026-04-09 12:12:16 +0000] [1344987] [INFO] Booting worker with pid: 1344987

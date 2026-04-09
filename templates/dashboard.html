@@ -1,0 +1,49 @@
+{% extends 'base.html' %}
+{% block title %}Tableau de bord{% endblock %}
+{% block content %}
+<div class="row g-4">
+  <div class="col-md-4">
+    <div class="card p-4 text-center">
+      <h4>👤 {{ user['username'] }}</h4>
+      <div class="display-4 fw-bold text-warning mt-2">{{ user['tokens'] }}</div>
+      <div class="text-muted">tokens</div>
+      <a href="/rewards" class="btn btn-outline-warning mt-3 w-100">🎁 Récompenses</a>
+    </div>
+  </div>
+  <div class="col-md-8">
+    <div class="card p-4">
+      <h4>🎲 Partie en cours</h4>
+      {% if active and active['status'] == 'open' %}
+        <div class="alert alert-success mt-3">
+          ✅ Session ouverte — <a href="/play" class="alert-link">Placer une mise</a>
+        </div>
+      {% elif active and active['status'] == 'spinning' %}
+        <div class="alert alert-warning mt-3">🎡 Roue en cours…</div>
+      {% else %}
+        <p class="text-muted mt-3">Aucune session ouverte pour l'instant.</p>
+      {% endif %}
+    </div>
+
+    {% if last_result %}
+    <div class="card p-4 mt-3">
+      <h5>📊 Dernier résultat</h5>
+      <p class="mt-2">Numéro gagnant : <strong class="fs-4">{{ last_result.session['winning_number'] }}</strong></p>
+      {% if last_result.bet %}
+        {% set bet = last_result.bet %}
+        <p>Ta mise :
+          <strong>{{ bet['amount'] }} tokens</strong>
+          sur {{ bet['bet_type'] }} / {{ bet['bet_value'] }}
+        </p>
+        {% if bet['result'] == 'win' %}
+          <div class="alert alert-success">🏆 Gagné ! +{{ bet['payout'] }} tokens</div>
+        {% else %}
+          <div class="alert alert-danger">😞 Perdu</div>
+        {% endif %}
+      {% else %}
+        <p class="text-muted">Tu n'avais pas misé sur cette partie.</p>
+      {% endif %}
+    </div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

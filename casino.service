@@ -1,0 +1,17 @@
+[Unit]
+Description=Casino Flask App
+After=network.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/root/casino
+EnvironmentFile=/root/casino/.env
+ExecStart=/root/casino/venv/bin/gunicorn --config /root/casino/gunicorn.conf.py "app:create_app()"
+Restart=on-failure
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
