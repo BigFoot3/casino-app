@@ -1,0 +1,194 @@
+{% extends 'base.html' %}
+{% block title %}Administration{% endblock %}
+{% block content %}
+<!-- Password modal -->
+<div class="modal fade" id="pwModal" tabindex="-1">
+  <div class="modal-dialog modal-sm modal-dialog-centered">
+    <div class="modal-content p-4 text-center">
+      <h5 id="pw-modal-title">Mot de passe</h5>
+      <div class="my-3">
+        <code id="pw-display" class="fs-5 user-select-all"></code>
+      </div>
+      <p class="text-muted small">Disparaît dans <strong id="pw-countdown">30</strong>s</p>
+      <button class="btn btn-sm btn-outline-light w-100" id="pw-copy-btn">📋 Copier</button>
+      <div id="pw-copy-ok" class="text-success mt-1 small" style="display:none">Copié !</div>
+    </div>
+  </div>
+</div>
+
+<h3 class="mb-4">⚙️ Administration</h3>
+
+<!-- Roulette controls -->
+<div class="card p-4 mb-4">
+  <h5>🎡 Contrôle de la roulette</h5>
+  <div class="row g-3 mt-1 align-items-end">
+    <div class="col-auto">
+      <span class="badge fs-6
+        {% if active and active['status'] == 'open' %}bg-success
+        {% elif active and active['status'] == 'spinning' %}bg-warning text-dark
+        {% elif active and active['status'] == 'waiting' %}bg-secondary
+        {% else %}bg-danger{% endif %}">
+        {% if active %}{{ active['status'] | upper }}{% else %}–{% endif %}
+      </span>
+    </div>
+    <div class="col-auto">
+      <button id="btn-open" class="btn btn-success"
+              {% if not active or active['status'] != 'waiting' %}disabled{% endif %}>
+        Ouvrir session
+      </button>
+    </div>
+    <div class="col-auto">
+      <button id="btn-spin" class="btn btn-warning text-dark"
+              {% if not active or active['status'] not in ('open','spinning') %}disabled{% endif %}>
+        Lancer roue
+      </button>
+    </div>
+    <div class="col-auto">
+      <a href="/roulette/display" target="_blank" class="btn btn-outline-light">📺 Affichage</a>
+    </div>
+  </div>
+
+  <!-- Mode selector -->
+  <hr class="mt-4">
+  <h6>Mode automatique</h6>
+  <div class="row g-2 align-items-end mt-1">
+    <div class="col-auto">
+      <select id="mode-select" class="form-select form-select-sm" style="width:120px">
+        <option value="manual" {% if cfg.get('auto_mode_enabled','0') == '0' %}selected{% endif %}>Manuel</option>
+        <option value="auto"   {% if cfg.get('auto_mode_enabled','0') == '1' %}selected{% endif %}>Auto</option>
+      </select>
+    </div>
+    <div class="col-auto">
+      <input type="number" id="interval-input" class="form-control form-control-sm" style="width:110px"
+             min="60" max="300" value="{{ cfg.get('auto_interval_seconds','120') }}" placeholder="Intervalle s">
+    </div>
+    <div class="col-auto">
+      <button id="btn-mode" class="btn btn-sm btn-outline-light">Appliquer</button>
+    </div>
+    <div class="col-auto">
+      <span id="mode-status" class="text-muted small"></span>
+    </div>
+  </div>
+</div>
+
+<!-- User management -->
+<div class="card p-4 mb-4">
+  <div class="d-flex justify-content-between align-items-center mb-3">
+    <h5 class="mb-0">👥 Utilisateurs</h5>
+    <button class="btn btn-sm btn-primary" data-bs-toggle="collapse" data-bs-target="#create-user-form">
+      + Créer
+    </button>
+  </div>
+
+  <div class="collapse mb-3" id="create-user-form">
+    <div class="card card-body">
+      <div class="row g-2 align-items-end">
+        <div class="col">
+          <input type="text" id="new-username" class="form-control form-control-sm" placeholder="Nom d'utilisateur">
+        </div>
+        <div class="col-auto">
+          <select id="new-role" class="form-select form-select-sm">
+            <option value="player">Joueur</option>
+            <option value="admin">Admin</option>
+          </select>
+        </div>
+        <div class="col-auto">
+          <button id="btn-create-user" class="btn btn-sm btn-success">Créer</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="table-responsive">
+    <table class="table table-dark table-sm align-middle" id="users-table">
+      <thead>
+        <tr>
+          <th>Utilisateur</th><th>Rôle</th><th>Tokens</th>
+          <th>Ajouter tokens</th><th>Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for u in users %}
+        <tr id="user-row-{{ u['id'] }}">
+          <td>{{ u['username'] }}</td>
+          <td><span class="badge {% if u['role'] == 'admin' %}bg-warning text-dark{% else %}bg-secondary{% endif %}">
+            {{ u['role'] }}</span></td>
+          <td><span class="user-tokens" data-id="{{ u['id'] }}">{{ u['tokens'] }}</span></td>
+          <td>
+            <div class="input-group input-group-sm" style="max-width:180px">
+              <input type="number" class="form-control add-tokens-input" min="1"
+                     data-id="{{ u['id'] }}" placeholder="Montant">
+              <button class="btn btn-outline-success add-tokens-btn" data-id="{{ u['id'] }}">+</button>
+            </div>
+          </td>
+          <td>
+            <button class="btn btn-sm btn-outline-warning reset-pw-btn" data-id="{{ u['id'] }}"
+                    data-name="{{ u['username'] }}">
+              🔑 Réinitialiser MDP
+            </button>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- Rewards -->
+<div class="card p-4 mb-4">
+  <div class="d-flex justify-content-between align-items-center mb-3">
+    <h5 class="mb-0">🎁 Récompenses</h5>
+    <button class="btn btn-sm btn-primary" data-bs-toggle="collapse" data-bs-target="#create-reward-form">
+      + Ajouter
+    </button>
+  </div>
+
+  <div class="collapse mb-3" id="create-reward-form">
+    <div class="card card-body">
+      <div class="row g-2">
+        <div class="col"><input type="text" id="rw-name" class="form-control form-control-sm" placeholder="Nom"></div>
+        <div class="col"><input type="text" id="rw-desc" class="form-control form-control-sm" placeholder="Description"></div>
+        <div class="col-auto"><input type="number" id="rw-cost" class="form-control form-control-sm" style="width:90px" placeholder="Coût" min="1"></div>
+        <div class="col-auto"><input type="number" id="rw-stock" class="form-control form-control-sm" style="width:80px" placeholder="Stock" min="0" value="0"></div>
+        <div class="col-auto"><button id="btn-add-reward" class="btn btn-sm btn-success">Ajouter</button></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="table-responsive">
+    <table class="table table-dark table-sm align-middle">
+      <thead>
+        <tr><th>Nom</th><th>Description</th><th>Coût</th><th>Stock</th><th>Statut</th><th>Actions</th></tr>
+      </thead>
+      <tbody id="rewards-body">
+        {% for r in rewards %}
+        <tr id="reward-row-{{ r['id'] }}">
+          <td>{{ r['name'] }}</td>
+          <td class="text-muted small">{{ r['description'] or '–' }}</td>
+          <td>{{ r['token_cost'] }}</td>
+          <td>
+            <input type="number" class="form-control form-control-sm rw-stock-input" style="width:80px"
+                   value="{{ r['stock'] }}" min="0" data-id="{{ r['id'] }}">
+          </td>
+          <td>
+            <span class="badge {% if r['active'] %}bg-success{% else %}bg-secondary{% endif %}">
+              {% if r['active'] %}Actif{% else %}Inactif{% endif %}
+            </span>
+          </td>
+          <td class="d-flex gap-1">
+            <button class="btn btn-xs btn-sm btn-outline-light rw-save-btn" data-id="{{ r['id'] }}">💾</button>
+            <button class="btn btn-xs btn-sm {% if r['active'] %}btn-outline-danger{% else %}btn-outline-success{% endif %} rw-toggle-btn"
+                    data-id="{{ r['id'] }}" data-active="{{ r['active'] }}">
+              {% if r['active'] %}Désactiver{% else %}Activer{% endif %}
+            </button>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script src="/static/js/admin.js"></script>
+{% endblock %}

@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Roulette — Affichage</title>
+  <link rel="stylesheet" href="/static/roulette/assets/css/style.css">
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { width: 100%; height: 100%; overflow: hidden;
+                 background: #1a1a2e; color: #eee; font-family: sans-serif; }
+    #container { position: relative; }
+    /* Hide the betting board — display page is view-only */
+    #betting_board { display: none !important; }
+    #notification   { display: none !important; }
+
+    #overlay {
+      position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
+      pointer-events: none; z-index: 100;
+    }
+    #status-badge {
+      font-size: 2rem; font-weight: bold; padding: .5rem 2rem;
+      border-radius: 2rem; background: rgba(0,0,0,.6); margin-bottom: 1rem;
+    }
+    #winning-display {
+      font-size: 6rem; font-weight: 900; text-shadow: 0 0 30px gold;
+      display: none;
+    }
+    #qr-block {
+      position: fixed; bottom: 20px; right: 20px;
+      background: white; padding: 8px; border-radius: 8px; z-index: 200;
+    }
+    #qr-block img { width: 120px; height: 120px; display: block; }
+    #qr-block p { font-size: .65rem; text-align: center; color: #333; margin-top: 4px; }
+    #session-id-display {
+      position: fixed; top: 10px; left: 10px; font-size: .8rem;
+      color: rgba(255,255,255,.4); z-index: 200;
+    }
+  </style>
+</head>
+<body>
+
+<div id="overlay">
+  <div id="status-badge">⏳ En attente…</div>
+  <div id="winning-display"></div>
+</div>
+
+<div id="qr-block">
+  <img id="qr-img" src="/api/session/qr" alt="QR /play">
+  <p>Jouer sur /play</p>
+</div>
+
+<div id="session-id-display"></div>
+
+<!-- Roulette wheel engine -->
+<script src="/static/roulette/assets/js/app.js"></script>
+<!-- Display controller -->
+<script src="/static/js/display.js"></script>
+</body>
+</html>

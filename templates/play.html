@@ -1,0 +1,85 @@
+{% extends 'base.html' %}
+{% block title %}Jouer{% endblock %}
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-md-6">
+    <div class="card p-4">
+      <div class="d-flex justify-content-between align-items-center mb-3">
+        <h4 class="mb-0">🎲 Placer une mise</h4>
+        <span class="badge bg-warning text-dark fs-6">
+          💰 <span id="balance">{{ user['tokens'] }}</span> tokens
+        </span>
+      </div>
+
+      <!-- State messages -->
+      <div id="msg-waiting" class="alert alert-secondary" style="display:none">
+        ⏳ En attente d'ouverture de session…
+      </div>
+      <div id="msg-spinning" class="alert alert-warning" style="display:none">
+        🎡 La roue tourne ! Résultats dans un instant…
+      </div>
+      <div id="msg-countdown" style="display:none">
+        <div class="alert alert-info">
+          ⏱ Temps restant : <strong id="countdown">30</strong>s
+        </div>
+      </div>
+
+      <!-- Bet form -->
+      <form id="bet-form" style="display:none">
+        <div class="mb-3">
+          <label class="form-label">Type de mise</label>
+          <select id="bet-type" class="form-select" required>
+            <option value="">-- Choisir --</option>
+            <option value="color">Couleur</option>
+            <option value="parity">Parité</option>
+            <option value="number">Numéro</option>
+          </select>
+        </div>
+
+        <div class="mb-3" id="color-options" style="display:none">
+          <label class="form-label">Couleur</label>
+          <div class="d-flex gap-2">
+            <button type="button" class="btn btn-danger flex-fill bet-val-btn" data-val="red">Rouge</button>
+            <button type="button" class="btn btn-dark flex-fill bet-val-btn" data-val="black">Noir</button>
+          </div>
+          <input type="hidden" id="color-value">
+        </div>
+        <div class="mb-3" id="parity-options" style="display:none">
+          <label class="form-label">Parité</label>
+          <div class="d-flex gap-2">
+            <button type="button" class="btn btn-outline-light flex-fill bet-val-btn" data-val="even">Pair</button>
+            <button type="button" class="btn btn-outline-light flex-fill bet-val-btn" data-val="odd">Impair</button>
+          </div>
+          <input type="hidden" id="parity-value">
+        </div>
+        <div class="mb-3" id="number-options" style="display:none">
+          <label class="form-label">Numéro (0–36)</label>
+          <input type="number" id="number-value" class="form-control" min="0" max="36" placeholder="0–36">
+        </div>
+
+        <div class="mb-3">
+          <label class="form-label">Montant (max : <span id="max-tokens">{{ user['tokens'] }}</span>)</label>
+          <input type="number" id="bet-amount" class="form-control" min="1" required>
+        </div>
+
+        <button type="submit" id="bet-submit" class="btn btn-primary w-100">Miser</button>
+        <div id="bet-error" class="alert alert-danger mt-2" style="display:none"></div>
+      </form>
+
+      <!-- Result display -->
+      <div id="result-panel" style="display:none">
+        <hr>
+        <h5>Résultat</h5>
+        <p>Numéro gagnant : <strong id="result-number" class="fs-3"></strong></p>
+        <div id="result-win" class="alert alert-success" style="display:none">🏆 Gagné ! +<span id="result-payout"></span> tokens</div>
+        <div id="result-loss" class="alert alert-danger" style="display:none">😞 Perdu</div>
+        <div id="result-no-bet" class="alert alert-secondary" style="display:none">Tu n'avais pas misé sur cette partie.</div>
+        <a href="/play" class="btn btn-outline-light mt-2">Nouvelle partie</a>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script src="/static/js/play.js"></script>
+{% endblock %}

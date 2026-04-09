@@ -1,0 +1,76 @@
+{% extends 'base.html' %}
+{% block title %}Récompenses{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+  <h3>🎁 Catalogue de récompenses</h3>
+  <span class="badge bg-warning text-dark fs-6">
+    💰 <span id="balance">{{ user['tokens'] }}</span> tokens
+  </span>
+</div>
+
+{% if rewards %}
+<div class="row g-3">
+  {% for r in rewards %}
+  <div class="col-md-4" id="reward-{{ r['id'] }}">
+    <div class="card p-3 h-100">
+      <h5>{{ r['name'] }}</h5>
+      {% if r['description'] %}
+        <p class="text-muted small">{{ r['description'] }}</p>
+      {% endif %}
+      <div class="mt-auto">
+        <div class="d-flex justify-content-between align-items-center">
+          <span class="fw-bold text-warning">{{ r['token_cost'] }} tokens</span>
+          <span class="text-muted small">Stock : {{ r['stock'] }}</span>
+        </div>
+        {% if r['stock'] > 0 and user['tokens'] >= r['token_cost'] %}
+          <button class="btn btn-primary w-100 mt-2 claim-btn"
+                  data-id="{{ r['id'] }}" data-cost="{{ r['token_cost'] }}">
+            Échanger
+          </button>
+        {% elif r['stock'] <= 0 %}
+          <button class="btn btn-secondary w-100 mt-2" disabled>Épuisé</button>
+        {% else %}
+          <button class="btn btn-secondary w-100 mt-2" disabled>Solde insuffisant</button>
+        {% endif %}
+        <div class="claim-msg mt-2" style="display:none"></div>
+      </div>
+    </div>
+  </div>
+  {% endfor %}
+</div>
+{% else %}
+  <p class="text-muted">Aucune récompense disponible pour l'instant.</p>
+{% endif %}
+{% endblock %}
+{% block scripts %}
+<script>
+const CSRF = document.querySelector('meta[name="csrf-token"]').content;
+
+document.querySelectorAll('.claim-btn').forEach(btn => {
+  btn.addEventListener('click', async () => {
+    btn.disabled = true;
+    const rid  = btn.dataset.id;
+    const card = document.getElementById('reward-' + rid);
+    const msg  = card.querySelector('.claim-msg');
+
+    const resp = await fetch('/api/claim', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json','X-CSRFToken': CSRF},
+      body: JSON.stringify({reward_id: parseInt(rid)})
+    });
+    const data = await resp.json();
+    if (resp.ok) {
+      document.getElementById('balance').textContent = data.new_balance;
+      msg.style.display = 'block';
+      msg.className = 'claim-msg alert alert-success mt-2';
+      msg.textContent = '✅ Échangé avec succès !';
+    } else {
+      msg.style.display = 'block';
+      msg.className = 'claim-msg alert alert-danger mt-2';
+      msg.textContent = data.error || 'Erreur';
+      btn.disabled = false;
+    }
+  });
+});
+</script>
+{% endblock %}
