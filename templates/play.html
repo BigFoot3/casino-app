@@ -1,8 +1,141 @@
 {% extends 'base.html' %}
 {% block title %}Jouer{% endblock %}
+{% block head %}
+{# Username passed to play.js for own-bet highlighting #}
+<meta name="username" content="{{ session.username }}">
+{# Roulette lib CSS — provides .redNum, .blackNum, .number_block, .oto_block styles #}
+<link rel="stylesheet" href="/static/roulette/assets/css/style.css">
+<style>
+  /* ── Betting table overrides for the play page context ── */
+  #bet-board-wrap { overflow-x: auto; }
+
+  /* Compact number grid — replaces lib's absolute-pixel layout */
+  #roulette-grid {
+    display: inline-grid;
+    grid-template-columns: 48px repeat(12, 38px) 54px;
+    grid-template-rows: repeat(3, 42px);
+    gap: 2px;
+    margin-bottom: 2px;
+  }
+  #roulette-grid .num-btn {
+    border: 1px solid rgba(255,255,255,.4);
+    color: #fff;
+    font-weight: bold;
+    font-size: 13px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 3px;
+    transition: outline .1s;
+  }
+  #roulette-grid .num-btn.redNum  { background-color: #E0080B; }
+  #roulette-grid .num-btn.blackNum{ background-color: #000; }
+  #roulette-grid .zero-btn        { background-color: #016D29; grid-row: 1 / 4; grid-column: 1; }
+  #roulette-grid .col-btn         { background-color: #016D29; grid-row-end: span 1; font-size: 11px; }
+  #roulette-grid .num-btn.selected { outline: 3px solid #ffc107; outline-offset: 1px; }
+
+  /* Outside bets row */
+  #outside-bets {
+    display: inline-flex;
+    gap: 2px;
+    margin-left: 50px; /* align with number columns, skip zero column */
+  }
+  #outside-bets .out-btn {
+    border: 1px solid rgba(255,255,255,.4);
+    color: #fff;
+    font-weight: bold;
+    font-size: 13px;
+    cursor: pointer;
+    padding: 6px 0;
+    text-align: center;
+    border-radius: 3px;
+    transition: outline .1s;
+    width: 112px; /* 3 columns each covers ~114px of the 12 number cols */
+  }
+  #outside-bets .out-btn:nth-child(1),
+  #outside-bets .out-btn:nth-child(4) { background: #1a1a2e; } /* even / odd */
+  #outside-bets .out-btn.redNum  { background-color: #E0080B; }
+  #outside-bets .out-btn.blackNum{ background-color: #000; }
+  #outside-bets .out-btn.selected { outline: 3px solid #ffc107; outline-offset: 1px; }
+
+  /* Chip denomination buttons */
+  .chip-btn {
+    width: 44px; height: 44px;
+    border-radius: 50%;
+    border: 2px solid rgba(255,255,255,.4);
+    background: #1a1a2e;
+    color: #f0f0f0;
+    font-weight: bold;
+    font-size: 13px;
+    cursor: pointer;
+    transition: border-color .1s, background .1s;
+  }
+  .chip-btn.active {
+    background: #c9a84c;
+    border-color: #c9a84c;
+    color: #0d0d1a;
+  }
+
+  /* Amount badge on grid cells */
+  .bet-badge {
+    position: absolute;
+    top: -6px; right: -6px;
+    min-width: 18px; height: 18px;
+    background: #c9a84c;
+    color: #0d0d1a;
+    font-size: 9px; font-weight: bold;
+    border-radius: 9px;
+    display: flex; align-items: center; justify-content: center;
+    padding: 0 3px;
+    pointer-events: none;
+    z-index: 10;
+  }
+
+  /* Per-bet result rows */
+  .result-bet-row {
+    display: flex;
+    justify-content: space-between;
+    padding: 4px 0;
+    border-bottom: 1px solid rgba(255,255,255,.1);
+    font-size: .9rem;
+  }
+  .result-win-row  { color: #4caf50; }
+  .result-loss-row { color: #e53935; }
+  .result-total-row {
+    padding-top: 6px;
+    font-size: 1rem;
+  }
+
+  /* FEATURE 2: chip overlay on the play page betting grid */
+  #roulette-grid .num-btn,
+  #outside-bets .out-btn {
+    position: relative; /* needed for chip absolute positioning */
+    overflow: visible;
+  }
+  .play-chip {
+    position: absolute;
+    width: 20px; height: 20px;
+    border-radius: 50%;
+    border: 2px solid rgba(255,255,255,.6);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 7px; font-weight: bold; color: #fff;
+    pointer-events: none;
+    top: 50%; left: 50%;
+    transform: translate(-50%, -50%);
+    z-index: 5;
+    box-shadow: 0 1px 4px rgba(0,0,0,.5);
+  }
+  /* Own bet chip gets a thicker gold border */
+  .play-chip.own-bet {
+    border: 3px solid #c9a84c;
+    box-shadow: 0 0 8px #c9a84c;
+  }
+</style>
+{% endblock %}
 {% block content %}
 <div class="row justify-content-center">
-  <div class="col-md-6">
+  <div class="col-lg-7 col-md-9">
     <div class="card p-4">
       <div class="d-flex justify-content-between align-items-center mb-3">
         <h4 class="mb-0">🎲 Placer une mise</h4>
@@ -20,60 +153,83 @@
       </div>
       <div id="msg-countdown" style="display:none">
         <div class="alert alert-info">
-          ⏱ Temps restant : <strong id="countdown">30</strong>s
+          ⏱ Temps restant : <strong id="countdown">—</strong>s
         </div>
       </div>
 
-      <!-- Bet form -->
+      <!-- ── Betting table (extracted from static/roulette/) ── -->
       <form id="bet-form" style="display:none">
-        <div class="mb-3">
-          <label class="form-label">Type de mise</label>
-          <select id="bet-type" class="form-select" required>
-            <option value="">-- Choisir --</option>
-            <option value="color">Couleur</option>
-            <option value="parity">Parité</option>
-            <option value="number">Numéro</option>
-          </select>
-        </div>
+        <div id="bet-board-wrap" class="mb-3">
 
-        <div class="mb-3" id="color-options" style="display:none">
-          <label class="form-label">Couleur</label>
-          <div class="d-flex gap-2">
-            <button type="button" class="btn btn-danger flex-fill bet-val-btn" data-val="red">Rouge</button>
-            <button type="button" class="btn btn-dark flex-fill bet-val-btn" data-val="black">Noir</button>
+          {# ── Number grid ── #}
+          {# Layout mirrors the milsaware number_board:
+             column order top→bottom: row1=3,6,...,36 | row2=2,5,...,35 | row3=1,4,...,34
+             Zero spans all 3 rows on the left; "2 to 1" buttons on the right. #}
+          {% set red_numbers = [1,3,5,7,9,12,14,16,18,19,21,23,25,27,30,32,34,36] %}
+          {% set rows = [[3,6,9,12,15,18,21,24,27,30,33,36],
+                         [2,5,8,11,14,17,20,23,26,29,32,35],
+                         [1,4,7,10,13,16,19,22,25,28,31,34]] %}
+          <div id="roulette-grid">
+            {# Zero — spans all 3 rows #}
+            <button type="button" class="num-btn zero-btn" data-type="number" data-val="0">0</button>
+
+            {# 12 columns × 3 rows of numbers, row by row #}
+            {% for row in rows %}
+              {% for n in row %}
+                {% if n in red_numbers %}
+                  <button type="button" class="num-btn redNum" data-type="number" data-val="{{ n }}">{{ n }}</button>
+                {% else %}
+                  <button type="button" class="num-btn blackNum" data-type="number" data-val="{{ n }}">{{ n }}</button>
+                {% endif %}
+              {% endfor %}
+              {# "2 to 1" column bet label (display only, not wired to API) #}
+              <div class="num-btn col-btn" style="cursor:default;opacity:.6">2→1</div>
+            {% endfor %}
           </div>
-          <input type="hidden" id="color-value">
-        </div>
-        <div class="mb-3" id="parity-options" style="display:none">
-          <label class="form-label">Parité</label>
-          <div class="d-flex gap-2">
-            <button type="button" class="btn btn-outline-light flex-fill bet-val-btn" data-val="even">Pair</button>
-            <button type="button" class="btn btn-outline-light flex-fill bet-val-btn" data-val="odd">Impair</button>
+
+          {# ── Outside bets: EVEN / RED / BLACK / ODD ── #}
+          <div id="outside-bets">
+            <button type="button" class="out-btn" data-type="parity" data-val="even">PAIR</button>
+            <button type="button" class="out-btn redNum"  data-type="color"  data-val="red">ROUGE</button>
+            <button type="button" class="out-btn blackNum" data-type="color" data-val="black">NOIR</button>
+            <button type="button" class="out-btn" data-type="parity" data-val="odd">IMPAIR</button>
           </div>
-          <input type="hidden" id="parity-value">
-        </div>
-        <div class="mb-3" id="number-options" style="display:none">
-          <label class="form-label">Numéro (0–36)</label>
-          <input type="number" id="number-value" class="form-control" min="0" max="36" placeholder="0–36">
         </div>
 
+        {# Chip denomination selector #}
         <div class="mb-3">
-          <label class="form-label">Montant (max : <span id="max-tokens">{{ user['tokens'] }}</span>)</label>
-          <input type="number" id="bet-amount" class="form-control" min="1" required>
+          <label class="form-label small">Valeur du jeton :</label>
+          <div class="d-flex gap-2 flex-wrap mt-1">
+            <button type="button" class="chip-btn active" data-chip="1">1</button>
+            <button type="button" class="chip-btn" data-chip="5">5</button>
+            <button type="button" class="chip-btn" data-chip="10">10</button>
+            <button type="button" class="chip-btn" data-chip="50">50</button>
+            <button type="button" class="chip-btn" data-chip="100">100</button>
+          </div>
         </div>
 
-        <button type="submit" id="bet-submit" class="btn btn-primary w-100">Miser</button>
+        {# Total + solde restant #}
+        <div class="d-flex justify-content-between mb-3 small">
+          <span>Total misé : <strong id="total-mised">0</strong> tokens</span>
+          <span>Solde restant : <strong id="solde-reste">{{ user['tokens'] }}</strong> tokens</span>
+        </div>
+
+        <div class="d-flex gap-2">
+          <button type="button" id="bet-clear" class="btn btn-outline-secondary">Effacer</button>
+          <button type="submit" id="bet-submit" class="btn btn-primary flex-grow-1">Miser</button>
+        </div>
         <div id="bet-error" class="alert alert-danger mt-2" style="display:none"></div>
       </form>
+
+      <!-- Recap after bets submitted, before result -->
+      <div id="bet-recap" class="alert alert-info mt-2" style="display:none"></div>
 
       <!-- Result display -->
       <div id="result-panel" style="display:none">
         <hr>
         <h5>Résultat</h5>
         <p>Numéro gagnant : <strong id="result-number" class="fs-3"></strong></p>
-        <div id="result-win" class="alert alert-success" style="display:none">🏆 Gagné ! +<span id="result-payout"></span> tokens</div>
-        <div id="result-loss" class="alert alert-danger" style="display:none">😞 Perdu</div>
-        <div id="result-no-bet" class="alert alert-secondary" style="display:none">Tu n'avais pas misé sur cette partie.</div>
+        <div id="result-bets-list" class="mb-2"></div>
         <a href="/play" class="btn btn-outline-light mt-2">Nouvelle partie</a>
       </div>
     </div>

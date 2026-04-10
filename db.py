@@ -59,15 +59,12 @@ def init_db():
             );
             CREATE TABLE IF NOT EXISTS bets (
                 id         INTEGER PRIMARY KEY AUTOINCREMENT,
-                session_id INTEGER NOT NULL REFERENCES game_sessions(id),
-                user_id    INTEGER NOT NULL REFERENCES users(id),
-                bet_type   TEXT CHECK(bet_type IN ('color','parity','number')) NOT NULL,
+                session_id INTEGER NOT NULL,
+                user_id    INTEGER NOT NULL,
+                bet_type   TEXT NOT NULL,
                 bet_value  TEXT NOT NULL,
-                amount     INTEGER CHECK(amount > 0) NOT NULL,
-                result     TEXT CHECK(result IN ('win','loss')),
-                payout     INTEGER,
-                created_at TEXT DEFAULT (datetime('now')),
-                UNIQUE(session_id, user_id)
+                amount     INTEGER NOT NULL,
+                payout     INTEGER NOT NULL DEFAULT 0
             );
             CREATE TABLE IF NOT EXISTS rewards (
                 id          INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -133,7 +130,7 @@ def startup_check():
             resolve_spin(active['id'])
         elif active['status'] == 'open' and active['opened_at']:
             elapsed = (now - _parse_dt(active['opened_at'])).total_seconds()
-            if elapsed > 30:
+            if elapsed > active['auto_interval_seconds']:
                 logging.info('[startup] Found stale open session — transitioning to spinning')
                 conn.execute('BEGIN IMMEDIATE')
                 winning = random.randint(0, 36)
@@ -171,7 +168,6 @@ def resolve_spin(session_id: int):
             ).fetchall()
 
             for bet in bets:
-                result = 'loss'
                 payout = 0
                 amount = bet['amount']
 
@@ -180,23 +176,23 @@ def resolve_spin(session_id: int):
                     bval  = bet['bet_value']
                     if btype == 'color':
                         if bval == 'red' and winning_number in RED_NUMBERS:
-                            result, payout = 'win', amount * 2
+                            payout = amount * 2
                         elif bval == 'black' and winning_number not in RED_NUMBERS:
-                            result, payout = 'win', amount * 2
+                            payout = amount * 2
                     elif btype == 'parity':
                         if bval == 'even' and winning_number % 2 == 0:
-                            result, payout = 'win', amount * 2
+                            payout = amount * 2
                         elif bval == 'odd' and winning_number % 2 == 1:
-                            result, payout = 'win', amount * 2
+                            payout = amount * 2
                     elif btype == 'number':
                         if int(bval) == winning_number:
-                            result, payout = 'win', amount * 36
+                            payout = amount * 36
 
                 conn.execute(
-                    'UPDATE bets SET result=?, payout=? WHERE id=?',
-                    (result, payout, bet['id'])
+                    'UPDATE bets SET payout=? WHERE id=?',
+                    (payout, bet['id'])
                 )
-                if result == 'win':
+                if payout > 0:
                     conn.execute(
                         'UPDATE users SET tokens = tokens + ? WHERE id=?',
                         (payout, bet['user_id'])

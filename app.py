@@ -4,14 +4,13 @@ from datetime import timedelta
 
 from flask import Flask
 from flask_wtf import CSRFProtect
-from flask_limiter import Limiter
-from flask_limiter.util import get_remote_address
+
+from extensions import limiter
 
 logging.basicConfig(level=logging.INFO,
                     format='%(asctime)s %(levelname)s %(message)s')
 
-csrf    = CSRFProtect()
-limiter = Limiter(key_func=get_remote_address, default_limits=[])
+csrf = CSRFProtect()
 
 
 def create_app():

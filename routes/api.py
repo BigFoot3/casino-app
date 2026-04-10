@@ -29,16 +29,33 @@ def _parse_dt(s):
 
 def _require_login():
     if 'user_id' not in flask_session:
-        abort(401)
+        # Return JSON so JS callers (play.js, rewards.html) can parse resp.json() cleanly
+        from flask import make_response
+        abort(make_response(jsonify({'error': 'Non authentifié'}), 401))
 
 
 def _require_admin():
     if flask_session.get('role') != 'admin':
-        abort(403)
+        # Same: JSON so admin.js can handle 403 gracefully
+        from flask import make_response
+        abort(make_response(jsonify({'error': 'Accès refusé'}), 403))
 
 
 def _gen_password(n=8):
     return ''.join(random.choices(string.ascii_letters + string.digits, k=n))
+
+
+# ─── Draw history ────────────────────────────────────────────────────────────
+
+@api_bp.route('/api/history')
+def draw_history():
+    with db_conn() as conn:
+        rows = conn.execute(
+            "SELECT id, winning_number FROM game_sessions "
+            "WHERE status='closed' AND winning_number IS NOT NULL "
+            "ORDER BY id DESC LIMIT 20"
+        ).fetchall()
+    return jsonify([{'session_id': r['id'], 'winning_number': r['winning_number']} for r in rows])
 
 
 # ─── Session status ──────────────────────────────────────────────────────────
@@ -76,7 +93,8 @@ def session_status():
         time_remaining = 0
         if active['status'] == 'open' and active['opened_at']:
             elapsed = (_utcnow() - _parse_dt(active['opened_at'])).total_seconds()
-            time_remaining = max(0, int(30 - elapsed))
+            # betting window = auto_interval_seconds (not hardcoded 30s)
+            time_remaining = max(0, int(active['auto_interval_seconds'] - elapsed))
 
         return jsonify({
             'status': active['status'],
@@ -97,17 +115,37 @@ def session_result():
         ).fetchone()
         if not closed:
             abort(404)
-        # Only return if there's no newer active session (i.e., result is for the last round)
-        active = get_active_session(conn)
-        # Return result for the most recently closed session
-        user_bet = conn.execute(
-            'SELECT * FROM bets WHERE session_id=? AND user_id=?',
+        # Return all bets the player placed in this session
+        user_bets = conn.execute(
+            'SELECT id, bet_type, bet_value, amount, payout FROM bets WHERE session_id=? AND user_id=?',
             (closed['id'], flask_session['user_id'])
-        ).fetchone()
+        ).fetchall()
         return jsonify({
+            'session_id': closed['id'],
             'winning_number': closed['winning_number'],
-            'user_bet': dict(user_bet) if user_bet else None,
+            # list of {id, bet_type, bet_value, amount, payout}
+            # payout>0 means win; payout==0 means loss
+            'user_bets': [dict(b) for b in user_bets],
         })
+
+
+# ─── Session bets (public — used by /roulette/display and /play) ─────────────
+
+@api_bp.route('/api/session/bets')
+def session_bets():
+    """Returns bets for the current open session. No auth required (display page is public)."""
+    with db_conn() as conn:
+        active = get_active_session(conn)
+        if not active or active['status'] != 'open':
+            return jsonify([])
+        rows = conn.execute(
+            '''SELECT u.username, b.bet_type, b.bet_value, b.amount
+               FROM bets b JOIN users u ON b.user_id = u.id
+               WHERE b.session_id = ?
+               ORDER BY b.id''',
+            (active['id'],)
+        ).fetchall()
+    return jsonify([dict(r) for r in rows])
 
 
 # ─── QR code ─────────────────────────────────────────────────────────────────
@@ -176,33 +214,29 @@ def place_bet():
         user = conn.execute(
             'SELECT * FROM users WHERE id=?', (user_id,)
         ).fetchone()
+        if not user:
+            conn.execute('ROLLBACK')
+            return jsonify({'error': 'Utilisateur introuvable'}), 401
         if user['tokens'] < amount:
             conn.execute('ROLLBACK')
             return jsonify({'error': 'Solde insuffisant'}), 400
-
-        # Check duplicate bet
-        existing = conn.execute(
-            'SELECT id FROM bets WHERE session_id=? AND user_id=?',
-            (active['id'], user_id)
-        ).fetchone()
-        if existing:
-            conn.execute('ROLLBACK')
-            return jsonify({'error': 'Mise déjà enregistrée'}), 409
 
         conn.execute(
             'UPDATE users SET tokens = tokens - ? WHERE id=? AND tokens >= ?',
             (amount, user_id, amount)
         )
-        conn.execute(
+        cur = conn.execute(
             'INSERT INTO bets(session_id, user_id, bet_type, bet_value, amount) VALUES (?,?,?,?,?)',
             (active['id'], user_id, bet_type, bet_value, amount)
         )
+        bet_id = cur.lastrowid
         new_balance = conn.execute(
             'SELECT tokens FROM users WHERE id=?', (user_id,)
         ).fetchone()['tokens']
+        bet_session_id = active['id']
         conn.execute('COMMIT')
 
-    return jsonify({'new_balance': new_balance})
+    return jsonify({'bet_id': bet_id, 'new_balance': new_balance, 'session_id': bet_session_id})
 
 
 # ─── Claim reward ─────────────────────────────────────────────────────────────
@@ -229,6 +263,9 @@ def claim_reward():
         user = conn.execute(
             'SELECT * FROM users WHERE id=?', (user_id,)
         ).fetchone()
+        if not user:
+            conn.execute('ROLLBACK')
+            return jsonify({'error': 'Utilisateur introuvable'}), 401
         if user['tokens'] < reward['token_cost']:
             conn.execute('ROLLBACK')
             return jsonify({'error': 'Solde insuffisant'}), 400
@@ -304,11 +341,12 @@ def admin_set_mode():
 
     if mode not in ('manual', 'auto'):
         return jsonify({'error': 'mode invalide'}), 400
-    if not (60 <= interval <= 300):
-        return jsonify({'error': 'interval doit être entre 60 et 300s'}), 400
+    if not (10 <= interval <= 3600):
+        return jsonify({'error': 'interval doit être entre 10 et 3600s'}), 400
 
     with db_conn() as conn:
         enabled = '1' if mode == 'auto' else '0'
+        conn.execute('BEGIN IMMEDIATE')
         conn.execute(
             "INSERT OR REPLACE INTO app_config(key,value) VALUES ('auto_mode_enabled',?)", (enabled,)
         )
@@ -316,12 +354,62 @@ def admin_set_mode():
             "INSERT OR REPLACE INTO app_config(key,value) VALUES ('auto_interval_seconds',?)",
             (str(interval),)
         )
-        conn.commit()
+        conn.execute('COMMIT')
 
     return jsonify({'ok': True, 'mode': mode, 'interval': interval})
 
 
 # ─── Admin — users ───────────────────────────────────────────────────────────
+
+@api_bp.route('/api/admin/users/<int:uid>/zero-tokens', methods=['POST'])
+def admin_zero_tokens(uid):
+    _require_admin()
+    with db_conn() as conn:
+        conn.execute('BEGIN IMMEDIATE')
+        user = conn.execute('SELECT id FROM users WHERE id=?', (uid,)).fetchone()
+        if not user:
+            conn.execute('ROLLBACK')
+            return jsonify({'error': 'Utilisateur introuvable'}), 404
+        conn.execute('UPDATE users SET tokens = 0 WHERE id=?', (uid,))
+        conn.execute('COMMIT')
+    return jsonify({'ok': True, 'new_balance': 0})
+
+
+@api_bp.route('/api/admin/users/<int:uid>/delete', methods=['POST'])
+def admin_delete_user(uid):
+    _require_admin()
+    with db_conn() as conn:
+        conn.execute('BEGIN IMMEDIATE')
+        user = conn.execute('SELECT id, role FROM users WHERE id=?', (uid,)).fetchone()
+        if not user:
+            conn.execute('ROLLBACK')
+            return jsonify({'error': 'Utilisateur introuvable'}), 404
+        if user['role'] == 'admin':
+            conn.execute('ROLLBACK')
+            return jsonify({'error': 'Impossible de supprimer un administrateur'}), 403
+        # Delete associated data (no FK cascade defined)
+        conn.execute('DELETE FROM reward_claims WHERE user_id=?', (uid,))
+        conn.execute('DELETE FROM bets WHERE user_id=?', (uid,))
+        conn.execute('DELETE FROM users WHERE id=?', (uid,))
+        conn.execute('COMMIT')
+    return jsonify({'ok': True})
+
+
+@api_bp.route('/api/admin/users/<int:uid>/decrement-tokens', methods=['POST'])
+def admin_decrement_tokens(uid):
+    _require_admin()
+    with db_conn() as conn:
+        conn.execute('BEGIN IMMEDIATE')
+        user = conn.execute('SELECT id, tokens FROM users WHERE id=?', (uid,)).fetchone()
+        if not user:
+            conn.execute('ROLLBACK')
+            return jsonify({'error': 'Utilisateur introuvable'}), 404
+        # Floor at 0 — balance cannot go negative
+        conn.execute('UPDATE users SET tokens = MAX(0, tokens - 1) WHERE id=?', (uid,))
+        new_balance = conn.execute('SELECT tokens FROM users WHERE id=?', (uid,)).fetchone()['tokens']
+        conn.execute('COMMIT')
+    return jsonify({'new_balance': new_balance})
+
 
 @api_bp.route('/api/admin/users/<int:uid>/add-tokens', methods=['POST'])
 def admin_add_tokens(uid):
@@ -331,12 +419,15 @@ def admin_add_tokens(uid):
     if not isinstance(amount, int) or amount <= 0:
         return jsonify({'error': 'Montant invalide'}), 400
     with db_conn() as conn:
+        conn.execute('BEGIN IMMEDIATE')
+        user = conn.execute('SELECT id FROM users WHERE id=?', (uid,)).fetchone()
+        if not user:
+            conn.execute('ROLLBACK')
+            return jsonify({'error': 'Utilisateur introuvable'}), 404
         conn.execute('UPDATE users SET tokens = tokens + ? WHERE id=?', (amount, uid))
-        conn.commit()
-        user = conn.execute('SELECT tokens FROM users WHERE id=?', (uid,)).fetchone()
-    if not user:
-        return jsonify({'error': 'Utilisateur introuvable'}), 404
-    return jsonify({'new_balance': user['tokens']})
+        new_balance = conn.execute('SELECT tokens FROM users WHERE id=?', (uid,)).fetchone()['tokens']
+        conn.execute('COMMIT')
+    return jsonify({'new_balance': new_balance})
 
 
 @api_bp.route('/api/admin/users/create', methods=['POST'])

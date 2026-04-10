@@ -13,7 +13,7 @@ const pwCopyOk   = $('pw-copy-ok');
 const pwTitle    = $('pw-modal-title');
 
 function showPassword(title, password) {
-  clearTimeout(pwTimer);
+  clearInterval(pwTimer);
   pwTitle.textContent   = title;
   pwDisplay.textContent = password;
   pwCopyOk.style.display = 'none';
@@ -83,6 +83,19 @@ $('btn-mode').addEventListener('click', async () => {
   }
 });
 
+// ── Decrement tokens (−1, no modal needed) ───────────────────────────────────
+document.querySelectorAll('.decrement-tokens-btn').forEach(btn => {
+  btn.addEventListener('click', async () => {
+    const uid  = parseInt(btn.dataset.id);
+    const [s, d] = await post(`/api/admin/users/${uid}/decrement-tokens`);
+    if (s === 200) {
+      document.querySelector(`.user-tokens[data-id="${uid}"]`).textContent = d.new_balance;
+    } else {
+      alert(d.error || 'Erreur');
+    }
+  });
+});
+
 // ── Tokens ────────────────────────────────────────────────────────────────────
 document.querySelectorAll('.add-tokens-btn').forEach(btn => {
   btn.addEventListener('click', async () => {
@@ -122,6 +135,62 @@ $('btn-create-user').addEventListener('click', async () => {
   } else {
     alert(d.error || 'Erreur');
   }
+});
+
+// ── Confirm modal helper ──────────────────────────────────────────────────────
+const confirmModal = new bootstrap.Modal($('confirmModal'), {backdrop: 'static', keyboard: false});
+let _confirmCallback = null;
+$('confirm-ok').addEventListener('click', () => {
+  confirmModal.hide();
+  if (_confirmCallback) { _confirmCallback(); _confirmCallback = null; }
+});
+
+function showConfirm(title, body, onConfirm) {
+  $('confirm-title').textContent = title;
+  $('confirm-body').textContent  = body;
+  _confirmCallback = onConfirm;
+  confirmModal.show();
+}
+
+// ── Zero tokens ───────────────────────────────────────────────────────────────
+document.querySelectorAll('.zero-tokens-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const uid  = parseInt(btn.dataset.id);
+    const name = btn.dataset.name;
+    showConfirm(
+      'Réinitialiser les tokens',
+      `Mettre le solde de ${name} à 0 ? Cette action est irréversible.`,
+      async () => {
+        const [s, d] = await post(`/api/admin/users/${uid}/zero-tokens`);
+        if (s === 200) {
+          document.querySelector(`.user-tokens[data-id="${uid}"]`).textContent = 0;
+        } else {
+          alert(d.error || 'Erreur');
+        }
+      }
+    );
+  });
+});
+
+// ── Delete user ───────────────────────────────────────────────────────────────
+document.querySelectorAll('.delete-user-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const uid  = parseInt(btn.dataset.id);
+    const name = btn.dataset.name;
+    showConfirm(
+      'Supprimer l\'utilisateur',
+      `Supprimer définitivement ${name} et toutes ses données ?`,
+      async () => {
+        const [s, d] = await post(`/api/admin/users/${uid}/delete`);
+        if (s === 200) {
+          const row = document.getElementById(`user-row-${uid}`);
+          if (row) row.remove();
+        } else {
+          alert(d.error || 'Erreur');
+        }
+      }
+    );
+  });
 });
 
 // ── Reset password ────────────────────────────────────────────────────────────
