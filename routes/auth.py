@@ -1,25 +1,17 @@
 import bcrypt
 from flask import (Blueprint, render_template, request, redirect,
-                   url_for, session, flash, current_app)
-from flask_limiter import Limiter
-from flask_limiter.util import get_remote_address
+                   url_for, session, flash)
 
 from db import db_conn
+from extensions import limiter
 
 auth_bp = Blueprint('auth', __name__)
 
 
-def _limiter():
-    from app import limiter
-    return limiter
-
-
 @auth_bp.route('/login', methods=['GET', 'POST'])
+@limiter.limit('10 per minute', methods=['POST'])
 def login():
-    from app import limiter
-
-    @limiter.limit('10 per minute')
-    def _post():
+    if request.method == 'POST':
         username = request.form.get('username', '').strip()
         password = request.form.get('password', '')
         with db_conn() as conn:
@@ -36,10 +28,6 @@ def login():
                 return redirect(url_for('admin.index'))
             return redirect(url_for('player.dashboard'))
         flash('Identifiants incorrects.')
-        return render_template('login.html')
-
-    if request.method == 'POST':
-        return _post()
     return render_template('login.html')
 
 

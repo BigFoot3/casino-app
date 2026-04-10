@@ -34,7 +34,8 @@ def game_tick(app):
 
                 if active['status'] == 'open' and active['opened_at']:
                     elapsed = (now - _parse_dt(active['opened_at'])).total_seconds()
-                    if elapsed >= 30:
+                    # betting window = auto_interval_seconds (not hardcoded 30s)
+                    if elapsed >= active['auto_interval_seconds']:
                         winning = random.randint(0, 36)
                         conn.execute('BEGIN IMMEDIATE')
                         conn.execute(
@@ -60,7 +61,8 @@ def game_tick(app):
                     should_open = False
                     if prev and prev['closed_at']:
                         closed_ago = (now - _parse_dt(prev['closed_at'])).total_seconds()
-                        if closed_ago >= (interval - 30):
+                        # Fixed 5s wait after close before opening next betting window
+                        if closed_ago >= 5:
                             should_open = True
                     elif not prev:
                         should_open = True  # first ever session, open immediately

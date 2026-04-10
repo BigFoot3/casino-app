@@ -1,6 +1,24 @@
 {% extends 'base.html' %}
 {% block title %}Administration{% endblock %}
 {% block content %}
+<!-- Confirmation modal (reused for zero-tokens and delete-user) -->
+<div class="modal fade" id="confirmModal" tabindex="-1">
+  <div class="modal-dialog modal-dialog-centered modal-sm">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="confirm-title">Confirmer</h5>
+      </div>
+      <div class="modal-body">
+        <p id="confirm-body"></p>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Annuler</button>
+        <button type="button" class="btn btn-danger btn-sm" id="confirm-ok">Confirmer</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <!-- Password modal -->
 <div class="modal fade" id="pwModal" tabindex="-1">
   <div class="modal-dialog modal-sm modal-dialog-centered">
@@ -60,7 +78,7 @@
     </div>
     <div class="col-auto">
       <input type="number" id="interval-input" class="form-control form-control-sm" style="width:110px"
-             min="60" max="300" value="{{ cfg.get('auto_interval_seconds','120') }}" placeholder="Intervalle s">
+             min="10" max="3600" value="{{ cfg.get('auto_interval_seconds','120') }}" placeholder="Intervalle s">
     </div>
     <div class="col-auto">
       <button id="btn-mode" class="btn btn-sm btn-outline-light">Appliquer</button>
@@ -121,11 +139,24 @@
               <button class="btn btn-outline-success add-tokens-btn" data-id="{{ u['id'] }}">+</button>
             </div>
           </td>
-          <td>
+          <td class="d-flex gap-1 flex-wrap">
             <button class="btn btn-sm btn-outline-warning reset-pw-btn" data-id="{{ u['id'] }}"
                     data-name="{{ u['username'] }}">
-              🔑 Réinitialiser MDP
+              🔑 MDP
             </button>
+            <button class="btn btn-sm btn-outline-info decrement-tokens-btn" data-id="{{ u['id'] }}">
+              −1
+            </button>
+            <button class="btn btn-sm btn-outline-secondary zero-tokens-btn" data-id="{{ u['id'] }}"
+                    data-name="{{ u['username'] }}">
+              🪙 0
+            </button>
+            {% if u['role'] != 'admin' %}
+            <button class="btn btn-sm btn-outline-danger delete-user-btn" data-id="{{ u['id'] }}"
+                    data-name="{{ u['username'] }}">
+              🗑
+            </button>
+            {% endif %}
           </td>
         </tr>
         {% endfor %}

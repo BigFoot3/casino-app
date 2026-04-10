@@ -6,55 +6,367 @@
   <title>Roulette — Affichage</title>
   <link rel="stylesheet" href="/static/roulette/assets/css/style.css">
   <style>
-    * { box-sizing: border-box; margin: 0; padding: 0; }
-    html, body { width: 100%; height: 100%; overflow: hidden;
-                 background: #1a1a2e; color: #eee; font-family: sans-serif; }
-    #container { position: relative; }
-    /* Hide the betting board — display page is view-only */
+    /* ── Reset ────────────────────────────────────────────────────────────── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    /* UI 1: color palette
+       Background: #0d0d1a  Surface: #1a1a2e  Text: #f0f0f0
+       Accent: #c9a84c  Success: #4caf50  Danger: #e53935  Muted: #9e9e9e */
+    html, body {
+      width: 100%; height: 100%;
+      background: #0d0d1a;
+      color: #f0f0f0;
+      font-family: sans-serif;
+      overflow: hidden;
+    }
+
+    /* UI 3: body is flex-column — wheel area on top, status bar below */
+    body { display: flex; flex-direction: column; }
+
+    /* ── Main row: wheel panel + bet panel ─────────────────────────────── */
+    #main-wrap {
+      display: flex;
+      flex-direction: row;
+      flex: 1;
+      min-height: 0;        /* allow flex children to shrink */
+      overflow: hidden;
+    }
+
+    /* ── Wheel panel ────────────────────────────────────────────────────── */
+    #wheel-panel {
+      width: 45%;
+      flex-shrink: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+      position: relative;
+    }
+
+    /* app.js appends #container to body; display.js moves it here */
+    /* UI 2: container transparent, auto-sized — JS applies scale() */
+    #container {
+      background: transparent !important;
+      height: auto !important;
+      width: auto !important;
+      padding: 0 !important;
+      display: inline-flex !important;
+      align-items: center !important;
+      justify-content: center !important;
+      transform-origin: center center;
+    }
+    /* Remove the left:-75px offset designed for the betting-board layout */
+    .wheel { left: 0 !important; transform-origin: center center; }
+    /* BUG 4 (prev session): hide yellow/gold outer rim artefact */
+    .outerRim { display: none !important; }
+    /* Hide betting board and game-over notification — display page is view-only */
     #betting_board { display: none !important; }
     #notification   { display: none !important; }
 
-    #overlay {
-      position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-      display: flex; flex-direction: column;
-      align-items: center; justify-content: center;
-      pointer-events: none; z-index: 100;
-    }
-    #status-badge {
-      font-size: 2rem; font-weight: bold; padding: .5rem 2rem;
-      border-radius: 2rem; background: rgba(0,0,0,.6); margin-bottom: 1rem;
-    }
+    /* ── Winning number overlay (inside wheel panel) ─────────────────── */
     #winning-display {
-      font-size: 6rem; font-weight: 900; text-shadow: 0 0 30px gold;
+      position: absolute;
+      top: 50%; left: 50%;
+      transform: translate(-50%, -50%);
+      font-size: 5rem; font-weight: 900;
+      color: #f0f0f0;
+      text-shadow: 0 0 40px #c9a84c, 0 0 80px #c9a84c;
       display: none;
+      pointer-events: none;
+      z-index: 50;
     }
+
+    /* ── Live-bet panel (right of wheel) ─────────────────────────────── */
+    #bet-panel {
+      flex: 1;
+      min-width: 0;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      background: #1a1a2e;
+      border-left: 1px solid #2a2a4a;
+      overflow-y: auto;
+      padding: 12px;
+    }
+    #bet-panel h3 {
+      font-size: .95rem;
+      color: #c9a84c;
+      letter-spacing: .05em;
+      text-transform: uppercase;
+      margin-bottom: 10px;
+    }
+
+    /* Draw history strip */
+    #draw-history {
+      margin-bottom: 10px;
+    }
+    #draw-history h3 {
+      margin-bottom: 6px;
+    }
+    #history-circles {
+      display: flex;
+      flex-direction: row;
+      gap: 4px;
+      overflow: hidden;
+    }
+    .history-circle {
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+      flex-shrink: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 11px;
+      font-weight: bold;
+      color: #fff;
+      cursor: default;
+    }
+    .history-circle.red-num   { background: #E0080B; }
+    .history-circle.black-num { background: #111; border: 1px solid rgba(255,255,255,.2); }
+    .history-circle.zero-num  { background: #016D29; }
+
+    /* Number grid — grows to fill the wider bet panel */
+    #live-roulette-grid {
+      display: grid;
+      grid-template-columns: 44px repeat(12, 1fr) 38px;
+      grid-template-rows: repeat(3, 38px);
+      gap: 2px;
+      margin-bottom: 2px;
+      width: 100%;
+    }
+    #live-roulette-grid .lnum {
+      border: 1px solid rgba(255,255,255,.25);
+      border-radius: 2px;
+      font-size: 9px;
+      font-weight: bold;
+      color: #f0f0f0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      position: relative;
+      overflow: visible;
+    }
+    #live-roulette-grid .lnum.redNum  { background: #E0080B; }
+    #live-roulette-grid .lnum.blackNum{ background: #111; }
+    #live-roulette-grid .lnum.zeroBtn { background: #016D29; grid-row: 1 / 4; grid-column: 1; }
+    #live-roulette-grid .lnum.colBtn  { background: #016D29; font-size: 7px; opacity:.6; cursor:default; }
+
+    /* Outside bets row */
+    #live-outside {
+      display: flex;
+      gap: 2px;
+      margin-left: 46px; /* skip zero column (44px + 2px gap) */
+      margin-bottom: 8px;
+      width: calc(100% - 46px);
+    }
+    #live-outside .lout {
+      flex: 1;
+      border: 1px solid rgba(255,255,255,.25);
+      border-radius: 2px;
+      font-size: 9px;
+      font-weight: bold;
+      color: #f0f0f0;
+      padding: 6px 0;
+      text-align: center;
+      position: relative;
+      overflow: visible;
+    }
+    #live-outside .lout.redNum  { background: #E0080B; }
+    #live-outside .lout.blackNum{ background: #111; }
+    #live-outside .lout.pairOdd { background: #1a1a3a; }
+
+    /* Chip token */
+    .bet-chip {
+      position: absolute;
+      width: 22px; height: 22px;
+      border-radius: 50%;
+      border: 2px solid rgba(255,255,255,.7);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 7px; font-weight: bold; color: #fff;
+      cursor: default;
+      top: 50%; left: 50%;
+      transform: translate(-50%, -50%);
+      z-index: 10;
+      box-shadow: 0 1px 4px rgba(0,0,0,.6);
+    }
+
+    /* Bet legend */
+    #bet-legend {
+      margin-top: 8px;
+      font-size: .75rem;
+      color: #9e9e9e;
+    }
+    #bet-legend .legend-row {
+      display: flex; align-items: center; gap: 6px;
+      margin-bottom: 3px;
+      color: #f0f0f0;
+    }
+    #bet-legend .legend-chip {
+      width: 14px; height: 14px;
+      border-radius: 50%;
+      border: 1px solid rgba(255,255,255,.5);
+      flex-shrink: 0;
+    }
+
+    /* ── Status bar (UI 3: below the wheel, never overlapping) ────────── */
+    #status-bar {
+      flex-shrink: 0;
+      height: 64px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 20px;
+      background: #1a1a2e;
+      border-top: 1px solid #2a2a4a;
+    }
+    /* UI 1: status badge — high contrast */
+    #status-badge {
+      font-size: 1.5rem;
+      font-weight: bold;
+      padding: .3rem 1.4rem;
+      border-radius: 2rem;
+      background: #0d0d1a;
+      color: #f0f0f0;
+      border: 2px solid #3a3a5c;
+    }
+
+    /* Last winning number — shown during open status */
+    #last-win-display {
+      font-size: 1rem;
+      color: #f0f0f0;
+    }
+    #last-win-number {
+      font-size: 1.4rem;
+      font-weight: bold;
+      color: #c9a84c;
+    }
+
+    /* ── QR block ─────────────────────────────────────────────────────── */
     #qr-block {
-      position: fixed; bottom: 20px; right: 20px;
-      background: white; padding: 8px; border-radius: 8px; z-index: 200;
+      position: fixed; bottom: 72px; right: 12px;
+      background: #fff; padding: 6px; border-radius: 6px;
+      z-index: 200;
+      box-shadow: 0 4px 16px rgba(0,0,0,.7);
     }
-    #qr-block img { width: 120px; height: 120px; display: block; }
-    #qr-block p { font-size: .65rem; text-align: center; color: #333; margin-top: 4px; }
+    #qr-block img { width: 100px; height: 100px; display: block; }
+    #qr-block p   { font-size: .6rem; text-align: center; color: #222; margin-top: 3px; font-weight: bold; }
+
+    /* ── Session info ─────────────────────────────────────────────────── */
     #session-id-display {
-      position: fixed; top: 10px; left: 10px; font-size: .8rem;
-      color: rgba(255,255,255,.4); z-index: 200;
+      position: fixed; top: 8px; left: 10px;
+      font-size: .8rem;
+      /* UI 1: muted but readable — #9e9e9e on #0d0d1a passes 4.5:1 */
+      color: #9e9e9e;
+      z-index: 200;
     }
   </style>
 </head>
 <body>
 
-<div id="overlay">
-  <div id="status-badge">⏳ En attente…</div>
-  <div id="winning-display"></div>
+<!-- Main row: wheel | bet panel -->
+<div id="main-wrap">
+
+  <!-- Wheel panel: app.js will append #container here (moved by display.js) -->
+  <div id="wheel-panel">
+    <div id="winning-display"></div>
+  </div>
+
+  <!-- Live bet panel (FEATURE 2) -->
+  <div id="bet-panel">
+
+    <!-- Draw history -->
+    <div id="draw-history">
+      <h3>🎯 Derniers tirages</h3>
+      <div id="history-circles"></div>
+    </div>
+
+    <h3>🎲 Mises en cours</h3>
+
+    <!--
+      Compact betting grid — mirrors play.html layout.
+      Cells are tagged with data-type / data-val so the chip renderer can target them.
+      Red numbers: 1,3,5,7,9,12,14,16,18,19,21,23,25,27,30,32,34,36
+    -->
+    <div id="live-roulette-grid">
+      <!-- Zero -->
+      <div class="lnum zeroBtn" data-type="number" data-val="0">0</div>
+      <!-- Row 1: 3,6,...,36 -->
+      <div class="lnum redNum"   data-type="number" data-val="3">3</div>
+      <div class="lnum blackNum" data-type="number" data-val="6">6</div>
+      <div class="lnum redNum"   data-type="number" data-val="9">9</div>
+      <div class="lnum redNum"   data-type="number" data-val="12">12</div>
+      <div class="lnum blackNum" data-type="number" data-val="15">15</div>
+      <div class="lnum redNum"   data-type="number" data-val="18">18</div>
+      <div class="lnum redNum"   data-type="number" data-val="21">21</div>
+      <div class="lnum blackNum" data-type="number" data-val="24">24</div>
+      <div class="lnum redNum"   data-type="number" data-val="27">27</div>
+      <div class="lnum redNum"   data-type="number" data-val="30">30</div>
+      <div class="lnum blackNum" data-type="number" data-val="33">33</div>
+      <div class="lnum redNum"   data-type="number" data-val="36">36</div>
+      <div class="lnum colBtn">2→1</div>
+      <!-- Row 2: 2,5,...,35 -->
+      <div class="lnum blackNum" data-type="number" data-val="2">2</div>
+      <div class="lnum redNum"   data-type="number" data-val="5">5</div>
+      <div class="lnum blackNum" data-type="number" data-val="8">8</div>
+      <div class="lnum blackNum" data-type="number" data-val="11">11</div>
+      <div class="lnum redNum"   data-type="number" data-val="14">14</div>
+      <div class="lnum blackNum" data-type="number" data-val="17">17</div>
+      <div class="lnum blackNum" data-type="number" data-val="20">20</div>
+      <div class="lnum redNum"   data-type="number" data-val="23">23</div>
+      <div class="lnum blackNum" data-type="number" data-val="26">26</div>
+      <div class="lnum blackNum" data-type="number" data-val="29">29</div>
+      <div class="lnum redNum"   data-type="number" data-val="32">32</div>
+      <div class="lnum blackNum" data-type="number" data-val="35">35</div>
+      <div class="lnum colBtn">2→1</div>
+      <!-- Row 3: 1,4,...,34 -->
+      <div class="lnum redNum"   data-type="number" data-val="1">1</div>
+      <div class="lnum blackNum" data-type="number" data-val="4">4</div>
+      <div class="lnum redNum"   data-type="number" data-val="7">7</div>
+      <div class="lnum blackNum" data-type="number" data-val="10">10</div>
+      <div class="lnum blackNum" data-type="number" data-val="13">13</div>
+      <div class="lnum redNum"   data-type="number" data-val="16">16</div>
+      <div class="lnum redNum"   data-type="number" data-val="19">19</div>
+      <div class="lnum blackNum" data-type="number" data-val="22">22</div>
+      <div class="lnum redNum"   data-type="number" data-val="25">25</div>
+      <div class="lnum blackNum" data-type="number" data-val="28">28</div>
+      <div class="lnum blackNum" data-type="number" data-val="31">31</div>
+      <div class="lnum redNum"   data-type="number" data-val="34">34</div>
+      <div class="lnum colBtn">2→1</div>
+    </div>
+
+    <!-- Outside bets -->
+    <div id="live-outside">
+      <div class="lout pairOdd" data-type="parity" data-val="even">PAIR</div>
+      <div class="lout redNum"  data-type="color"  data-val="red">ROUGE</div>
+      <div class="lout blackNum"data-type="color"  data-val="black">NOIR</div>
+      <div class="lout pairOdd" data-type="parity" data-val="odd">IMPAIR</div>
+    </div>
+
+    <!-- Chip legend — dynamically populated -->
+    <div id="bet-legend">
+      <div style="color:#9e9e9e;font-size:.7rem;margin-bottom:4px">Joueurs :</div>
+      <div id="legend-entries"></div>
+    </div>
+  </div>
 </div>
 
+<!-- UI 3: status bar BELOW the wheel — never overlapping -->
+<div id="status-bar">
+  <div id="status-badge">⏳ En attente…</div>
+  <div id="last-win-display" style="display:none">
+    Dernier numéro : <span id="last-win-number"></span>
+  </div>
+</div>
+
+<!-- Fixed overlays -->
 <div id="qr-block">
   <img id="qr-img" src="/api/session/qr" alt="QR /play">
   <p>Jouer sur /play</p>
 </div>
-
 <div id="session-id-display"></div>
 
-<!-- Roulette wheel engine -->
+<!-- Roulette wheel engine (creates #container, appends to body) -->
 <script src="/static/roulette/assets/js/app.js"></script>
 <!-- Display controller -->
 <script src="/static/js/display.js"></script>
