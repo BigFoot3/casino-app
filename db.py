@@ -84,9 +84,30 @@ def init_db():
                 key   TEXT PRIMARY KEY,
                 value TEXT NOT NULL
             );
+            CREATE TABLE IF NOT EXISTS vote_sessions (
+                id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                film_title  TEXT NOT NULL,
+                status      TEXT NOT NULL DEFAULT 'waiting'
+                                CHECK(status IN ('waiting','open','closed')),
+                opened_at   TEXT,
+                closed_at   TEXT,
+                created_at  TEXT DEFAULT (datetime('now'))
+            );
+            CREATE TABLE IF NOT EXISTS votes (
+                id               INTEGER PRIMARY KEY AUTOINCREMENT,
+                vote_session_id  INTEGER NOT NULL REFERENCES vote_sessions(id),
+                user_id          INTEGER NOT NULL REFERENCES users(id),
+                score            INTEGER NOT NULL CHECK(score BETWEEN 1 AND 10),
+                bonus_amount     INTEGER NOT NULL DEFAULT 0 CHECK(bonus_amount IN (0,25,50)),
+                weighted_score   REAL NOT NULL,
+                updated_at       TEXT DEFAULT (datetime('now')),
+                UNIQUE(vote_session_id, user_id)
+            );
         ''')
         conn.execute("INSERT OR IGNORE INTO app_config(key,value) VALUES ('auto_mode_enabled','0')")
         conn.execute("INSERT OR IGNORE INTO app_config(key,value) VALUES ('auto_interval_seconds','120')")
+        conn.execute("INSERT OR IGNORE INTO app_config(key,value) VALUES ('app_mode','roulette')")
+        conn.execute("INSERT OR IGNORE INTO app_config(key,value) VALUES ('current_vote_session_id','')")
         conn.commit()
 
 

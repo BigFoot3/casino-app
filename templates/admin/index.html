@@ -219,6 +219,71 @@
     </table>
   </div>
 </div>
+<!-- Vote festival -->
+<div class="card p-4 mb-4">
+  <h5>🎬 Vote festival</h5>
+
+  {% if app_mode == 'vote' and current_vote %}
+  <!-- Vote en cours -->
+  <div class="mb-3">
+    <span class="badge bg-info text-dark fs-6">EN COURS</span>
+    <strong class="ms-2">{{ current_vote['film_title'] }}</strong>
+  </div>
+  <div class="row g-2 align-items-center mb-3">
+    <div class="col-auto">
+      <button id="btn-vote-close" class="btn btn-danger">Fermer le vote</button>
+    </div>
+  </div>
+  <!-- Résultats en temps réel -->
+  <div id="vote-results-panel">
+    <div id="vote-results-loading" class="text-muted small">Chargement des résultats…</div>
+    <div id="vote-results-content" style="display:none">
+      <div class="row align-items-center mb-3">
+        <div class="col-auto">
+          <span class="fw-bold" style="font-size:2.5rem;color:#c9a84c" id="vr-avg">—</span>
+          <span class="text-muted">/10 pondérée</span>
+        </div>
+        <div class="col-auto ms-4">
+          <span id="vr-count" class="fs-5 fw-bold">0</span> <span class="text-muted">votant(s)</span>
+        </div>
+      </div>
+      <div class="mb-2 small text-muted">Répartition bonus :
+        <span class="badge bg-secondary ms-1">0 tok : <span id="vr-b0">0</span></span>
+        <span class="badge bg-primary ms-1">25 tok : <span id="vr-b25">0</span></span>
+        <span class="badge bg-warning text-dark ms-1">50 tok : <span id="vr-b50">0</span></span>
+      </div>
+      <div class="table-responsive mt-2">
+        <table class="table table-dark table-sm align-middle">
+          <thead><tr><th>Joueur</th><th>Note</th><th>Bonus</th><th>Score pondéré</th></tr></thead>
+          <tbody id="vr-table-body"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  {% else %}
+  <!-- Pas de vote en cours -->
+  <div class="row g-2 align-items-end mb-3">
+    <div class="col">
+      <input type="text" id="vote-film-title" class="form-control form-control-sm" placeholder="Titre du film">
+    </div>
+    <div class="col-auto">
+      <button id="btn-vote-open" class="btn btn-success">Ouvrir vote</button>
+    </div>
+    <div class="col-auto">
+      <button id="btn-vote-palmares" class="btn btn-outline-warning"
+              {% if app_mode == 'palmares' %}disabled{% endif %}>
+        {% if app_mode == 'palmares' %}Palmarès affiché{% else %}Afficher palmarès{% endif %}
+      </button>
+    </div>
+    {% if app_mode == 'palmares' %}
+    <div class="col-auto">
+      <button id="btn-vote-roulette" class="btn btn-outline-secondary btn-sm">Repasser en roulette</button>
+    </div>
+    {% endif %}
+  </div>
+  {% endif %}
+</div>
 {% endblock %}
 {% block scripts %}
 <script src="/static/js/admin.js"></script>
