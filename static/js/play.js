@@ -135,35 +135,34 @@ async function pollStatus() {
         $('vote-film-name').textContent = d.vote_session.film_title;
       }
       updateVoteBalancePreview();
-      return;
-    }
-
-    if (appMode === 'palmares') {
+    } else if (appMode === 'palmares') {
       showOnly(msgPalmares);
       clearInterval(cdInterval);
-      return;
-    }
-
-    // Normal roulette mode
-    if (d.status === 'open') {
-      // New session detected → clear any leftover pending bets from previous round
-      if (d.session_id && d.session_id !== lastOpenSession) {
-        lastOpenSession = d.session_id;
-        pendingBets.clear();
-        allBtns.forEach(btn => updateBadge(btn));
-        updateTotals();
-        betError.style.display = 'none';
-      }
-      showOnly(msgCountdown, betForm);
-      startCountdown(d.time_remaining_seconds);
-    } else if (d.status === 'spinning') {
-      showOnly(msgSpinning);
-      clearInterval(cdInterval);
     } else {
-      showOnly(msgWaiting);
-      clearInterval(cdInterval);
+      // Normal roulette mode
+      if (d.status === 'open') {
+        // New session detected → clear any leftover pending bets from previous round
+        if (d.session_id && d.session_id !== lastOpenSession) {
+          lastOpenSession = d.session_id;
+          pendingBets.clear();
+          allBtns.forEach(btn => updateBadge(btn));
+          updateTotals();
+          betError.style.display = 'none';
+        }
+        showOnly(msgCountdown, betForm);
+        startCountdown(d.time_remaining_seconds);
+      } else if (d.status === 'spinning') {
+        showOnly(msgSpinning);
+        clearInterval(cdInterval);
+      } else {
+        showOnly(msgWaiting);
+        clearInterval(cdInterval);
+      }
     }
-  } catch(e) {}
+  } catch(e) {
+    pollTimer = setTimeout(pollStatus, 3000);
+    return;
+  }
   pollTimer = setTimeout(pollStatus, 2000);
 }
 
@@ -397,6 +396,20 @@ if (btnVoteSubmit) {
   });
 }
 
-// ── Start ─────────────────────────────────────────────────────────────────────
+// ── Start — affichage immédiat depuis l'état serveur injecté par Jinja2 ──────
+(function applyInitialMode() {
+  const mode = window.INITIAL_APP_MODE || 'roulette';
+  const vs   = window.INITIAL_VOTE_SESSION;
+  if (mode === 'vote') {
+    showOnly(votePanel);
+    if (vs && vs.film_title) $('vote-film-name').textContent = vs.film_title;
+    updateVoteBalancePreview();
+  } else if (mode === 'palmares') {
+    showOnly(msgPalmares);
+  } else {
+    showOnly(msgWaiting);
+  }
+})();
+
 pollStatus();
 pollPlayBets();
