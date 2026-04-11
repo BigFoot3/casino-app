@@ -2,7 +2,7 @@ from datetime import datetime, timezone, timedelta
 from flask import (Blueprint, render_template, session as flask_session,
                    redirect, url_for, g)
 
-from db import db_conn, get_active_session
+from db import db_conn, get_active_session, get_config
 
 player_bp = Blueprint('player', __name__)
 
@@ -57,7 +57,19 @@ def play():
         user = conn.execute(
             'SELECT * FROM users WHERE id=?', (flask_session['user_id'],)
         ).fetchone()
-    return render_template('play.html', user=user)
+        cfg = get_config(conn)
+        app_mode = cfg.get('app_mode', 'roulette')
+        vote_session = None
+        if app_mode == 'vote':
+            vsid = cfg.get('current_vote_session_id', '')
+            if vsid:
+                vs = conn.execute(
+                    'SELECT id, film_title FROM vote_sessions WHERE id=?', (int(vsid),)
+                ).fetchone()
+                if vs:
+                    vote_session = {'id': vs['id'], 'film_title': vs['film_title']}
+    return render_template('play.html', user=user,
+                           app_mode=app_mode, vote_session=vote_session)
 
 
 @player_bp.route('/roulette/display')

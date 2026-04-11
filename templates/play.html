@@ -278,5 +278,9 @@
 </div>
 {% endblock %}
 {% block scripts %}
+<script>
+  window.INITIAL_APP_MODE    = {{ app_mode | tojson }};
+  window.INITIAL_VOTE_SESSION = {{ vote_session | tojson }};
+</script>
 <script src="/static/js/play.js"></script>
 {% endblock %}
