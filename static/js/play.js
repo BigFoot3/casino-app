@@ -12,6 +12,7 @@ const $ = id => document.getElementById(id);
 const msgWaiting   = $('msg-waiting');
 const msgSpinning  = $('msg-spinning');
 const msgCountdown = $('msg-countdown');
+const msgPalmares  = $('msg-palmares');
 const betForm      = $('bet-form');
 const betSubmit    = $('bet-submit');
 const betClear     = $('bet-clear');
@@ -21,12 +22,14 @@ const resultPanel  = $('result-panel');
 const balanceEl    = $('balance');
 const totalMisedEl = $('total-mised');
 const soldeResteEl = $('solde-reste');
+const votePanel    = $('vote-panel');
 
-let betPlaced    = false;
-let betSessionId = null;
-let resultShown  = false;
-let pollTimer    = null;
-let cdInterval   = null;
+let betPlaced       = false;
+let betSessionId    = null;
+let resultShown     = false;
+let pollTimer       = null;
+let cdInterval      = null;
+let lastOpenSession = null;   // tracks session_id of last 'open' state seen
 
 // ── Multi-bet state ───────────────────────────────────────────────────────────
 // pendingBets: Map<"type:value", {bet_type, bet_value, amount}>
@@ -101,7 +104,8 @@ betClear.addEventListener('click', () => {
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 function showOnly(...els) {
-  [msgWaiting, msgSpinning, msgCountdown, betForm, resultPanel].forEach(e => e.style.display = 'none');
+  [msgWaiting, msgSpinning, msgCountdown, betForm, resultPanel, msgPalmares, votePanel]
+    .forEach(e => e.style.display = 'none');
   els.forEach(e => { if (e) e.style.display = ''; });
 }
 
@@ -121,7 +125,35 @@ async function pollStatus() {
   try {
     const r = await fetch('/api/session/status');
     const d = await r.json();
+
+    const appMode = d.app_mode || 'roulette';
+
+    if (appMode === 'vote') {
+      showOnly(votePanel);
+      clearInterval(cdInterval);
+      if (d.vote_session) {
+        $('vote-film-name').textContent = d.vote_session.film_title;
+      }
+      updateVoteBalancePreview();
+      return;
+    }
+
+    if (appMode === 'palmares') {
+      showOnly(msgPalmares);
+      clearInterval(cdInterval);
+      return;
+    }
+
+    // Normal roulette mode
     if (d.status === 'open') {
+      // New session detected → clear any leftover pending bets from previous round
+      if (d.session_id && d.session_id !== lastOpenSession) {
+        lastOpenSession = d.session_id;
+        pendingBets.clear();
+        allBtns.forEach(btn => updateBadge(btn));
+        updateTotals();
+        betError.style.display = 'none';
+      }
       showOnly(msgCountdown, betForm);
       startCountdown(d.time_remaining_seconds);
     } else if (d.status === 'spinning') {
@@ -150,7 +182,7 @@ async function pollResult() {
 
     // Delay result by SPIN_DURATION_MS — ball frozen at t=9000ms on display page
     setTimeout(() => {
-      $('result-number').textContent = d.winning_number;
+      $('result-number').textContent = d.winning_number === 0 ? 67 : d.winning_number;
       showOnly(resultPanel);
 
       const listEl = $('result-bets-list');
@@ -294,6 +326,75 @@ async function pollPlayBets() {
     }
   } catch(e) {}
   setTimeout(pollPlayBets, 2000);
+}
+
+// ── Vote UI ───────────────────────────────────────────────────────────────────
+let selectedBonus = 0;
+
+const scoreSlider = $('vote-score-slider');
+const scoreDisplay = $('vote-score-display');
+
+if (scoreSlider) {
+  scoreSlider.addEventListener('input', () => {
+    scoreDisplay.textContent = scoreSlider.value;
+    updateVoteBalancePreview();
+  });
+}
+
+document.querySelectorAll('.vote-bonus-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const bonus = parseInt(btn.dataset.bonus);
+    const balance = parseInt(balanceEl.textContent) || 0;
+    // Check affordability for new bonus vs current selection
+    const cost = bonus - selectedBonus;  // net cost (negative = refund)
+    if (balance + selectedBonus - bonus < 0) {
+      const fb = $('vote-feedback');
+      fb.textContent = 'Solde insuffisant pour ce bonus.';
+      fb.className = 'alert alert-danger mt-2';
+      fb.style.display = '';
+      return;
+    }
+    $('vote-feedback').style.display = 'none';
+    selectedBonus = bonus;
+    document.querySelectorAll('.vote-bonus-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    updateVoteBalancePreview();
+  });
+});
+
+function updateVoteBalancePreview() {
+  const balance = parseInt(balanceEl.textContent) || 0;
+  // Preview assumes 0 was previously spent (first vote); will be adjusted server-side for re-votes
+  $('vote-balance-preview').textContent = balance - selectedBonus;
+}
+
+const btnVoteSubmit = $('btn-vote-submit');
+if (btnVoteSubmit) {
+  btnVoteSubmit.addEventListener('click', async () => {
+    const score = parseInt(scoreSlider.value);
+    const fb = $('vote-feedback');
+    fb.style.display = 'none';
+    $('vote-confirmed').style.display = 'none';
+    btnVoteSubmit.disabled = true;
+
+    const resp = await fetch('/api/vote/submit', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json', 'X-CSRFToken': CSRF},
+      body: JSON.stringify({score, bonus_amount: selectedBonus})
+    });
+    const data = await resp.json();
+    btnVoteSubmit.disabled = false;
+
+    if (!resp.ok) {
+      fb.textContent = data.error || 'Erreur lors du vote.';
+      fb.className = 'alert alert-danger mt-2';
+      fb.style.display = '';
+    } else {
+      balanceEl.textContent = data.tokens_remaining;
+      updateVoteBalancePreview();
+      $('vote-confirmed').style.display = '';
+    }
+  });
 }
 
 // ── Start ─────────────────────────────────────────────────────────────────────

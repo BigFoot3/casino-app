@@ -45,6 +45,58 @@ def _gen_password(n=8):
     return ''.join(random.choices(string.ascii_letters + string.digits, k=n))
 
 
+# ─── Leaderboard ─────────────────────────────────────────────────────────────
+
+@api_bp.route('/api/leaderboard')
+def leaderboard():
+    """Top 3 winners / top 3 losers over closed sessions only.
+    Excludes bets from sessions still open or spinning (payout not yet resolved).
+    """
+    _Q = '''
+        SELECT u.username, SUM(b.payout - b.amount) AS net
+        FROM bets b
+        JOIN users u          ON b.user_id    = u.id
+        JOIN game_sessions gs ON b.session_id = gs.id
+        WHERE gs.status = 'closed'
+        GROUP BY b.user_id
+        HAVING net {cmp} 0
+        ORDER BY net {order}
+        LIMIT 3
+    '''
+    with db_conn() as conn:
+        winners = conn.execute(_Q.format(cmp='>', order='DESC')).fetchall()
+        losers  = conn.execute(_Q.format(cmp='<', order='ASC')).fetchall()
+    return jsonify({
+        'top_winners': [{'username': r['username'], 'net': r['net']} for r in winners],
+        'top_losers':  [{'username': r['username'], 'net': r['net']} for r in losers],
+    })
+
+
+# ─── Round result (per-spin leaderboard) ─────────────────────────────────────
+
+@api_bp.route('/api/session/round_result')
+def session_round_result():
+    """Winners/losers for the most recently closed session (single-round stats)."""
+    with db_conn() as conn:
+        closed = conn.execute(
+            "SELECT id FROM game_sessions WHERE status='closed' ORDER BY id DESC LIMIT 1"
+        ).fetchone()
+        if not closed:
+            return jsonify({'session_id': None, 'winners': [], 'losers': []})
+        sid = closed['id']
+        rows = conn.execute(
+            '''SELECT u.username, (b.payout - b.amount) AS net
+               FROM bets b JOIN users u ON b.user_id = u.id
+               WHERE b.session_id = ?
+               ORDER BY net DESC''',
+            (sid,)
+        ).fetchall()
+    data    = [{'username': r['username'], 'net': r['net']} for r in rows]
+    winners = [r for r in data if r['net'] > 0][:3]
+    losers  = sorted([r for r in data if r['net'] < 0], key=lambda x: x['net'])[:3]
+    return jsonify({'session_id': sid, 'winners': winners, 'losers': losers})
+
+
 # ─── Draw history ────────────────────────────────────────────────────────────
 
 @api_bp.route('/api/history')
@@ -66,11 +118,33 @@ def session_status():
         active = get_active_session(conn)
         cfg    = get_config(conn)
 
+        app_mode = cfg.get('app_mode', 'roulette')
+
+        # Vote session info (only when app_mode == 'vote')
+        vote_session = None
+        if app_mode == 'vote':
+            vsid = cfg.get('current_vote_session_id', '')
+            if vsid:
+                vs = conn.execute(
+                    'SELECT id, film_title FROM vote_sessions WHERE id=?', (int(vsid),)
+                ).fetchone()
+                if vs:
+                    voter_count = conn.execute(
+                        'SELECT COUNT(*) FROM votes WHERE vote_session_id=?', (vs['id'],)
+                    ).fetchone()[0]
+                    vote_session = {
+                        'id': vs['id'],
+                        'film_title': vs['film_title'],
+                        'voter_count': voter_count,
+                    }
+
         if not active:
             return jsonify({'status': 'waiting', 'time_remaining_seconds': 0,
                             'winning_number': None,
                             'mode': cfg.get('auto_mode_enabled','0') == '1' and 'auto' or 'manual',
-                            'auto_interval_seconds': int(cfg.get('auto_interval_seconds', 120))})
+                            'auto_interval_seconds': int(cfg.get('auto_interval_seconds', 120)),
+                            'app_mode': app_mode,
+                            'vote_session': vote_session})
 
         # Grace period: if active is 'waiting' but previous session closed < 12s ago,
         # report 'spinning' so the display page can run the wheel animation.
@@ -88,6 +162,8 @@ def session_status():
                         'session_id': prev['id'],
                         'mode': active['mode'],
                         'auto_interval_seconds': active['auto_interval_seconds'],
+                        'app_mode': app_mode,
+                        'vote_session': vote_session,
                     })
 
         time_remaining = 0
@@ -103,6 +179,8 @@ def session_status():
             'session_id': active['id'],
             'mode': active['mode'],
             'auto_interval_seconds': active['auto_interval_seconds'],
+            'app_mode': app_mode,
+            'vote_session': vote_session,
         })
 
 
@@ -287,6 +365,242 @@ def claim_reward():
         conn.execute('COMMIT')
 
     return jsonify({'new_balance': new_balance})
+
+
+# ─── Vote ────────────────────────────────────────────────────────────────────
+
+@api_bp.route('/api/vote/open', methods=['POST'])
+def vote_open():
+    _require_admin()
+    data       = request.get_json(force=True)
+    film_title = (data.get('film_title') or '').strip()
+    if not film_title:
+        return jsonify({'error': 'film_title requis'}), 400
+
+    with db_conn() as conn:
+        conn.execute('BEGIN IMMEDIATE')
+        existing = conn.execute(
+            "SELECT id FROM vote_sessions WHERE status='open'"
+        ).fetchone()
+        if existing:
+            conn.execute('ROLLBACK')
+            return jsonify({'error': 'Une session de vote est déjà ouverte'}), 400
+
+        cur = conn.execute(
+            "INSERT INTO vote_sessions(film_title, status, opened_at) VALUES (?,?,?)",
+            (film_title, 'open', _utcnow().isoformat())
+        )
+        new_id = cur.lastrowid
+        conn.execute(
+            "INSERT OR REPLACE INTO app_config(key,value) VALUES ('app_mode','vote')"
+        )
+        conn.execute(
+            "INSERT OR REPLACE INTO app_config(key,value) VALUES ('current_vote_session_id',?)",
+            (str(new_id),)
+        )
+        conn.execute('COMMIT')
+
+    return jsonify({'ok': True, 'vote_session_id': new_id})
+
+
+@api_bp.route('/api/vote/close', methods=['POST'])
+def vote_close():
+    _require_admin()
+    with db_conn() as conn:
+        conn.execute('BEGIN IMMEDIATE')
+        vsid = conn.execute(
+            "SELECT value FROM app_config WHERE key='current_vote_session_id'"
+        ).fetchone()
+        if not vsid or not vsid['value']:
+            conn.execute('ROLLBACK')
+            return jsonify({'error': 'Aucune session de vote ouverte'}), 400
+
+        conn.execute(
+            "UPDATE vote_sessions SET status='closed', closed_at=? WHERE id=? AND status='open'",
+            (_utcnow().isoformat(), int(vsid['value']))
+        )
+        conn.execute(
+            "INSERT OR REPLACE INTO app_config(key,value) VALUES ('app_mode','roulette')"
+        )
+        conn.execute(
+            "INSERT OR REPLACE INTO app_config(key,value) VALUES ('current_vote_session_id','')"
+        )
+        conn.execute('COMMIT')
+
+    return jsonify({'ok': True})
+
+
+@api_bp.route('/api/vote/submit', methods=['POST'])
+def vote_submit():
+    _require_login()
+    data         = request.get_json(force=True)
+    score        = data.get('score')
+    bonus_amount = data.get('bonus_amount', 0)
+    user_id      = flask_session['user_id']
+
+    if not isinstance(score, int) or not (1 <= score <= 10):
+        return jsonify({'error': 'score invalide (1–10)'}), 400
+    if bonus_amount not in (0, 25, 50):
+        return jsonify({'error': 'bonus_amount invalide (0, 25 ou 50)'}), 400
+
+    multiplier = {0: 1.0, 25: 1.5, 50: 2.0}[bonus_amount]
+    weighted   = round(score * multiplier, 4)
+
+    with db_conn() as conn:
+        conn.execute('BEGIN IMMEDIATE')
+
+        cfg = get_config(conn)
+        if cfg.get('app_mode') != 'vote':
+            conn.execute('ROLLBACK')
+            return jsonify({'error': 'Aucun vote en cours'}), 400
+
+        vsid_str = cfg.get('current_vote_session_id', '')
+        if not vsid_str:
+            conn.execute('ROLLBACK')
+            return jsonify({'error': 'Aucune session de vote active'}), 400
+        vsid = int(vsid_str)
+
+        # Read existing vote (if any)
+        existing_vote = conn.execute(
+            'SELECT bonus_amount FROM votes WHERE vote_session_id=? AND user_id=?',
+            (vsid, user_id)
+        ).fetchone()
+        ancien_bonus = existing_vote['bonus_amount'] if existing_vote else 0
+
+        # delta: positive = refund, negative = deduction
+        delta_tokens = ancien_bonus - bonus_amount
+
+        user = conn.execute(
+            'SELECT tokens FROM users WHERE id=?', (user_id,)
+        ).fetchone()
+        if not user:
+            conn.execute('ROLLBACK')
+            return jsonify({'error': 'Utilisateur introuvable'}), 401
+        if user['tokens'] + delta_tokens < 0:
+            conn.execute('ROLLBACK')
+            return jsonify({'error': 'Solde insuffisant pour ce bonus'}), 400
+
+        # UPSERT vote
+        if existing_vote:
+            conn.execute(
+                '''UPDATE votes
+                   SET score=?, bonus_amount=?, weighted_score=?, updated_at=?
+                   WHERE vote_session_id=? AND user_id=?''',
+                (score, bonus_amount, weighted, _utcnow().isoformat(), vsid, user_id)
+            )
+        else:
+            conn.execute(
+                '''INSERT INTO votes(vote_session_id, user_id, score, bonus_amount, weighted_score, updated_at)
+                   VALUES (?,?,?,?,?,?)''',
+                (vsid, user_id, score, bonus_amount, weighted, _utcnow().isoformat())
+            )
+
+        conn.execute(
+            'UPDATE users SET tokens = tokens + ? WHERE id=?',
+            (delta_tokens, user_id)
+        )
+        new_balance = conn.execute(
+            'SELECT tokens FROM users WHERE id=?', (user_id,)
+        ).fetchone()['tokens']
+        conn.execute('COMMIT')
+
+    return jsonify({'ok': True, 'tokens_remaining': new_balance, 'weighted_score': weighted})
+
+
+@api_bp.route('/api/vote/results')
+def vote_results():
+    _require_admin()
+    session_id = request.args.get('session_id', type=int)
+    if not session_id:
+        return jsonify({'error': 'session_id requis'}), 400
+
+    with db_conn() as conn:
+        vs = conn.execute(
+            'SELECT id, film_title, status FROM vote_sessions WHERE id=?', (session_id,)
+        ).fetchone()
+        if not vs:
+            return jsonify({'error': 'Session introuvable'}), 404
+
+        rows = conn.execute(
+            '''SELECT u.username, v.score, v.bonus_amount, v.weighted_score
+               FROM votes v JOIN users u ON v.user_id = u.id
+               WHERE v.vote_session_id=?
+               ORDER BY u.username''',
+            (session_id,)
+        ).fetchall()
+
+        voter_count = len(rows)
+        avg_weighted = round(sum(r['weighted_score'] for r in rows) / voter_count, 2) if voter_count else 0
+
+        bonus_breakdown = {0: 0, 25: 0, 50: 0}
+        for r in rows:
+            bonus_breakdown[r['bonus_amount']] += 1
+
+    return jsonify({
+        'film_title': vs['film_title'],
+        'voter_count': voter_count,
+        'avg_weighted_score': avg_weighted,
+        'bonus_breakdown': bonus_breakdown,
+        'votes': [dict(r) for r in rows],
+    })
+
+
+@api_bp.route('/api/vote/palmares', methods=['POST'])
+def vote_palmares():
+    _require_admin()
+    with db_conn() as conn:
+        conn.execute('BEGIN IMMEDIATE')
+        open_vs = conn.execute(
+            "SELECT id FROM vote_sessions WHERE status='open'"
+        ).fetchone()
+        if open_vs:
+            conn.execute('ROLLBACK')
+            return jsonify({'error': 'Fermer le vote en cours avant d\'afficher le palmarès'}), 400
+        conn.execute(
+            "INSERT OR REPLACE INTO app_config(key,value) VALUES ('app_mode','palmares')"
+        )
+        conn.execute('COMMIT')
+
+    return jsonify({'ok': True})
+
+
+@api_bp.route('/api/vote/reset-mode', methods=['POST'])
+def vote_reset_mode():
+    """Switch app_mode back to roulette (used from palmares state)."""
+    _require_admin()
+    with db_conn() as conn:
+        conn.execute('BEGIN IMMEDIATE')
+        conn.execute(
+            "INSERT OR REPLACE INTO app_config(key,value) VALUES ('app_mode','roulette')"
+        )
+        conn.execute('COMMIT')
+    return jsonify({'ok': True})
+
+
+@api_bp.route('/api/vote/summary')
+def vote_summary():
+    _require_admin()
+    with db_conn() as conn:
+        sessions = conn.execute(
+            "SELECT id, film_title, opened_at, closed_at FROM vote_sessions WHERE status='closed' ORDER BY id DESC"
+        ).fetchall()
+        result = []
+        for vs in sessions:
+            row = conn.execute(
+                '''SELECT COUNT(*) as voter_count,
+                          ROUND(AVG(weighted_score), 2) as avg_weighted_score
+                   FROM votes WHERE vote_session_id=?''',
+                (vs['id'],)
+            ).fetchone()
+            result.append({
+                'id': vs['id'],
+                'film_title': vs['film_title'],
+                'voter_count': row['voter_count'],
+                'avg_weighted_score': row['avg_weighted_score'] or 0,
+            })
+        result.sort(key=lambda x: x['avg_weighted_score'], reverse=True)
+
+    return jsonify(result)
 
 
 # ─── Admin — session control ──────────────────────────────────────────────────

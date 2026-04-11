@@ -20,12 +20,13 @@ const historyCircles = document.getElementById('history-circles');
 
 const RED_NUMBERS = new Set([1,3,5,7,9,12,14,16,18,19,21,23,25,27,30,32,34,36]);
 
-let lastSessionId    = null;
-let lastWinningNumber = null;  // remembered across sessions
-// BUG 1 fix: guard keyed on session_id, not a boolean flag.
-// Prevents double-spin within one session; resets automatically when session_id changes.
-// Does NOT rely on status==='waiting' which may be skipped in fast auto-mode cycles.
-let spunForSessionId = null;
+let lastSessionId     = null;
+let lastWinningNumber = null;   // remembered across sessions
+// Guard keyed on session_id — prevents double-spin within one session.
+let spunForSessionId  = null;
+// Timestamp (ms) when the current wheel animation fully ends (t+10000ms).
+// pollHistory defers rendering until this time to avoid spoiling the result.
+let spinEndTime = 0;
 
 // ── UI 1 palette ─────────────────────────────────────────────────────────────
 const STATUS_LABELS = {
@@ -144,11 +145,86 @@ async function pollBets() {
   setTimeout(pollBets, 2000);
 }
 
+// ── App mode helpers ─────────────────────────────────────────────────────────
+const voteOverlay     = document.getElementById('vote-overlay');
+const palmaresOverlay = document.getElementById('palmares-overlay');
+const mainWrap        = document.getElementById('main-wrap');
+let lastAppMode       = null;
+let palmaresLoaded    = false;
+
+function setDisplayMode(mode) {
+  if (mode === lastAppMode) return;
+  lastAppMode = mode;
+
+  if (mode === 'vote') {
+    mainWrap.style.display        = 'none';
+    palmaresOverlay.style.display = 'none';
+    voteOverlay.style.display     = 'flex';
+  } else if (mode === 'palmares') {
+    mainWrap.style.display        = 'none';
+    voteOverlay.style.display     = 'none';
+    palmaresOverlay.style.display = 'flex';
+    if (!palmaresLoaded) {
+      palmaresLoaded = true;
+      loadPalmares();
+    }
+  } else {
+    // roulette
+    voteOverlay.style.display     = 'none';
+    palmaresOverlay.style.display = 'none';
+    mainWrap.style.display        = '';
+  }
+}
+
+async function loadPalmares() {
+  try {
+    const r = await fetch('/api/vote/summary');
+    if (!r.ok) return;
+    const films = await r.json();
+    const medals = ['🥇', '🥈', '🥉'];
+    const listEl = document.getElementById('palmares-list');
+    listEl.innerHTML = '';
+    films.forEach((f, i) => {
+      const medal = medals[i] || `${i + 1}.`;
+      const div = document.createElement('div');
+      div.style.cssText = 'display:flex;align-items:center;gap:16px;padding:14px 20px;' +
+        'background:#1a1a2e;border-radius:12px;margin-bottom:12px;' +
+        (i === 0 ? 'border:2px solid #ffd700;box-shadow:0 0 18px rgba(255,215,0,.4)' :
+         i === 1 ? 'border:2px solid #c0c0c0' :
+         i === 2 ? 'border:2px solid #cd7f32' : 'border:1px solid #2a2a4a');
+      div.innerHTML = `<span style="font-size:2rem">${medal}</span>
+        <span style="flex:1;font-size:1.25rem;font-weight:bold;color:#f0f0f0">${f.film_title}</span>
+        <span style="font-size:1.8rem;font-weight:900;color:#c9a84c">${f.avg_weighted_score}</span>
+        <span style="color:#9e9e9e;font-size:.85rem">/10 · ${f.voter_count} vote${f.voter_count !== 1 ? 's' : ''}</span>`;
+      listEl.appendChild(div);
+    });
+  } catch(e) { /* network hiccup */ }
+}
+
 // ── Main display poll ─────────────────────────────────────────────────────────
 async function pollDisplay() {
   try {
     const r = await fetch('/api/session/status');
     const d = await r.json();
+
+    const appMode = d.app_mode || 'roulette';
+    setDisplayMode(appMode);
+
+    if (appMode === 'vote') {
+      if (d.vote_session) {
+        document.getElementById('display-film-title').textContent  = d.vote_session.film_title;
+        document.getElementById('display-voter-count').textContent = d.vote_session.voter_count;
+      }
+      setTimeout(pollDisplay, 3000);
+      return;
+    }
+
+    if (appMode === 'palmares') {
+      setTimeout(pollDisplay, 5000);
+      return;
+    }
+
+    // ── Roulette mode ─────────────────────────────────────────────────────────
 
     // UI 1: apply palette
     const label = STATUS_LABELS[d.status] || d.status;
@@ -162,18 +238,28 @@ async function pollDisplay() {
       statusBadge.textContent = label;
     }
 
-    // BUG 1 fix: fire spinWheel exactly once per unique session_id
+    // Fire spinWheel exactly once per unique session_id
     if (d.status === 'spinning' && d.winning_number !== null && d.session_id !== spunForSessionId) {
-      spunForSessionId = d.session_id;
-      lastWinningNumber = d.winning_number;  // remember for next open phase
+      spunForSessionId  = d.session_id;
+      spinEndTime       = Date.now() + 10000;  // animation ends at t+10000ms (app.js wheel stop)
+      lastWinningNumber = d.winning_number;    // remember for next open phase
       // Hide "last win" banner while wheel is spinning
       lastWinDisplay.style.display = 'none';
-      // Delay winning number reveal by 9000ms — ball is visually frozen at t=9000ms
-      // (app.js:629: ballTrack.style.cssText sets static transform at t=9000ms)
-      const _winNum = d.winning_number;
-      setTimeout(() => {
+      // At t+9000ms: reveal winning number + fetch round leaderboard
+      // (ball visually frozen at t=9000ms — app.js line 629)
+      const _winNum        = d.winning_number;
+      const _rlSessionId   = d.session_id;
+      setTimeout(async () => {
         winDisplay.style.display = 'block';
-        winDisplay.textContent   = _winNum;
+        winDisplay.textContent   = _winNum === 0 ? 67 : _winNum;
+        // Fetch and display the per-round leaderboard
+        try {
+          const rr = await fetch('/api/session/round_result');
+          if (rr.ok) {
+            const data = await rr.json();
+            if (data.session_id === _rlSessionId) showRoundLeaderboard(data);
+          }
+        } catch(e) { /* network hiccup */ }
       }, 9000);
       console.log(`spinWheel called session=${d.session_id} winning=${d.winning_number}`);
       try { spinWheel(d.winning_number); } catch(e) { console.error('spinWheel error', e); }
@@ -185,7 +271,7 @@ async function pollDisplay() {
       winDisplay.textContent   = '';
     }
     if (d.status === 'open' && lastWinningNumber !== null) {
-      lastWinNumber.textContent  = lastWinningNumber;
+      lastWinNumber.textContent  = lastWinningNumber === 0 ? 67 : lastWinningNumber;
       lastWinDisplay.style.display = '';
     } else if (d.status !== 'open') {
       lastWinDisplay.style.display = 'none';
@@ -217,7 +303,7 @@ function renderHistory(draws) {
     const n = draw.winning_number;
     const el = document.createElement('div');
     el.className = 'history-circle ' + (n === 0 ? 'zero-num' : RED_NUMBERS.has(n) ? 'red-num' : 'black-num');
-    el.textContent = n;
+    el.textContent = n === 0 ? 67 : n;
     el.title = `Session #${draw.session_id}`;
     historyCircles.appendChild(el);
   });
@@ -226,12 +312,111 @@ function renderHistory(draws) {
 async function pollHistory() {
   try {
     const r = await fetch('/api/history');
-    if (r.ok) renderHistory(await r.json());
+    if (r.ok) {
+      const draws = await r.json();
+      const now   = Date.now();
+      if (now >= spinEndTime) {
+        renderHistory(draws);
+      } else {
+        // Wheel animation still running — defer render until it ends (+200ms margin)
+        const delay = spinEndTime - now + 200;
+        setTimeout(async () => {
+          try {
+            const r2 = await fetch('/api/history');
+            if (r2.ok) renderHistory(await r2.json());
+          } catch(e) { /* network hiccup */ }
+        }, delay);
+      }
+    }
   } catch(e) { /* network hiccup */ }
   setTimeout(pollHistory, 5000);
+}
+
+// ── Round leaderboard overlay (shown once after each spin) ───────────────────
+function showRoundLeaderboard(data) {
+  const overlay  = document.getElementById('round-leaderboard');
+  const winSect  = document.getElementById('rl-winners-section');
+  const loseSect = document.getElementById('rl-losers-section');
+  const winEl    = document.getElementById('rl-winners');
+  const loseEl   = document.getElementById('rl-losers');
+  if (!overlay || !winEl || !loseEl) return;
+
+  const medals = ['🥇', '🥈', '🥉'];
+  winEl.innerHTML  = '';
+  loseEl.innerHTML = '';
+  const rows = [];
+
+  data.winners.forEach((p, i) => {
+    const div = document.createElement('div');
+    div.className = 'rl-row';
+    div.innerHTML = `<span>${medals[i]} ${p.username}</span><span class="rl-pos">+${p.net}</span>`;
+    winEl.appendChild(div);
+    rows.push(div);
+  });
+  data.losers.forEach((p, i) => {
+    const div = document.createElement('div');
+    div.className = 'rl-row';
+    div.innerHTML = `<span>${medals[i]} ${p.username}</span><span class="rl-neg">${p.net}</span>`;
+    loseEl.appendChild(div);
+    rows.push(div);
+  });
+
+  if (rows.length === 0) return;  // no bets this round — nothing to show
+
+  winSect.style.display  = data.winners.length ? '' : 'none';
+  loseSect.style.display = data.losers.length  ? '' : 'none';
+
+  // Reset animation classes then show overlay
+  rows.forEach(r => { r.classList.remove('rl-popin'); r.style.animationDelay = ''; });
+  overlay.classList.remove('rl-fadeout');
+  overlay.style.display = 'flex';
+
+  // Trigger pop-in sequentially (force reflow so removing/adding class works)
+  void overlay.offsetWidth;
+  rows.forEach((row, i) => {
+    row.style.animationDelay = `${i * 200}ms`;
+    row.classList.add('rl-popin');
+  });
+
+  // Auto-hide: fade out after 5s, then hide after fade (600ms)
+  setTimeout(() => {
+    overlay.classList.add('rl-fadeout');
+    setTimeout(() => {
+      overlay.style.display = 'none';
+    }, 600);
+  }, 5000);
+}
+
+// ── Leaderboard polling (every 10s) ──────────────────────────────────────────
+function renderLeaderboard(data) {
+  const medals  = ['🥇', '🥈', '🥉'];
+  const winEl   = document.getElementById('lb-winners-list');
+  const loseEl  = document.getElementById('lb-losers-list');
+  if (!winEl || !loseEl) return;
+
+  winEl.innerHTML = data.top_winners.length === 0
+    ? '<div class="lb-row lb-empty">Personne encore…</div>'
+    : data.top_winners.map((p, i) =>
+        `<div class="lb-row"><span>${medals[i]} ${p.username}</span><span class="lb-net-pos">+${p.net}</span></div>`
+      ).join('');
+
+  loseEl.innerHTML = data.top_losers.length === 0
+    ? '<div class="lb-row lb-empty">Personne encore…</div>'
+    : data.top_losers.map((p, i) =>
+        `<div class="lb-row"><span>${medals[i]} ${p.username}</span><span class="lb-net-neg">${p.net}</span></div>`
+      ).join('');
+}
+
+async function pollLeaderboard() {
+  try {
+    const r = await fetch('/api/leaderboard');
+    if (r.ok) renderLeaderboard(await r.json());
+  } catch(e) { /* network hiccup */ }
+  setTimeout(pollLeaderboard, 10000);
 }
 
 // Start all pollers
 pollDisplay();
 pollBets();
 pollHistory();
+pollLeaderboard();

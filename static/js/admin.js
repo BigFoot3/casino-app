@@ -243,3 +243,82 @@ document.querySelectorAll('.rw-toggle-btn').forEach(btn => {
     else alert('Erreur');
   });
 });
+
+// ── Vote ──────────────────────────────────────────────────────────────────────
+const btnVoteOpen     = $('btn-vote-open');
+const btnVoteClose    = $('btn-vote-close');
+const btnVotePalmares = $('btn-vote-palmares');
+const btnVoteRoulette = $('btn-vote-roulette');
+
+if (btnVoteOpen) {
+  btnVoteOpen.addEventListener('click', async () => {
+    const film_title = $('vote-film-title').value.trim();
+    if (!film_title) return alert('Saisissez le titre du film.');
+    const [s, d] = await post('/api/vote/open', {film_title});
+    if (s === 200) location.reload();
+    else alert(d.error || 'Erreur');
+  });
+}
+
+if (btnVoteClose) {
+  btnVoteClose.addEventListener('click', async () => {
+    if (!confirm('Fermer le vote en cours ?')) return;
+    const [s, d] = await post('/api/vote/close');
+    if (s === 200) location.reload();
+    else alert(d.error || 'Erreur');
+  });
+}
+
+if (btnVotePalmares) {
+  btnVotePalmares.addEventListener('click', async () => {
+    const [s, d] = await post('/api/vote/palmares');
+    if (s === 200) location.reload();
+    else alert(d.error || 'Erreur');
+  });
+}
+
+if (btnVoteRoulette) {
+  btnVoteRoulette.addEventListener('click', async () => {
+    const [s, d] = await post('/api/vote/reset-mode');
+    if (s === 200) location.reload();
+    else alert(d.error || 'Erreur');
+  });
+}
+
+// ── Vote results polling (when vote is open) ──────────────────────────────────
+const vrPanel = $('vote-results-panel');
+if (vrPanel) {
+  let vrSessionId = null;
+  // Read session id from the close button's data or from page context
+  const closeBtn = $('btn-vote-close');
+  // The session_id comes from the current_vote embedded in the page — read via API
+  async function loadVoteResults() {
+    try {
+      const r = await fetch('/api/session/status');
+      const d = await r.json();
+      if (d.vote_session && d.vote_session.id) {
+        vrSessionId = d.vote_session.id;
+        const r2 = await fetch(`/api/vote/results?session_id=${vrSessionId}`);
+        if (r2.ok) {
+          const data = await r2.json();
+          $('vr-avg').textContent   = data.avg_weighted_score || '—';
+          $('vr-count').textContent = data.voter_count;
+          $('vr-b0').textContent    = data.bonus_breakdown[0];
+          $('vr-b25').textContent   = data.bonus_breakdown[25];
+          $('vr-b50').textContent   = data.bonus_breakdown[50];
+          const tbody = $('vr-table-body');
+          tbody.innerHTML = '';
+          (data.votes || []).forEach(v => {
+            const tr = document.createElement('tr');
+            tr.innerHTML = `<td>${v.username}</td><td>${v.score}/10</td><td>${v.bonus_amount} tok</td><td>${v.weighted_score}</td>`;
+            tbody.appendChild(tr);
+          });
+          $('vote-results-loading').style.display = 'none';
+          $('vote-results-content').style.display = '';
+        }
+      }
+    } catch(e) {}
+    setTimeout(loadVoteResults, 5000);
+  }
+  loadVoteResults();
+}
