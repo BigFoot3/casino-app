@@ -3,7 +3,7 @@
 Application roulette en ligne pour événements en présentiel — jusqu'à 100 joueurs simultanés.
 
 > Fichier de référence pour Claude Code. Mettre à jour après chaque milestone.
-> Dernière mise à jour : 2026-04-10
+> Dernière mise à jour : 2026-04-11
 
 ---
 
@@ -74,12 +74,19 @@ casino.db            # Créé automatiquement au premier lancement
 | `GET /rewards` | player | Catalogue de récompenses |
 | `GET /roulette/display` | player | Affichage salle (grand écran) |
 | `GET /admin` | admin | Panel administrateur |
-| `GET /api/session/status` | api | Statut de session courant (JSON) |
-| `POST /api/session/open` | api | Ouvrir une session (admin) |
+| `GET /api/session/status` | api | Statut courant (JSON) + `app_mode` + `vote_session` |
+| `POST /api/session/open` | api | Ouvrir une session roulette (admin) |
 | `POST /api/session/spin` | api | Lancer la roue (admin) |
 | `POST /api/bet` | api | Placer une mise (joueur) |
 | `POST /api/claim` | api | Réclamer une récompense |
 | `POST /api/admin/*` | api | Actions admin (tokens, users, rewards) |
+| `POST /api/vote/open` | api | Ouvrir un vote film (admin) — body: `{film_title}` |
+| `POST /api/vote/close` | api | Fermer le vote courant (admin) |
+| `POST /api/vote/submit` | api | Voter (joueur) — body: `{score, bonus_amount}` |
+| `GET /api/vote/results?session_id=X` | api | Résultats détaillés (admin) |
+| `POST /api/vote/palmares` | api | Passer en mode palmarès (admin) |
+| `GET /api/vote/summary` | api | Toutes les sessions fermées triées par note (admin) |
+| `POST /api/vote/reset-mode` | api | Repasser en mode roulette (admin) |
 
 ---
 
@@ -91,10 +98,15 @@ game_sessions  (id, status, mode, auto_interval_seconds, winning_number, opened_
 bets           (id, session_id, user_id, bet_type, bet_value, amount, payout)
 rewards        (id, name, description, token_cost, stock, active)
 reward_claims  (id, user_id, reward_id, claimed_at)
-app_config     (key, value)   -- auto_mode_enabled, auto_interval_seconds
+app_config     (key, value)   -- auto_mode_enabled, auto_interval_seconds, app_mode, current_vote_session_id
+vote_sessions  (id, film_title, status, opened_at, closed_at, created_at)
+votes          (id, vote_session_id, user_id, score, bonus_amount, weighted_score, updated_at)
+               UNIQUE(vote_session_id, user_id)
 ```
 
-`status` : `waiting → open (30s) → spinning → closed → waiting`
+`status` roulette : `waiting → open (30s) → spinning → closed → waiting`
+`app_mode` : `'roulette'` / `'vote'` / `'palmares'`
+`status` vote : `'waiting'` / `'open'` / `'closed'`
 
 ---
 
@@ -193,7 +205,26 @@ flask --app "app:create_app()" run
 ⚠️ preload_app=True → forking : les objets initialisés avant le fork sont partagés — éviter les connexions DB globales
 ⚠️ Rôles           → 'admin' | 'player' — constraint SQLite CHECK
 ⚠️ winning_number  → 0 = House win (aucun parieur ne gagne, ni rouge/noir ni pair/impair)
+⚠️ vote delta_tokens → ancien_bonus - nouveau_bonus : positif=remboursement, négatif=déduction
+⚠️ vote weighted_score → score × (1 / 1.5 / 2) selon bonus (0 / 25 / 50)
+⚠️ vote UPSERT      → UNIQUE(vote_session_id, user_id) — un seul vote par user par session, modifiable
+⚠️ app_mode         → stocké dans app_config — roulette par défaut, reset via /api/vote/reset-mode
 ```
+
+---
+
+## Tests
+
+```bash
+cd /root/casino && source venv/bin/activate
+pytest tests/ -v --tb=short   # 73 tests (72 passed + 1 xfail intentionnel)
+```
+
+Suite dans `tests/` :
+- `conftest.py` — fixtures : `app` (DB temporaire isolée), `admin_client`, `player_client`, `player2_client`, `open_session`, `open_vote_session`
+- `test_casino.py` — 73 tests sur 9 classes : `TestAuth`, `TestRoulette`, `TestBets`, `TestRewards`, `TestLeaderboard`, `TestVoteOpen`, `TestVoteSubmit`, `TestVoteClose`, `TestVoteResults`, `TestPalmares`, `TestAdminActions`
+
+> `test_no_double_bet_same_session` → xfail intentionnel : l'app autorise les mises multiples par session (multi-bet frontend).
 
 ---
 
