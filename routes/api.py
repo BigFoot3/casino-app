@@ -51,6 +51,7 @@ def _gen_password(n=8):
 def leaderboard():
     """Top 3 winners / top 3 losers over closed sessions only.
     Excludes bets from sessions still open or spinning (payout not yet resolved).
+    Filtered by stats_reset_at if set in app_config.
     """
     _Q = '''
         SELECT u.username, SUM(b.payout - b.amount) AS net
@@ -58,17 +59,27 @@ def leaderboard():
         JOIN users u          ON b.user_id    = u.id
         JOIN game_sessions gs ON b.session_id = gs.id
         WHERE gs.status = 'closed'
+          AND gs.closed_at > ?
         GROUP BY b.user_id
         HAVING net {cmp} 0
         ORDER BY net {order}
         LIMIT 3
     '''
     with db_conn() as conn:
-        winners = conn.execute(_Q.format(cmp='>', order='DESC')).fetchall()
-        losers  = conn.execute(_Q.format(cmp='<', order='ASC')).fetchall()
+        cfg      = get_config(conn)
+        # Default: epoch — all bets pass. Format matches SQLite datetime('now'): 'YYYY-MM-DD HH:MM:SS'
+        reset_at = cfg.get('stats_reset_at', '1970-01-01 00:00:00')
+        winners  = conn.execute(_Q.format(cmp='>', order='DESC'), (reset_at,)).fetchall()
+        losers   = conn.execute(_Q.format(cmp='<', order='ASC'),  (reset_at,)).fetchall()
+        h_rows   = conn.execute(
+            "SELECT username, tokens FROM users WHERE role='player' ORDER BY tokens DESC LIMIT 10"
+        ).fetchall()
+    top_holders = [{'rank': i + 1, 'username': r['username'], 'tokens': r['tokens']}
+                   for i, r in enumerate(h_rows)]
     return jsonify({
         'top_winners': [{'username': r['username'], 'net': r['net']} for r in winners],
         'top_losers':  [{'username': r['username'], 'net': r['net']} for r in losers],
+        'top_holders': top_holders,
     })
 
 
@@ -641,6 +652,44 @@ def admin_spin_session():
         else:
             conn.execute('ROLLBACK')
     resolve_spin(active['id'])
+    return jsonify({'ok': True})
+
+
+@api_bp.route('/api/admin/session/close', methods=['POST'])
+def admin_close_session():
+    _require_admin()
+    with db_conn() as conn:
+        conn.execute('BEGIN IMMEDIATE')
+        active = get_active_session(conn)
+        if not active:
+            conn.execute('ROLLBACK')
+            return jsonify({'error': 'Aucune session active'}), 400
+        if active['status'] == 'spinning':
+            conn.execute('ROLLBACK')
+            return jsonify({'error': 'spin in progress'}), 400
+        if active['status'] not in ('open', 'waiting'):
+            conn.execute('ROLLBACK')
+            return jsonify({'error': 'Session non fermable'}), 400
+        conn.execute(
+            "UPDATE game_sessions SET status='closed', closed_at=? WHERE id=?",
+            (_utcnow().isoformat(), active['id'])
+        )
+        conn.execute('COMMIT')
+    return jsonify({'ok': True})
+
+
+@api_bp.route('/api/admin/stats/reset', methods=['POST'])
+def admin_stats_reset():
+    """Set stats_reset_at to now — leaderboard will only count bets placed after this timestamp."""
+    _require_admin()
+    with db_conn() as conn:
+        conn.execute('BEGIN IMMEDIATE')
+        # Use SQLite datetime format to match bets.created_at DEFAULT (datetime('now'))
+        conn.execute(
+            "INSERT OR REPLACE INTO app_config(key,value) VALUES ('stats_reset_at',?)",
+            (_utcnow().strftime('%Y-%m-%d %H:%M:%S'),)
+        )
+        conn.execute('COMMIT')
     return jsonify({'ok': True})
 
 
