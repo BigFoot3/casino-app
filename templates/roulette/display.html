@@ -4,114 +4,60 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Roulette — Affichage</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Serif:wght@700;900&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/static/roulette/assets/css/style.css">
   <style>
     /* ── Reset ────────────────────────────────────────────────────────────── */
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
-    /* UI 1: color palette
-       Background: #0d0d1a  Surface: #1a1a2e  Text: #f0f0f0
-       Accent: #c9a84c  Success: #4caf50  Danger: #e53935  Muted: #9e9e9e */
+    /* Midnight Gala palette
+       surface-dim:#0E0E13  surface-lo:#1A1A21  text:#DDDDE8
+       gold:#E9C349  success:#7DE0A8  danger:#E8334A  muted:#72727F */
     html, body {
       width: 100%; height: 100%;
-      background: #0d0d1a;
-      color: #f0f0f0;
-      font-family: sans-serif;
+      background: #0E0E13;
+      color: #DDDDE8;
+      font-family: 'Inter', system-ui, sans-serif;
       overflow: hidden;
     }
 
-    /* UI 3: body is flex-column — wheel area on top, status bar below */
     body { display: flex; flex-direction: column; }
 
-    /* ── Main row: wheel panel + bet panel ─────────────────────────────── */
-    #main-wrap {
-      display: flex;
-      flex-direction: row;
-      flex: 1;
-      min-height: 0;        /* allow flex children to shrink */
-      overflow: hidden;
-    }
-
-    /* ── Wheel panel ────────────────────────────────────────────────────── */
-    #wheel-panel {
-      width: 45%;
+    /* ── Draws strip (top, full width) ─────────────────────────────────── */
+    #draws-strip {
       flex-shrink: 0;
+      height: 52px;
       display: flex;
       align-items: center;
-      justify-content: center;
+      gap: 10px;
+      padding: 0 16px;
+      background: #1A1A21;
+      border-bottom: 1px solid rgba(91,64,62,0.2);
       overflow: hidden;
-      position: relative;
     }
 
-    /* app.js appends #container to body; display.js moves it here */
-    /* UI 2: container transparent, auto-sized — JS applies scale() */
-    #container {
-      background: transparent !important;
-      height: auto !important;
-      width: auto !important;
-      padding: 0 !important;
-      display: inline-flex !important;
-      align-items: center !important;
-      justify-content: center !important;
-      transform-origin: center center;
-    }
-    /* Remove the left:-75px offset designed for the betting-board layout */
-    .wheel { left: 0 !important; transform-origin: center center; }
-    /* BUG 4 (prev session): hide yellow/gold outer rim artefact */
-    .outerRim { display: none !important; }
-    /* Hide betting board and game-over notification — display page is view-only */
-    #betting_board { display: none !important; }
-    #notification   { display: none !important; }
-
-    /* ── Winning number overlay (inside wheel panel) ─────────────────── */
-    #winning-display {
-      position: absolute;
-      top: 50%; left: 50%;
-      transform: translate(-50%, -50%);
-      font-size: 5rem; font-weight: 900;
-      color: #f0f0f0;
-      text-shadow: 0 0 40px #c9a84c, 0 0 80px #c9a84c;
-      display: none;
-      pointer-events: none;
-      z-index: 50;
-    }
-
-    /* ── Live-bet panel (right of wheel) ─────────────────────────────── */
-    #bet-panel {
-      flex: 1;
-      min-width: 0;
-      display: flex;
-      flex-direction: column;
-      justify-content: center;
-      background: #1a1a2e;
-      border-left: 1px solid #2a2a4a;
-      overflow-y: auto;
-      padding: 12px;
-    }
-    #bet-panel h3 {
-      font-size: .95rem;
-      color: #c9a84c;
-      letter-spacing: .05em;
+    .strip-label {
+      font-family: 'Noto Serif', serif;
+      font-size: .65rem;
+      font-weight: 700;
       text-transform: uppercase;
-      margin-bottom: 10px;
+      letter-spacing: .12em;
+      color: #72727F;
+      flex-shrink: 0;
+      white-space: nowrap;
     }
 
-    /* Draw history strip */
-    #draw-history {
-      margin-bottom: 10px;
-    }
-    #draw-history h3 {
-      margin-bottom: 6px;
-    }
     #history-circles {
       display: flex;
       flex-direction: row;
       gap: 4px;
       overflow: hidden;
     }
+
     .history-circle {
-      width: 32px;
-      height: 32px;
+      width: 34px; height: 34px;
       border-radius: 50%;
       flex-shrink: 0;
       display: flex;
@@ -122,18 +68,231 @@
       color: #fff;
       cursor: default;
     }
+
     .history-circle.red-num   { background: #E0080B; }
-    .history-circle.black-num { background: #111; border: 1px solid rgba(255,255,255,.2); }
+    .history-circle.black-num { background: #0E0E13; border: 1px solid rgba(255,255,255,.2); }
     .history-circle.zero-num  { background: #016D29; }
 
-    /* Number grid — grows to fill the wider bet panel */
+    /* ── Main wrap (flex-row — kept for setDisplayMode() in display.js) ─── */
+    #main-wrap {
+      display: flex;
+      flex-direction: row;
+      flex: 1;
+      min-height: 0;
+      overflow: hidden;
+    }
+
+    /* ── Center panel: wheel + bottom cards ────────────────────────────── */
+    #center-panel {
+      display: flex;
+      flex-direction: column;
+      flex: 1;
+      min-width: 0;
+      overflow: hidden;
+    }
+
+    /* ── Wheel panel ────────────────────────────────────────────────────── */
+    #wheel-panel {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      position: relative;
+      min-height: 0;
+      overflow: hidden;
+    }
+
+    /* Wheel engine: app.js creates #container and appends to body;
+       display.js moves it here. Transparent bg, JS applies scale(). */
+    #container {
+      background: transparent !important;
+      height: auto !important;
+      width: auto !important;
+      padding: 0 !important;
+      display: inline-flex !important;
+      align-items: center !important;
+      justify-content: center !important;
+      transform-origin: center center;
+    }
+
+    .wheel { left: 0 !important; transform-origin: center center; }
+    .outerRim      { display: none !important; }
+    #betting_board { display: none !important; }
+    #notification  { display: none !important; }
+
+    /* Winning number overlay (centered on wheel) */
+    #winning-display {
+      position: absolute;
+      top: 50%; left: 50%;
+      transform: translate(-50%, -50%);
+      font-size: 5rem; font-weight: 900;
+      font-family: 'Noto Serif', serif;
+      color: #DDDDE8;
+      text-shadow: 0 0 40px rgba(233,195,73,0.8), 0 0 80px rgba(233,195,73,0.4);
+      display: none;
+      pointer-events: none;
+      z-index: 50;
+    }
+
+    /* ── Bottom panels: top gagnants + top perdants (side by side) ───── */
+    #bottom-panels {
+      flex-shrink: 0;
+      height: 140px;
+      display: flex;
+      flex-direction: row;
+      gap: 8px;
+      padding: 8px 10px;
+      background: #0E0E13;
+      border-top: 1px solid rgba(91,64,62,0.15);
+    }
+
+    #lb-winners, #lb-losers {
+      flex: 1;
+      background: rgba(14,14,19,0.95);
+      border-radius: 12px;
+      padding: 8px 12px 10px;
+      overflow: hidden;
+    }
+
+    #lb-winners {
+      border: 2px solid #E9C349;
+      box-shadow: 0 0 10px rgba(233,195,73,0.15);
+    }
+
+    #lb-losers {
+      border: 2px solid #E8334A;
+      box-shadow: 0 0 10px rgba(232,51,74,0.15);
+    }
+
+    .lb-title {
+      font-family: 'Noto Serif', serif;
+      font-size: .78rem;
+      font-weight: 900;
+      text-transform: uppercase;
+      letter-spacing: .05em;
+      margin-bottom: 6px;
+    }
+
+    #lb-winners .lb-title { color: #E9C349; text-shadow: 0 0 6px rgba(233,195,73,0.4); }
+    #lb-losers  .lb-title { color: #E8334A; text-shadow: 0 0 6px rgba(232,51,74,0.4); }
+
+    .lb-row {
+      font-size: .74rem;
+      font-weight: bold;
+      color: #DDDDE8;
+      display: flex;
+      justify-content: space-between;
+      gap: 8px;
+      margin-bottom: 3px;
+      letter-spacing: .01em;
+    }
+
+    .lb-net-pos { color: #7DE0A8; }
+    .lb-net-neg { color: #FFB4AB; }
+    .lb-empty   { color: #72727F; font-size: .7rem; font-style: italic; }
+
+    /* ── Right panel — top 10 token holders ────────────────────────────── */
+    #right-panel {
+      flex-shrink: 0;
+      width: 210px;
+      display: flex;
+      flex-direction: column;
+      background: #1A1A21;
+      border-left: 1px solid rgba(91,64,62,0.2);
+      padding: 14px 12px 10px;
+      overflow: hidden;
+    }
+
+    .rp-title {
+      font-family: 'Noto Serif', serif;
+      font-size: .82rem;
+      font-weight: 900;
+      text-transform: uppercase;
+      letter-spacing: .07em;
+      color: #E9C349;
+      text-shadow: 0 0 8px rgba(233,195,73,0.35);
+      margin-bottom: 10px;
+      flex-shrink: 0;
+    }
+
+    #top-holders-list {
+      flex: 1;
+      overflow-y: auto;
+      overflow-x: hidden;
+    }
+
+    /* Hide scrollbar — cosmetic, content still scrollable */
+    #top-holders-list::-webkit-scrollbar { width: 0; }
+
+    .holder-row {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 0;
+      border-bottom: 1px solid rgba(255,255,255,.05);
+    }
+
+    .holder-rank {
+      font-family: 'Noto Serif', serif;
+      font-size: .78rem;
+      font-weight: 700;
+      color: #E9C349;
+      min-width: 20px;
+      text-align: right;
+      flex-shrink: 0;
+    }
+
+    /* Gold / silver / bronze for top 3 */
+    .holder-rank.rank-1 { color: #FFD700; }
+    .holder-rank.rank-2 { color: #C0C0C0; }
+    .holder-rank.rank-3 { color: #CD7F32; }
+
+    .holder-name {
+      flex: 1;
+      font-size: .8rem;
+      font-weight: 600;
+      color: #DDDDE8;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .holder-tokens {
+      font-size: .78rem;
+      font-weight: 700;
+      color: #E9C349;
+      white-space: nowrap;
+      flex-shrink: 0;
+    }
+
+    /* ── Live bet panel (bottom of center column) ──────────────────────── */
+    #bet-panel {
+      flex-shrink: 0;
+      display: flex;
+      flex-direction: column;
+      background: #1A1A21;
+      border-top: 1px solid rgba(91,64,62,0.2);
+      padding: 8px 10px 6px;
+      overflow: hidden;
+    }
+    #bet-panel h3 {
+      font-family: 'Noto Serif', serif;
+      font-size: .72rem;
+      font-weight: 900;
+      text-transform: uppercase;
+      letter-spacing: .08em;
+      color: #E9C349;
+      margin-bottom: 6px;
+      flex-shrink: 0;
+    }
     #live-roulette-grid {
       display: grid;
       grid-template-columns: 44px repeat(12, 1fr) 38px;
-      grid-template-rows: repeat(3, 38px);
+      grid-template-rows: repeat(3, 30px);
       gap: 2px;
       margin-bottom: 2px;
       width: 100%;
+      flex-shrink: 0;
     }
     #live-roulette-grid .lnum {
       border: 1px solid rgba(255,255,255,.25);
@@ -147,18 +306,17 @@
       position: relative;
       overflow: visible;
     }
-    #live-roulette-grid .lnum.redNum  { background: #E0080B; }
-    #live-roulette-grid .lnum.blackNum{ background: #111; }
-    #live-roulette-grid .lnum.zeroBtn { background: #016D29; grid-row: 1 / 4; grid-column: 1; }
-    #live-roulette-grid .lnum.colBtn  { background: #016D29; font-size: 7px; opacity:.6; cursor:default; }
-
-    /* Outside bets row */
+    #live-roulette-grid .lnum.redNum   { background: #E0080B; }
+    #live-roulette-grid .lnum.blackNum { background: #111; }
+    #live-roulette-grid .lnum.zeroBtn  { background: #016D29; grid-row: 1 / 4; grid-column: 1; }
+    #live-roulette-grid .lnum.colBtn   { background: #016D29; font-size: 7px; opacity:.6; cursor:default; }
     #live-outside {
       display: flex;
       gap: 2px;
-      margin-left: 46px; /* skip zero column (44px + 2px gap) */
-      margin-bottom: 8px;
+      margin-left: 46px;
+      margin-bottom: 4px;
       width: calc(100% - 46px);
+      flex-shrink: 0;
     }
     #live-outside .lout {
       flex: 1;
@@ -167,151 +325,90 @@
       font-size: 9px;
       font-weight: bold;
       color: #f0f0f0;
-      padding: 6px 0;
+      padding: 4px 0;
       text-align: center;
       position: relative;
       overflow: visible;
     }
-    #live-outside .lout.redNum  { background: #E0080B; }
-    #live-outside .lout.blackNum{ background: #111; }
-    #live-outside .lout.pairOdd { background: #1a1a3a; }
-
-    /* Chip token */
+    #live-outside .lout.redNum   { background: #E0080B; }
+    #live-outside .lout.blackNum { background: #111; }
+    #live-outside .lout.pairOdd  { background: #1a1a3a; }
     .bet-chip {
       position: absolute;
-      width: 22px; height: 22px;
+      width: 18px; height: 18px;
       border-radius: 50%;
       border: 2px solid rgba(255,255,255,.7);
       display: flex; align-items: center; justify-content: center;
-      font-size: 7px; font-weight: bold; color: #fff;
+      font-size: 6px; font-weight: bold; color: #fff;
       cursor: default;
       top: 50%; left: 50%;
       transform: translate(-50%, -50%);
       z-index: 10;
       box-shadow: 0 1px 4px rgba(0,0,0,.6);
     }
-
-    /* Bet legend */
     #bet-legend {
-      margin-top: 8px;
-      font-size: .75rem;
-      color: #9e9e9e;
+      font-size: .7rem;
+      color: #72727F;
+      flex-shrink: 0;
     }
     #bet-legend .legend-row {
       display: flex; align-items: center; gap: 6px;
-      margin-bottom: 3px;
-      color: #f0f0f0;
+      margin-bottom: 2px;
+      color: #DDDDE8;
     }
     #bet-legend .legend-chip {
-      width: 14px; height: 14px;
+      width: 12px; height: 12px;
       border-radius: 50%;
       border: 1px solid rgba(255,255,255,.5);
       flex-shrink: 0;
     }
 
-    /* ── Status bar (UI 3: below the wheel, never overlapping) ────────── */
+    /* ── Status bar (bottom strip) ─────────────────────────────────────── */
     #status-bar {
       flex-shrink: 0;
-      height: 64px;
+      height: 60px;
       display: flex;
       align-items: center;
       justify-content: center;
       gap: 20px;
-      background: #1a1a2e;
-      border-top: 1px solid #2a2a4a;
+      background: #1A1A21;
+      border-top: 1px solid rgba(91,64,62,0.2);
     }
-    /* UI 1: status badge — high contrast */
+
     #status-badge {
-      font-size: 1.5rem;
+      font-family: 'Noto Serif', serif;
+      font-size: 1.45rem;
       font-weight: bold;
-      padding: .3rem 1.4rem;
+      padding: .28rem 1.3rem;
       border-radius: 2rem;
-      background: #0d0d1a;
-      color: #f0f0f0;
-      border: 2px solid #3a3a5c;
+      background: #0E0E13;
+      color: #DDDDE8;
+      border: 2px solid rgba(91,64,62,0.4);
     }
 
-    /* Last winning number — shown during open status */
     #last-win-display {
-      font-size: 1rem;
-      color: #f0f0f0;
-    }
-    #last-win-number {
-      font-size: 1.4rem;
-      font-weight: bold;
-      color: #c9a84c;
+      font-size: .95rem;
+      color: #DDDDE8;
     }
 
-    /* ── QR block ─────────────────────────────────────────────────────── */
+    #last-win-number {
+      font-size: 1.35rem;
+      font-weight: bold;
+      font-family: 'Noto Serif', serif;
+      color: #E9C349;
+    }
+
+    /* ── QR block (fixed bottom-right) ─────────────────────────────────── */
     #qr-block {
-      position: fixed; bottom: 72px; right: 12px;
+      position: fixed; bottom: 68px; right: 12px;
       background: #fff; padding: 6px; border-radius: 6px;
       z-index: 200;
       box-shadow: 0 4px 16px rgba(0,0,0,.7);
     }
-    #qr-block img { width: 100px; height: 100px; display: block; }
-    #qr-block p   { font-size: .6rem; text-align: center; color: #222; margin-top: 3px; font-weight: bold; }
+    #qr-block img { width: 88px; height: 88px; display: block; }
+    #qr-block p   { font-size: .55rem; text-align: center; color: #222; margin-top: 2px; font-weight: bold; }
 
-    /* ── Session info ─────────────────────────────────────────────────── */
-    #session-id-display {
-      position: fixed; top: 8px; left: 10px;
-      font-size: .8rem;
-      /* UI 1: muted but readable — #9e9e9e on #0d0d1a passes 4.5:1 */
-      color: #9e9e9e;
-      z-index: 200;
-    }
-
-    /* ── Leaderboard overlay ──────────────────────────────────────────── */
-    #leaderboard-overlay {
-      position: fixed;
-      top: 12px; right: 12px;
-      z-index: 150;
-      display: flex;
-      flex-direction: column;
-      gap: 10px;
-      font-family: 'Impact', 'Arial Black', sans-serif;
-      pointer-events: none;
-    }
-    #lb-winners, #lb-losers {
-      background: rgba(8, 8, 20, 0.88);
-      border-radius: 14px;
-      padding: 8px 14px 10px;
-      min-width: 170px;
-    }
-    #lb-winners {
-      border: 3px solid #ffd700;
-      transform: rotate(-1.8deg);
-      box-shadow: 0 0 14px rgba(255,215,0,.4);
-    }
-    #lb-losers {
-      border: 3px solid #e53935;
-      transform: rotate(1.8deg);
-      box-shadow: 0 0 14px rgba(229,57,53,.3);
-    }
-    .lb-title {
-      font-size: 1rem;
-      font-weight: 900;
-      text-transform: uppercase;
-      letter-spacing: .06em;
-      margin-bottom: 6px;
-    }
-    #lb-winners .lb-title { color: #ffd700; text-shadow: 0 0 8px #ffd700; }
-    #lb-losers  .lb-title { color: #e53935; text-shadow: 0 0 8px #e53935; }
-    .lb-row {
-      font-size: .82rem;
-      font-weight: bold;
-      color: #f0f0f0;
-      display: flex;
-      justify-content: space-between;
-      gap: 10px;
-      margin-bottom: 2px;
-      letter-spacing: .02em;
-    }
-    .lb-net-pos { color: #4caf50; }
-    .lb-net-neg { color: #ff5252; }
-    .lb-empty   { color: #9e9e9e; font-size: .72rem; font-style: italic; }
-
-    /* ── Round leaderboard overlay (per-spin, auto-hide 5s) ────────────── */
+    /* ── Round leaderboard overlay (center-bottom, auto-hides after 5s) ─ */
     @keyframes rlPopIn {
       0%   { transform: scale(0) translateY(16px); opacity: 0; }
       65%  { transform: scale(1.18) translateY(-4px); opacity: 1; }
@@ -321,171 +418,178 @@
       from { opacity: 1; transform: scale(1); }
       to   { opacity: 0; transform: scale(0.88) translateY(10px); }
     }
+
     #round-leaderboard {
       position: fixed;
-      bottom: 80px; left: 50%;
+      bottom: 70px; left: 50%;
       transform: translateX(-50%);
       z-index: 300;
-      display: none;          /* hidden by default, shown by JS */
+      display: none;
       flex-direction: row;
       gap: 18px;
       pointer-events: none;
-      font-family: 'Impact', 'Arial Black', sans-serif;
+      font-family: 'Inter', sans-serif;
     }
+
     #round-leaderboard.rl-fadeout {
       animation: rlFadeOut 0.6s ease forwards;
     }
+
     .rl-section {
-      background: rgba(5, 5, 15, 0.94);
+      background: rgba(14, 14, 19, 0.94);
       border-radius: 18px;
       padding: 12px 20px 14px;
       min-width: 186px;
       text-align: center;
     }
+
     #rl-winners-section {
-      border: 4px solid #ffd700;
-      box-shadow: 0 0 24px rgba(255,215,0,.55), 0 4px 16px rgba(0,0,0,.6);
+      border: 4px solid #E9C349;
+      box-shadow: 0 0 24px rgba(233,195,73,0.55), 0 4px 16px rgba(0,0,0,.6);
     }
+
     #rl-losers-section {
-      border: 4px solid #e53935;
-      box-shadow: 0 0 24px rgba(229,57,53,.45), 0 4px 16px rgba(0,0,0,.6);
+      border: 4px solid #E8334A;
+      box-shadow: 0 0 24px rgba(232,51,74,0.45), 0 4px 16px rgba(0,0,0,.6);
     }
+
     .rl-title {
+      font-family: 'Noto Serif', serif;
       font-size: 1.15rem;
       font-weight: 900;
       text-transform: uppercase;
       letter-spacing: .07em;
       margin-bottom: 8px;
     }
-    #rl-winners-section .rl-title { color: #ffd700; text-shadow: 0 0 10px #ffd700; }
-    #rl-losers-section  .rl-title { color: #e53935; text-shadow: 0 0 10px #e53935; }
+
+    #rl-winners-section .rl-title { color: #E9C349; text-shadow: 0 0 10px rgba(233,195,73,0.6); }
+    #rl-losers-section  .rl-title { color: #E8334A; text-shadow: 0 0 10px rgba(232,51,74,0.6); }
+
     .rl-row {
       font-size: 1rem;
       font-weight: bold;
-      color: #fff;
+      color: #DDDDE8;
       display: flex;
       justify-content: space-between;
       gap: 18px;
       margin-bottom: 4px;
-      opacity: 0;             /* start invisible — animation sets final opacity */
+      opacity: 0;
     }
+
     .rl-row.rl-popin {
       animation: rlPopIn 0.42s cubic-bezier(.34,1.56,.64,1) forwards;
     }
-    .rl-pos { color: #69f0ae; font-size: 1.05rem; }
-    .rl-neg { color: #ff5252; font-size: 1.05rem; }
+
+    .rl-pos { color: #7DE0A8; font-size: 1.05rem; }
+    .rl-neg { color: #FFB4AB; font-size: 1.05rem; }
   </style>
 </head>
 <body>
 
-<!-- Main row: wheel | bet panel -->
+<!-- Draws strip — top full-width, numbers colored red/black/green -->
+<div id="draws-strip">
+  <span class="strip-label">🎯 Derniers tirages</span>
+  <div id="history-circles"></div>
+</div>
+
+<!-- Main wrap (id kept for setDisplayMode() in display.js) -->
 <div id="main-wrap">
 
-  <!-- Wheel panel: app.js will append #container here (moved by display.js) -->
-  <div id="wheel-panel">
-    <div id="winning-display"></div>
+  <!-- Center: wheel panel + bottom cards -->
+  <div id="center-panel">
+
+    <!-- Wheel — large, centered, up to 80vh -->
+    <div id="wheel-panel">
+      <div id="winning-display"></div>
+    </div>
+
+    <!-- Bottom: top gagnants / top perdants — compact side-by-side cards -->
+    <div id="bottom-panels">
+      <div id="lb-winners">
+        <div class="lb-title">🏆 Top Gagnants</div>
+        <div id="lb-winners-list"><div class="lb-row lb-empty">Chargement…</div></div>
+      </div>
+      <div id="lb-losers">
+        <div class="lb-title">💀 Top Loosers</div>
+        <div id="lb-losers-list"><div class="lb-row lb-empty">Chargement…</div></div>
+      </div>
+    </div>
+
+    <!-- Live bet grid (visible, bottom of center column) -->
+    <div id="bet-panel">
+      <h3>🎲 Mises en cours</h3>
+      <div id="live-roulette-grid">
+        <!-- Zero -->
+        <div class="lnum zeroBtn" data-type="number" data-val="0">67</div>
+        <!-- Row 1: 3,6,...,36 -->
+        <div class="lnum redNum"   data-type="number" data-val="3">3</div>
+        <div class="lnum blackNum" data-type="number" data-val="6">6</div>
+        <div class="lnum redNum"   data-type="number" data-val="9">9</div>
+        <div class="lnum redNum"   data-type="number" data-val="12">12</div>
+        <div class="lnum blackNum" data-type="number" data-val="15">15</div>
+        <div class="lnum redNum"   data-type="number" data-val="18">18</div>
+        <div class="lnum redNum"   data-type="number" data-val="21">21</div>
+        <div class="lnum blackNum" data-type="number" data-val="24">24</div>
+        <div class="lnum redNum"   data-type="number" data-val="27">27</div>
+        <div class="lnum redNum"   data-type="number" data-val="30">30</div>
+        <div class="lnum blackNum" data-type="number" data-val="33">33</div>
+        <div class="lnum redNum"   data-type="number" data-val="36">36</div>
+        <div class="lnum colBtn">2→1</div>
+        <!-- Row 2: 2,5,...,35 -->
+        <div class="lnum blackNum" data-type="number" data-val="2">2</div>
+        <div class="lnum redNum"   data-type="number" data-val="5">5</div>
+        <div class="lnum blackNum" data-type="number" data-val="8">8</div>
+        <div class="lnum blackNum" data-type="number" data-val="11">11</div>
+        <div class="lnum redNum"   data-type="number" data-val="14">14</div>
+        <div class="lnum blackNum" data-type="number" data-val="17">17</div>
+        <div class="lnum blackNum" data-type="number" data-val="20">20</div>
+        <div class="lnum redNum"   data-type="number" data-val="23">23</div>
+        <div class="lnum blackNum" data-type="number" data-val="26">26</div>
+        <div class="lnum blackNum" data-type="number" data-val="29">29</div>
+        <div class="lnum redNum"   data-type="number" data-val="32">32</div>
+        <div class="lnum blackNum" data-type="number" data-val="35">35</div>
+        <div class="lnum colBtn">2→1</div>
+        <!-- Row 3: 1,4,...,34 -->
+        <div class="lnum redNum"   data-type="number" data-val="1">1</div>
+        <div class="lnum blackNum" data-type="number" data-val="4">4</div>
+        <div class="lnum redNum"   data-type="number" data-val="7">7</div>
+        <div class="lnum blackNum" data-type="number" data-val="10">10</div>
+        <div class="lnum blackNum" data-type="number" data-val="13">13</div>
+        <div class="lnum redNum"   data-type="number" data-val="16">16</div>
+        <div class="lnum redNum"   data-type="number" data-val="19">19</div>
+        <div class="lnum blackNum" data-type="number" data-val="22">22</div>
+        <div class="lnum redNum"   data-type="number" data-val="25">25</div>
+        <div class="lnum blackNum" data-type="number" data-val="28">28</div>
+        <div class="lnum blackNum" data-type="number" data-val="31">31</div>
+        <div class="lnum redNum"   data-type="number" data-val="34">34</div>
+        <div class="lnum colBtn">2→1</div>
+      </div>
+      <!-- Outside bets -->
+      <div id="live-outside">
+        <div class="lout pairOdd" data-type="parity" data-val="even">PAIR</div>
+        <div class="lout redNum"  data-type="color"  data-val="red">ROUGE</div>
+        <div class="lout blackNum"data-type="color"  data-val="black">NOIR</div>
+        <div class="lout pairOdd" data-type="parity" data-val="odd">IMPAIR</div>
+      </div>
+      <!-- Chip legend -->
+      <div id="bet-legend">
+        <div style="color:#72727F;font-size:.65rem;margin-bottom:3px">Joueurs :</div>
+        <div id="legend-entries"></div>
+      </div>
+    </div>
   </div>
 
-  <!-- Live bet panel (FEATURE 2) -->
-  <div id="bet-panel">
-
-    <!-- Draw history -->
-    <div id="draw-history">
-      <h3>🎯 Derniers tirages</h3>
-      <div id="history-circles"></div>
-    </div>
-
-    <h3>🎲 Mises en cours</h3>
-
-    <!--
-      Compact betting grid — mirrors play.html layout.
-      Cells are tagged with data-type / data-val so the chip renderer can target them.
-      Red numbers: 1,3,5,7,9,12,14,16,18,19,21,23,25,27,30,32,34,36
-    -->
-    <div id="live-roulette-grid">
-      <!-- Zero -->
-      <div class="lnum zeroBtn" data-type="number" data-val="0">67</div>
-      <!-- Row 1: 3,6,...,36 -->
-      <div class="lnum redNum"   data-type="number" data-val="3">3</div>
-      <div class="lnum blackNum" data-type="number" data-val="6">6</div>
-      <div class="lnum redNum"   data-type="number" data-val="9">9</div>
-      <div class="lnum redNum"   data-type="number" data-val="12">12</div>
-      <div class="lnum blackNum" data-type="number" data-val="15">15</div>
-      <div class="lnum redNum"   data-type="number" data-val="18">18</div>
-      <div class="lnum redNum"   data-type="number" data-val="21">21</div>
-      <div class="lnum blackNum" data-type="number" data-val="24">24</div>
-      <div class="lnum redNum"   data-type="number" data-val="27">27</div>
-      <div class="lnum redNum"   data-type="number" data-val="30">30</div>
-      <div class="lnum blackNum" data-type="number" data-val="33">33</div>
-      <div class="lnum redNum"   data-type="number" data-val="36">36</div>
-      <div class="lnum colBtn">2→1</div>
-      <!-- Row 2: 2,5,...,35 -->
-      <div class="lnum blackNum" data-type="number" data-val="2">2</div>
-      <div class="lnum redNum"   data-type="number" data-val="5">5</div>
-      <div class="lnum blackNum" data-type="number" data-val="8">8</div>
-      <div class="lnum blackNum" data-type="number" data-val="11">11</div>
-      <div class="lnum redNum"   data-type="number" data-val="14">14</div>
-      <div class="lnum blackNum" data-type="number" data-val="17">17</div>
-      <div class="lnum blackNum" data-type="number" data-val="20">20</div>
-      <div class="lnum redNum"   data-type="number" data-val="23">23</div>
-      <div class="lnum blackNum" data-type="number" data-val="26">26</div>
-      <div class="lnum blackNum" data-type="number" data-val="29">29</div>
-      <div class="lnum redNum"   data-type="number" data-val="32">32</div>
-      <div class="lnum blackNum" data-type="number" data-val="35">35</div>
-      <div class="lnum colBtn">2→1</div>
-      <!-- Row 3: 1,4,...,34 -->
-      <div class="lnum redNum"   data-type="number" data-val="1">1</div>
-      <div class="lnum blackNum" data-type="number" data-val="4">4</div>
-      <div class="lnum redNum"   data-type="number" data-val="7">7</div>
-      <div class="lnum blackNum" data-type="number" data-val="10">10</div>
-      <div class="lnum blackNum" data-type="number" data-val="13">13</div>
-      <div class="lnum redNum"   data-type="number" data-val="16">16</div>
-      <div class="lnum redNum"   data-type="number" data-val="19">19</div>
-      <div class="lnum blackNum" data-type="number" data-val="22">22</div>
-      <div class="lnum redNum"   data-type="number" data-val="25">25</div>
-      <div class="lnum blackNum" data-type="number" data-val="28">28</div>
-      <div class="lnum blackNum" data-type="number" data-val="31">31</div>
-      <div class="lnum redNum"   data-type="number" data-val="34">34</div>
-      <div class="lnum colBtn">2→1</div>
-    </div>
-
-    <!-- Outside bets -->
-    <div id="live-outside">
-      <div class="lout pairOdd" data-type="parity" data-val="even">PAIR</div>
-      <div class="lout redNum"  data-type="color"  data-val="red">ROUGE</div>
-      <div class="lout blackNum"data-type="color"  data-val="black">NOIR</div>
-      <div class="lout pairOdd" data-type="parity" data-val="odd">IMPAIR</div>
-    </div>
-
-    <!-- Chip legend — dynamically populated -->
-    <div id="bet-legend">
-      <div style="color:#9e9e9e;font-size:.7rem;margin-bottom:4px">Joueurs :</div>
-      <div id="legend-entries"></div>
+  <!-- Right column: top 10 token holders, full height -->
+  <div id="right-panel">
+    <div class="rp-title">💰 Top 10 Jetons</div>
+    <div id="top-holders-list">
+      <div class="lb-row lb-empty">Chargement…</div>
     </div>
   </div>
-</div>
 
-<!-- Vote mode overlay (full screen, shown over main-wrap) -->
-<div id="vote-overlay" style="display:none;position:fixed;inset:0;background:#0d0d1a;z-index:500;
-     flex-direction:column;align-items:center;justify-content:center;gap:24px;text-align:center">
-  <div style="font-size:3.5rem;font-weight:900;color:#c9a84c;text-shadow:0 0 30px #c9a84c" id="display-film-title">—</div>
-  <div style="font-size:1.4rem;color:#f0f0f0">
-    <span id="display-voter-count" style="font-size:2.5rem;font-weight:bold;color:#4caf50">0</span>
-    <span style="color:#9e9e9e"> votant(s)</span>
-  </div>
-  <div style="font-size:1.2rem;color:#9e9e9e;margin-top:8px">📱 Votez sur votre téléphone</div>
-  <img id="display-qr" src="/api/session/qr" alt="QR /play"
-       style="width:140px;height:140px;background:#fff;padding:8px;border-radius:8px">
-</div>
+</div><!-- #main-wrap -->
 
-<!-- Palmares overlay -->
-<div id="palmares-overlay" style="display:none;position:fixed;inset:0;background:#0d0d1a;z-index:500;
-     flex-direction:column;align-items:center;justify-content:center;padding:20px;overflow-y:auto">
-  <div style="font-size:2rem;font-weight:900;color:#c9a84c;margin-bottom:24px">🏆 Palmarès</div>
-  <div id="palmares-list" style="width:100%;max-width:600px"></div>
-</div>
-
-<!-- UI 3: status bar BELOW the wheel — never overlapping -->
+<!-- Status bar -->
 <div id="status-bar">
   <div id="status-badge">⏳ En attente…</div>
   <div id="last-win-display" style="display:none">
@@ -493,19 +597,29 @@
   </div>
 </div>
 
-<!-- Leaderboard overlay (top-right corner) -->
-<div id="leaderboard-overlay">
-  <div id="lb-winners">
-    <div class="lb-title">🏆 Top Gagnants</div>
-    <div id="lb-winners-list"><div class="lb-row lb-empty">Chargement…</div></div>
+<!-- ── Vote mode overlay (full-screen) ──────────────────────────────────── -->
+<div id="vote-overlay" style="display:none;position:fixed;inset:0;background:#0E0E13;z-index:500;
+     flex-direction:column;align-items:center;justify-content:center;gap:24px;text-align:center">
+  <div style="font-size:3.5rem;font-weight:900;font-family:'Noto Serif',serif;color:#E9C349;
+              text-shadow:0 0 30px rgba(233,195,73,0.6)" id="display-film-title">—</div>
+  <div style="font-size:1.4rem;color:#DDDDE8">
+    <span id="display-voter-count" style="font-size:2.5rem;font-weight:bold;color:#7DE0A8">0</span>
+    <span style="color:#72727F"> votant(s)</span>
   </div>
-  <div id="lb-losers">
-    <div class="lb-title">💀 Top Loosers</div>
-    <div id="lb-losers-list"><div class="lb-row lb-empty">Chargement…</div></div>
-  </div>
+  <div style="font-size:1.2rem;color:#72727F;margin-top:8px">📱 Votez sur votre téléphone</div>
+  <img id="display-qr" src="/api/session/qr" alt="QR /play"
+       style="width:140px;height:140px;background:#fff;padding:8px;border-radius:8px">
 </div>
 
-<!-- Round leaderboard overlay (centered bottom, shown ~9s after spin, auto-hides after 5s) -->
+<!-- ── Palmares overlay (full-screen) ──────────────────────────────────── -->
+<div id="palmares-overlay" style="display:none;position:fixed;inset:0;background:#0E0E13;z-index:500;
+     flex-direction:column;align-items:center;justify-content:center;padding:20px;overflow-y:auto">
+  <div style="font-size:2rem;font-weight:900;font-family:'Noto Serif',serif;color:#E9C349;
+              margin-bottom:24px">🏆 Palmarès</div>
+  <div id="palmares-list" style="width:100%;max-width:600px"></div>
+</div>
+
+<!-- ── Round leaderboard overlay (center-bottom, per-spin) ─────────────── -->
 <div id="round-leaderboard">
   <div class="rl-section" id="rl-winners-section">
     <div class="rl-title">🏆 Cette manche</div>
@@ -517,14 +631,13 @@
   </div>
 </div>
 
-<!-- Fixed overlays -->
+<!-- QR code (fixed bottom-right) -->
 <div id="qr-block">
   <img id="qr-img" src="/api/session/qr" alt="QR /play">
   <p>Jouer sur /play</p>
 </div>
-<div id="session-id-display"></div>
 
-<!-- Roulette wheel engine (creates #container, appends to body) -->
+<!-- Roulette wheel engine (creates #container, appended to body, moved by display.js) -->
 <script src="/static/roulette/assets/js/app.js"></script>
 <!-- Display controller -->
 <script src="/static/js/display.js"></script>

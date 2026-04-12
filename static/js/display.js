@@ -52,7 +52,7 @@ function scaleWheel() {
   const NATIVE = 312;
   const panel  = document.getElementById('wheel-panel');
   const avail  = panel ? Math.min(panel.clientHeight, panel.clientWidth) : window.innerHeight;
-  const target = Math.min(avail * 0.92, window.innerHeight * 0.80);
+  const target = Math.min(avail * 0.75, window.innerHeight * 0.62);
   const scale  = target / NATIVE;
   cont.style.transform       = `scale(${scale.toFixed(4)})`;
   cont.style.transformOrigin = 'center center';
