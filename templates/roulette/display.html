@@ -134,24 +134,14 @@
       z-index: 50;
     }
 
-    /* ── Bottom panels: top gagnants + top perdants (side by side) ───── */
-    #bottom-panels {
-      flex-shrink: 0;
-      height: 140px;
-      display: flex;
-      flex-direction: row;
-      gap: 8px;
-      padding: 8px 10px;
-      background: #0E0E13;
-      border-top: 1px solid rgba(91,64,62,0.15);
-    }
-
+    /* ── Leaderboard cards (in right panel, stacked vertically) ────────── */
     #lb-winners, #lb-losers {
-      flex: 1;
+      flex-shrink: 0;
       background: rgba(14,14,19,0.95);
-      border-radius: 12px;
-      padding: 8px 12px 10px;
+      border-radius: 10px;
+      padding: 7px 10px 8px;
       overflow: hidden;
+      margin-bottom: 6px;
     }
 
     #lb-winners {
@@ -191,16 +181,16 @@
     .lb-net-neg { color: #FFB4AB; }
     .lb-empty   { color: #72727F; font-size: .7rem; font-style: italic; }
 
-    /* ── Right panel — top 10 token holders ────────────────────────────── */
+    /* ── Right panel — leaderboards + QR (32% width) ───────────────────── */
     #right-panel {
-      flex-shrink: 0;
-      width: 210px;
+      flex: 0 0 32%;
       display: flex;
       flex-direction: column;
       background: #1A1A21;
       border-left: 1px solid rgba(91,64,62,0.2);
       padding: 14px 12px 10px;
       overflow: hidden;
+      min-width: 0;
     }
 
     .rp-title {
@@ -217,6 +207,7 @@
 
     #top-holders-list {
       flex: 1;
+      min-height: 0;
       overflow-y: auto;
       overflow-x: hidden;
     }
@@ -398,15 +389,20 @@
       color: #E9C349;
     }
 
-    /* ── QR block (fixed bottom-right) ─────────────────────────────────── */
+    /* ── QR block (bottom of right panel, in-flow) ──────────────────────── */
     #qr-block {
-      position: fixed; bottom: 68px; right: 12px;
-      background: #fff; padding: 6px; border-radius: 6px;
-      z-index: 200;
+      flex-shrink: 0;
+      margin-top: auto;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      background: #fff;
+      padding: 7px;
+      border-radius: 8px;
       box-shadow: 0 4px 16px rgba(0,0,0,.7);
     }
-    #qr-block img { width: 88px; height: 88px; display: block; }
-    #qr-block p   { font-size: .55rem; text-align: center; color: #222; margin-top: 2px; font-weight: bold; }
+    #qr-block img { width: 106px; height: 106px; display: block; }
+    #qr-block p   { font-size: .55rem; text-align: center; color: #222; margin-top: 3px; font-weight: bold; }
 
     /* ── Round leaderboard overlay (center-bottom, auto-hides after 5s) ─ */
     @keyframes rlPopIn {
@@ -503,18 +499,6 @@
       <div id="winning-display"></div>
     </div>
 
-    <!-- Bottom: top gagnants / top perdants — compact side-by-side cards -->
-    <div id="bottom-panels">
-      <div id="lb-winners">
-        <div class="lb-title">🏆 Top Gagnants</div>
-        <div id="lb-winners-list"><div class="lb-row lb-empty">Chargement…</div></div>
-      </div>
-      <div id="lb-losers">
-        <div class="lb-title">💀 Top Loosers</div>
-        <div id="lb-losers-list"><div class="lb-row lb-empty">Chargement…</div></div>
-      </div>
-    </div>
-
     <!-- Live bet grid (visible, bottom of center column) -->
     <div id="bet-panel">
       <h3>🎲 Mises en cours</h3>
@@ -579,11 +563,23 @@
     </div>
   </div>
 
-  <!-- Right column: top 10 token holders, full height -->
+  <!-- Right column: top 10 jetons + top gagnants/perdants + QR -->
   <div id="right-panel">
     <div class="rp-title">💰 Top 10 Jetons</div>
     <div id="top-holders-list">
       <div class="lb-row lb-empty">Chargement…</div>
+    </div>
+    <div id="lb-winners">
+      <div class="lb-title">🏆 Top Gagnants</div>
+      <div id="lb-winners-list"><div class="lb-row lb-empty">Chargement…</div></div>
+    </div>
+    <div id="lb-losers">
+      <div class="lb-title">💀 Top Loosers</div>
+      <div id="lb-losers-list"><div class="lb-row lb-empty">Chargement…</div></div>
+    </div>
+    <div id="qr-block">
+      <img id="qr-img" src="/api/session/qr" alt="QR /play">
+      <p>Jouer sur /play</p>
     </div>
   </div>
 
@@ -629,12 +625,6 @@
     <div class="rl-title">💀 Ouch !</div>
     <div id="rl-losers"></div>
   </div>
-</div>
-
-<!-- QR code (fixed bottom-right) -->
-<div id="qr-block">
-  <img id="qr-img" src="/api/session/qr" alt="QR /play">
-  <p>Jouer sur /play</p>
 </div>
 
 <!-- Roulette wheel engine (creates #container, appended to body, moved by display.js) -->
