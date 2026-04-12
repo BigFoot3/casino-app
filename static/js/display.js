@@ -13,7 +13,6 @@
 const statusBadge    = document.getElementById('status-badge');
 const winDisplay     = document.getElementById('winning-display');
 const qrImg          = document.getElementById('qr-img');
-const sessionInfo    = document.getElementById('session-id-display');
 const lastWinDisplay = document.getElementById('last-win-display');
 const lastWinNumber  = document.getElementById('last-win-number');
 const historyCircles = document.getElementById('history-circles');
@@ -53,7 +52,7 @@ function scaleWheel() {
   const NATIVE = 312;
   const panel  = document.getElementById('wheel-panel');
   const avail  = panel ? Math.min(panel.clientHeight, panel.clientWidth) : window.innerHeight;
-  const target = avail * 0.88;   // 88% of the panel dimension (≈70% viewport when panel ~80% tall)
+  const target = Math.min(avail * 0.92, window.innerHeight * 0.80);
   const scale  = target / NATIVE;
   cont.style.transform       = `scale(${scale.toFixed(4)})`;
   cont.style.transformOrigin = 'center center';
@@ -287,9 +286,6 @@ async function pollDisplay() {
       lastSessionId = d.session_id;
       qrImg.src = '/api/session/qr?' + Date.now();
     }
-    if (d.session_id) {
-      sessionInfo.textContent = `Session #${d.session_id}`;
-    }
 
   } catch(e) { /* network hiccup */ }
 
@@ -387,7 +383,24 @@ function showRoundLeaderboard(data) {
   }, 5000);
 }
 
-// ── Leaderboard polling (every 10s) ──────────────────────────────────────────
+// ── Top holders panel ─────────────────────────────────────────────────────────
+function renderTopHolders(holders) {
+  const el = document.getElementById('top-holders-list');
+  if (!el) return;
+  if (!holders || holders.length === 0) {
+    el.innerHTML = '<div class="lb-row lb-empty">Aucun joueur…</div>';
+    return;
+  }
+  el.innerHTML = holders.map(h =>
+    `<div class="holder-row">
+       <span class="holder-rank rank-${h.rank}">${h.rank}</span>
+       <span class="holder-name">${h.username}</span>
+       <span class="holder-tokens">${h.tokens}</span>
+     </div>`
+  ).join('');
+}
+
+// ── Leaderboard polling (every 15s) ──────────────────────────────────────────
 function renderLeaderboard(data) {
   const medals  = ['🥇', '🥈', '🥉'];
   const winEl   = document.getElementById('lb-winners-list');
@@ -410,9 +423,13 @@ function renderLeaderboard(data) {
 async function pollLeaderboard() {
   try {
     const r = await fetch('/api/leaderboard');
-    if (r.ok) renderLeaderboard(await r.json());
+    if (r.ok) {
+      const data = await r.json();
+      renderLeaderboard(data);
+      renderTopHolders(data.top_holders || []);
+    }
   } catch(e) { /* network hiccup */ }
-  setTimeout(pollLeaderboard, 10000);
+  setTimeout(pollLeaderboard, 15000);
 }
 
 // Start all pollers
