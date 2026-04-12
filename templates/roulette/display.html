@@ -28,7 +28,7 @@
     /* ── Draws strip (top, full width) ─────────────────────────────────── */
     #draws-strip {
       flex-shrink: 0;
-      height: 52px;
+      height: 64px;
       display: flex;
       align-items: center;
       gap: 10px;
@@ -57,13 +57,13 @@
     }
 
     .history-circle {
-      width: 34px; height: 34px;
+      width: 38px; height: 38px;
       border-radius: 50%;
       flex-shrink: 0;
       display: flex;
       align-items: center;
       justify-content: center;
-      font-size: 11px;
+      font-size: 15px;
       font-weight: bold;
       color: #fff;
       cursor: default;
@@ -134,14 +134,12 @@
       z-index: 50;
     }
 
-    /* ── Leaderboard cards (in right panel, stacked vertically) ────────── */
+    /* ── Leaderboard cards (in right panel, side by side via grid row) ─── */
     #lb-winners, #lb-losers {
-      flex-shrink: 0;
       background: rgba(14,14,19,0.95);
       border-radius: 10px;
       padding: 7px 10px 8px;
       overflow: hidden;
-      margin-bottom: 6px;
     }
 
     #lb-winners {
@@ -156,7 +154,7 @@
 
     .lb-title {
       font-family: 'Noto Serif', serif;
-      font-size: .78rem;
+      font-size: 13px;
       font-weight: 900;
       text-transform: uppercase;
       letter-spacing: .05em;
@@ -167,7 +165,7 @@
     #lb-losers  .lb-title { color: #E8334A; text-shadow: 0 0 6px rgba(232,51,74,0.4); }
 
     .lb-row {
-      font-size: .74rem;
+      font-size: 15px;
       font-weight: bold;
       color: #DDDDE8;
       display: flex;
@@ -181,11 +179,13 @@
     .lb-net-neg { color: #FFB4AB; }
     .lb-empty   { color: #72727F; font-size: .7rem; font-style: italic; }
 
-    /* ── Right panel — leaderboards + QR (32% width) ───────────────────── */
+    /* ── Right panel — leaderboards + QR (24% width, CSS grid) ─────────── */
     #right-panel {
-      flex: 0 0 32%;
-      display: flex;
-      flex-direction: column;
+      flex: 0 0 24%;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      grid-template-rows: auto 1fr auto auto;
+      gap: 6px;
       background: #1A1A21;
       border-left: 1px solid rgba(91,64,62,0.2);
       padding: 14px 12px 10px;
@@ -201,12 +201,11 @@
       letter-spacing: .07em;
       color: #E9C349;
       text-shadow: 0 0 8px rgba(233,195,73,0.35);
-      margin-bottom: 10px;
-      flex-shrink: 0;
+      grid-column: 1 / -1;
     }
 
     #top-holders-list {
-      flex: 1;
+      grid-column: 1 / -1;
       min-height: 0;
       overflow-y: auto;
       overflow-x: hidden;
@@ -225,7 +224,7 @@
 
     .holder-rank {
       font-family: 'Noto Serif', serif;
-      font-size: .78rem;
+      font-size: 15px;
       font-weight: 700;
       color: #E9C349;
       min-width: 20px;
@@ -240,7 +239,7 @@
 
     .holder-name {
       flex: 1;
-      font-size: .8rem;
+      font-size: 16px;
       font-weight: 600;
       color: #DDDDE8;
       overflow: hidden;
@@ -249,7 +248,7 @@
     }
 
     .holder-tokens {
-      font-size: .78rem;
+      font-size: 15px;
       font-weight: 700;
       color: #E9C349;
       white-space: nowrap;
@@ -391,18 +390,14 @@
 
     /* ── QR block (bottom of right panel, in-flow) ──────────────────────── */
     #qr-block {
-      flex-shrink: 0;
-      margin-top: auto;
+      grid-column: 1 / -1;
       display: flex;
       flex-direction: column;
       align-items: center;
-      background: #fff;
-      padding: 7px;
-      border-radius: 8px;
-      box-shadow: 0 4px 16px rgba(0,0,0,.7);
+      background: transparent;
     }
     #qr-block img { width: 106px; height: 106px; display: block; }
-    #qr-block p   { font-size: .55rem; text-align: center; color: #222; margin-top: 3px; font-weight: bold; }
+    #qr-block p   { font-size: 11px; text-align: center; color: #9e9e9e; margin-top: 3px; font-weight: bold; }
 
     /* ── Round leaderboard overlay (center-bottom, auto-hides after 5s) ─ */
     @keyframes rlPopIn {
