@@ -3,7 +3,8 @@ import os
 workers = 1          # Single worker: in-memory rate-limiter (Flask-Limiter MemoryStorage)
                      # is per-process — multiple workers would give N×limit per IP.
                      # For concurrent I/O, use threads instead.
-threads = 4          # 4 threads per worker for concurrent request handling
+threads = 12         # 12 threads → 12 concurrent bcrypt logins (~7 logins/s, 100 joueurs en ~14s→~9s)
+timeout = 30         # bcrypt peut prendre ~600ms — évite timeout prématuré sous charge
 bind = "0.0.0.0:5000"
 preload_app = True
 worker_class = "gthread"  # thread-based worker required for threads > 1

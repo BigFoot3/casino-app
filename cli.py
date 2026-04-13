@@ -14,7 +14,7 @@ def register_cli(app):
     def create_user(username, role):
         """Create a user and print the generated password to stdout."""
         password = ''.join(random.choices(string.ascii_letters + string.digits, k=8))
-        pw_hash  = bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()
+        pw_hash  = bcrypt.hashpw(password.encode(), bcrypt.gensalt(rounds=10)).decode()
         with db_conn() as conn:
             try:
                 conn.execute(

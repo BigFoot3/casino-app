@@ -332,6 +332,8 @@ def place_bet():
 
 @api_bp.route('/api/claim', methods=['POST'])
 def claim_reward():
+    # Kept for backwards-compat; tokens are no longer deducted.
+    # Rewards are now distributed by admins via /api/admin/reward/give.
     _require_login()
     data      = request.get_json(force=True)
     reward_id = data.get('reward_id')
@@ -348,21 +350,6 @@ def claim_reward():
         if reward['stock'] <= 0:
             conn.execute('ROLLBACK')
             return jsonify({'error': 'Stock épuisé'}), 400
-
-        user = conn.execute(
-            'SELECT * FROM users WHERE id=?', (user_id,)
-        ).fetchone()
-        if not user:
-            conn.execute('ROLLBACK')
-            return jsonify({'error': 'Utilisateur introuvable'}), 401
-        if user['tokens'] < reward['token_cost']:
-            conn.execute('ROLLBACK')
-            return jsonify({'error': 'Solde insuffisant'}), 400
-
-        conn.execute(
-            'UPDATE users SET tokens = tokens - ? WHERE id=? AND tokens >= ?',
-            (reward['token_cost'], user_id, reward['token_cost'])
-        )
         conn.execute(
             'UPDATE rewards SET stock = stock - 1 WHERE id=?', (reward_id,)
         )
@@ -370,12 +357,9 @@ def claim_reward():
             'INSERT INTO reward_claims(user_id, reward_id) VALUES (?,?)',
             (user_id, reward_id)
         )
-        new_balance = conn.execute(
-            'SELECT tokens FROM users WHERE id=?', (user_id,)
-        ).fetchone()['tokens']
         conn.execute('COMMIT')
 
-    return jsonify({'new_balance': new_balance})
+    return jsonify({'ok': True})
 
 
 # ─── Vote ────────────────────────────────────────────────────────────────────
@@ -804,7 +788,7 @@ def admin_create_user():
     if role not in ('admin', 'player'):
         return jsonify({'error': 'Role invalide'}), 400
     password = _gen_password()
-    pw_hash  = bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()
+    pw_hash  = bcrypt.hashpw(password.encode(), bcrypt.gensalt(rounds=10)).decode()
     with db_conn() as conn:
         try:
             conn.execute(
@@ -823,7 +807,7 @@ def admin_create_user():
 def admin_reset_password(uid):
     _require_admin()
     password = _gen_password()
-    pw_hash  = bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()
+    pw_hash  = bcrypt.hashpw(password.encode(), bcrypt.gensalt(rounds=10)).decode()
     with db_conn() as conn:
         result = conn.execute(
             'UPDATE users SET password_hash=? WHERE id=?', (pw_hash, uid)
@@ -874,4 +858,43 @@ def admin_update_reward(rid):
             (name, desc, cost, stock, active, rid)
         )
         conn.commit()
+    return jsonify({'ok': True})
+
+
+@api_bp.route('/api/admin/reward/give', methods=['POST'])
+def admin_give_reward():
+    _require_admin()
+    data      = request.get_json(force=True)
+    username  = (data.get('username') or '').strip()
+    reward_id = data.get('reward_id')
+
+    if not username or not reward_id:
+        return jsonify({'error': 'username et reward_id requis'}), 400
+
+    with db_conn() as conn:
+        conn.execute('BEGIN IMMEDIATE')
+        user = conn.execute(
+            'SELECT id FROM users WHERE username=?', (username,)
+        ).fetchone()
+        if not user:
+            conn.execute('ROLLBACK')
+            return jsonify({'error': 'Utilisateur introuvable'}), 404
+        reward = conn.execute(
+            'SELECT * FROM rewards WHERE id=? AND active=1', (reward_id,)
+        ).fetchone()
+        if not reward:
+            conn.execute('ROLLBACK')
+            return jsonify({'error': 'Récompense introuvable'}), 400
+        if reward['stock'] <= 0:
+            conn.execute('ROLLBACK')
+            return jsonify({'error': 'Stock épuisé'}), 400
+        conn.execute(
+            'UPDATE rewards SET stock = stock - 1 WHERE id=?', (reward_id,)
+        )
+        conn.execute(
+            'INSERT INTO reward_claims(user_id, reward_id) VALUES (?,?)',
+            (user['id'], reward_id)
+        )
+        conn.execute('COMMIT')
+
     return jsonify({'ok': True})
