@@ -76,58 +76,89 @@ let lastBetSignature = '';   // JSON string of bets — skip re-render if unchan
 
 function clearChips() {
   document.querySelectorAll('#bet-panel .bet-chip').forEach(el => el.remove());
-  document.getElementById('legend-entries').innerHTML = '';
+  document.querySelectorAll('#bet-panel .bet-chip-more').forEach(el => el.remove());
   lastBetSignature = '';
 }
+
+const MAX_CHIPS_PER_CELL = 6;  // max chips displayed before "+N" badge
+
+// Spread positions [x, y] in px from cell center — 1 to 6 chips
+// Designed for 30px-tall cells: two rows of 10px chips at ±8px vertical
+const CHIP_SPREAD = [
+  [[0, 0]],                                                              // 1
+  [[-9, 0], [9, 0]],                                                     // 2
+  [[-14, 0], [0, 0], [14, 0]],                                          // 3
+  [[-9, -8], [9, -8], [-9, 8], [9, 8]],                                 // 4
+  [[-14, -8], [0, -8], [14, -8], [-9, 8], [9, 8]],                     // 5
+  [[-14, -8], [0, -8], [14, -8], [-14, 8], [0, 8], [14, 8]],           // 6
+];
 
 function renderChips(bets) {
   const sig = JSON.stringify(bets);
   if (sig === lastBetSignature) return;   // nothing changed
   lastBetSignature = sig;
 
-  // Remove old chips
+  // Remove old chips and overflow badges
   document.querySelectorAll('#bet-panel .bet-chip').forEach(el => el.remove());
+  document.querySelectorAll('#bet-panel .bet-chip-more').forEach(el => el.remove());
 
-  // Track how many chips already placed per cell (for stacking offset)
-  const cellCount = new Map();
-  const legend    = new Map();  // username → color
+  // Group bets by cell key
+  const cellBets = new Map();  // "type:val" → {cell, entries[]}
 
   bets.forEach(bet => {
-    const color = chipColor(bet.username);
-    legend.set(bet.username, color);
-
-    // Find the target cell
     const cell = document.querySelector(
       `#bet-panel [data-type="${bet.bet_type}"][data-val="${bet.bet_value}"]`
     );
     if (!cell) return;
-
-    const key   = `${bet.bet_type}:${bet.bet_value}`;
-    const idx   = cellCount.get(key) || 0;
-    cellCount.set(key, idx + 1);
-
-    const chip = document.createElement('div');
-    chip.className = 'bet-chip';
-    chip.style.background = color;
-    // Stack chips with 4px offset each
-    chip.style.top  = `calc(50% + ${idx * 4}px)`;
-    chip.style.left = `calc(50% + ${idx * 4}px)`;
-    chip.style.transform = 'none';
-    chip.title = `${bet.username}: ${bet.amount} token${bet.amount > 1 ? 's' : ''}`;
-    // Show first initial as label
-    chip.textContent = bet.username.charAt(0).toUpperCase();
-    cell.appendChild(chip);
+    const key = `${bet.bet_type}:${bet.bet_value}`;
+    if (!cellBets.has(key)) cellBets.set(key, { cell, entries: [] });
+    cellBets.get(key).entries.push({
+      username: bet.username,
+      amount:   bet.amount,
+      color:    chipColor(bet.username),
+    });
   });
 
-  // Update legend
-  const legendEl = document.getElementById('legend-entries');
-  legendEl.innerHTML = '';
-  legend.forEach((color, username) => {
-    const row = document.createElement('div');
-    row.className = 'legend-row';
-    row.innerHTML = `<div class="legend-chip" style="background:${color}"></div>
-                     <span>${username}</span>`;
-    legendEl.appendChild(row);
+  cellBets.forEach(({ cell, entries }) => {
+    const total    = entries.length;
+    const visible  = entries.slice(0, MAX_CHIPS_PER_CELL);
+    const overflow = total - visible.length;
+
+    // Single chip: use full 16px size; multiple: 10px to fit the spread layout
+    const chipSize = visible.length === 1 ? 16 : 10;
+    const half     = chipSize / 2;
+    const positions = CHIP_SPREAD[Math.min(visible.length, CHIP_SPREAD.length) - 1];
+
+    visible.forEach((e, idx) => {
+      const [ox, oy] = positions[idx];
+      const chip = document.createElement('div');
+      chip.className = 'bet-chip';
+      chip.style.cssText =
+        `width:${chipSize}px;height:${chipSize}px;` +
+        `background:${e.color};` +
+        `top:calc(50% + ${oy - half}px);left:calc(50% + ${ox - half}px);` +
+        `transform:none;z-index:${10 + idx};` +
+        `font-size:${chipSize <= 10 ? '5px' : '6px'};`;
+      chip.title = `${e.username}: ${e.amount} token${e.amount > 1 ? 's' : ''}`;
+      chip.textContent = e.username.charAt(0).toUpperCase();
+      cell.appendChild(chip);
+    });
+
+    if (overflow > 0) {
+      // "+N" badge anchored to top-right corner of the cell
+      const badge = document.createElement('div');
+      badge.className = 'bet-chip-more';
+      badge.style.cssText =
+        'position:absolute;top:1px;right:1px;' +
+        'width:11px;height:11px;border-radius:50%;' +
+        'background:rgba(20,20,40,0.92);border:1.5px solid rgba(255,255,255,.6);' +
+        'display:flex;align-items:center;justify-content:center;' +
+        'font-size:5px;font-weight:900;color:#fff;' +
+        `z-index:30;cursor:default;`;
+      badge.textContent = `+${overflow}`;
+      badge.title = `+${overflow} autre${overflow > 1 ? 's' : ''} joueur${overflow > 1 ? 's' : ''}`;
+      cell.appendChild(badge);
+    }
   });
 }
 
@@ -149,6 +180,7 @@ const voteOverlay     = document.getElementById('vote-overlay');
 const palmaresOverlay = document.getElementById('palmares-overlay');
 const mainWrap        = document.getElementById('main-wrap');
 let lastAppMode       = null;
+let lastPollStatus    = null;
 let palmaresLoaded    = false;
 
 function setDisplayMode(mode) {
@@ -276,10 +308,21 @@ async function pollDisplay() {
       lastWinDisplay.style.display = 'none';
     }
 
-    // Clear bet chips only when session is fully over — not during spinning
-    if (d.status === 'closed' || d.status === 'waiting') {
+    // Clear bet chips when session ends, or once on transition to open (new round)
+    if (d.status === 'closed' || d.status === 'waiting' ||
+        (d.status === 'open' && lastPollStatus !== 'open')) {
       clearChips();
     }
+    // Hide leaderboard panels during spin to avoid spoiling result
+    if (d.status === 'spinning') {
+      document.getElementById('lb-winners').style.visibility = 'hidden';
+      document.getElementById('lb-losers').style.visibility  = 'hidden';
+    } else {
+      // Always restore — guards against missed spinning→closed transitions
+      document.getElementById('lb-winners').style.visibility = 'visible';
+      document.getElementById('lb-losers').style.visibility  = 'visible';
+    }
+    lastPollStatus = d.status;
 
     // Refresh QR when session changes
     if (d.session_id && d.session_id !== lastSessionId) {
