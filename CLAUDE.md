@@ -3,7 +3,7 @@
 Application roulette en ligne pour événements en présentiel — jusqu'à 100 joueurs simultanés.
 
 > Fichier de référence pour Claude Code. Mettre à jour après chaque milestone.
-> Dernière mise à jour : 2026-04-11
+> Dernière mise à jour : 2026-04-13
 
 ---
 
@@ -24,7 +24,7 @@ Application roulette en ligne pour événements en présentiel — jusqu'à 100 
 | Package | Version | Rôle |
 |---------|---------|------|
 | Flask | 3.1.0 | Web framework (factory pattern) |
-| Gunicorn | 23.0.0 | WSGI — 4 workers, `preload_app=True` |
+| Gunicorn | 23.0.0 | WSGI — 1 worker, 12 threads (gthread), `preload_app=True` |
 | APScheduler | 3.10.4 | Game tick toutes les 5s |
 | SQLite WAL | — | Base de données — `busy_timeout=10s` |
 | Flask-WTF | 1.2.2 | CSRF sur tous les POST |
@@ -42,7 +42,7 @@ db.py                # Connexion SQLite, schéma, resolve_spin()
 scheduler.py         # APScheduler — game_tick() toutes les 5s
 cli.py               # Commande CLI : flask create-user
 extensions.py        # Limiter Flask-Limiter (partagé entre modules)
-gunicorn.conf.py     # 4 workers, preload_app=True, logs/
+gunicorn.conf.py     # 1 worker, 12 threads (gthread), preload_app=True, logs/
 casino.service       # Unité systemd
 routes/
   auth.py            # /login  /logout
@@ -54,7 +54,11 @@ static/
   js/
     play.js          # Polling → formulaire de mise → affichage résultat
     admin.js         # Modal mot de passe, contrôles session, gestion users/récompenses
+                     # + pollAdmin() toutes les 3s → updateControlsState(status, mode)
+                     # + btn-stop-auto : arrêt mode auto immédiat sans rechargement
     display.js       # Lance spinWheel() depuis polling /api/session/status
+                     # + cache leaderboard (isSpinning + lastLeaderboardCache) : tops
+                     #   jamais vidés pendant le spin
   roulette/          # milsaware/javascript-roulette (cloné)
 logs/                # access.log, error.log (Gunicorn)
 casino.db            # Créé automatiquement au premier lancement
@@ -209,6 +213,14 @@ flask --app "app:create_app()" run
 ⚠️ vote weighted_score → score × (1 / 1.5 / 2) selon bonus (0 / 25 / 50)
 ⚠️ vote UPSERT      → UNIQUE(vote_session_id, user_id) — un seul vote par user par session, modifiable
 ⚠️ app_mode         → stocké dans app_config — roulette par défaut, reset via /api/vote/reset-mode
+⚠️ admin boutons    → états pilotés exclusivement par pollAdmin() (toutes les 3s) via updateControlsState()
+                      — ne jamais ajouter de variable JS locale pour l'état des boutons
+⚠️ leaderboard cache → display.js mémorise lastLeaderboardCache ; pendant isSpinning, un payload vide
+                        ne vide pas les tops — comportement voulu, pas un bug
+⚠️ btn-stop-auto    → met à jour l'UI immédiatement (pas de location.reload()) ; les autres contrôles
+                        de session font toujours location.reload() après action manuelle
+⚠️ /api/session/status → retourne `mode` ('auto'|'manual') et `auto_interval_seconds` — utilisés par
+                          admin.js pour piloter le badge ⚡ AUTO et le bouton stop-auto
 ```
 
 ---
@@ -217,12 +229,12 @@ flask --app "app:create_app()" run
 
 ```bash
 cd /root/casino && source venv/bin/activate
-pytest tests/ -v --tb=short   # 73 tests (72 passed + 1 xfail intentionnel)
+pytest tests/ -v --tb=short   # 77 tests (76 passed + 1 xfail intentionnel)
 ```
 
 Suite dans `tests/` :
 - `conftest.py` — fixtures : `app` (DB temporaire isolée), `admin_client`, `player_client`, `player2_client`, `open_session`, `open_vote_session`
-- `test_casino.py` — 73 tests sur 9 classes : `TestAuth`, `TestRoulette`, `TestBets`, `TestRewards`, `TestLeaderboard`, `TestVoteOpen`, `TestVoteSubmit`, `TestVoteClose`, `TestVoteResults`, `TestPalmares`, `TestAdminActions`
+- `test_casino.py` — 77 tests sur 9 classes : `TestAuth`, `TestRoulette`, `TestBets`, `TestRewards`, `TestLeaderboard`, `TestVoteOpen`, `TestVoteSubmit`, `TestVoteClose`, `TestVoteResults`, `TestPalmares`, `TestAdminActions`
 
 > `test_no_double_bet_same_session` → xfail intentionnel : l'app autorise les mises multiples par session (multi-bet frontend).
 
