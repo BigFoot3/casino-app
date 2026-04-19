@@ -338,34 +338,79 @@ class TestBets:
 class TestRewards:
 
     def test_claim_reward_success(self, app, admin_client, player_client):
-        """Joueur réclame récompense → tokens débités, stock -1, claim créé."""
+        """Claim endpoint → stock -1, claim created, tokens untouched."""
         rid = _create_reward(admin_client, cost=100, stock=5)
         _set_tokens('player1', 200)
         r = player_client.post('/api/claim',
                                json={'reward_id': rid},
                                headers={'X-CSRFToken': 'test'})
         assert r.status_code == 200
-        assert r.get_json()['new_balance'] == 100
+        assert r.get_json().get('ok') is True
         with db_conn() as conn:
             rw  = conn.execute('SELECT stock FROM rewards WHERE id=?', (rid,)).fetchone()
             uid = conn.execute('SELECT id FROM users WHERE username=?', ('player1',)).fetchone()['id']
             clm = conn.execute(
                 'SELECT id FROM reward_claims WHERE user_id=? AND reward_id=?', (uid, rid)
             ).fetchone()
+            tokens = conn.execute('SELECT tokens FROM users WHERE id=?', (uid,)).fetchone()['tokens']
         assert rw['stock'] == 4
         assert clm is not None
+        assert tokens == 200  # tokens no longer deducted
+
+    def test_admin_give_reward(self, app, admin_client, player_client):
+        """Admin give endpoint → stock -1, claim created, tokens untouched."""
+        rid = _create_reward(admin_client, cost=100, stock=5)
+        _set_tokens('player1', 200)
+        r = admin_client.post('/api/admin/reward/give',
+                              json={'username': 'player1', 'reward_id': rid},
+                              headers={'X-CSRFToken': 'test'})
+        assert r.status_code == 200
+        assert r.get_json().get('ok') is True
+        with db_conn() as conn:
+            rw  = conn.execute('SELECT stock FROM rewards WHERE id=?', (rid,)).fetchone()
+            uid = conn.execute('SELECT id FROM users WHERE username=?', ('player1',)).fetchone()['id']
+            clm = conn.execute(
+                'SELECT id FROM reward_claims WHERE user_id=? AND reward_id=?', (uid, rid)
+            ).fetchone()
+            tokens = conn.execute('SELECT tokens FROM users WHERE id=?', (uid,)).fetchone()['tokens']
+        assert rw['stock'] == 4
+        assert clm is not None
+        assert tokens == 200
+
+    def test_admin_give_reward_unknown_user(self, app, admin_client):
+        """Unknown username → 404."""
+        rid = _create_reward(admin_client, cost=10, stock=5)
+        r = admin_client.post('/api/admin/reward/give',
+                              json={'username': 'nobody', 'reward_id': rid},
+                              headers={'X-CSRFToken': 'test'})
+        assert r.status_code == 404
+
+    def test_admin_give_reward_out_of_stock(self, app, admin_client, player_client):
+        """stock=0 → 400."""
+        rid = _create_reward(admin_client, cost=10, stock=0)
+        r = admin_client.post('/api/admin/reward/give',
+                              json={'username': 'player1', 'reward_id': rid},
+                              headers={'X-CSRFToken': 'test'})
+        assert r.status_code == 400
+
+    def test_admin_give_reward_forbidden_player(self, app, player_client):
+        """Player cannot call admin give endpoint."""
+        r = player_client.post('/api/admin/reward/give',
+                               json={'username': 'player1', 'reward_id': 1},
+                               headers={'X-CSRFToken': 'test'})
+        assert r.status_code == 403
 
     def test_claim_reward_insufficient_tokens(self, app, admin_client, player_client):
-        """Solde insuffisant → 400, stock inchangé."""
+        """Token balance no longer checked on /api/claim — succeeds regardless."""
         rid = _create_reward(admin_client, cost=500, stock=5)
         _set_tokens('player1', 100)
         r = player_client.post('/api/claim',
                                json={'reward_id': rid},
                                headers={'X-CSRFToken': 'test'})
-        assert r.status_code == 400
+        assert r.status_code == 200  # token check removed
         with db_conn() as conn:
             rw = conn.execute('SELECT stock FROM rewards WHERE id=?', (rid,)).fetchone()
-        assert rw['stock'] == 5
+        assert rw['stock'] == 4  # stock was decremented
 
     def test_claim_reward_out_of_stock(self, app, admin_client, player_client):
         """stock=0 → 400."""

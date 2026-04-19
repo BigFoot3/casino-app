@@ -121,7 +121,7 @@ function startCountdown(seconds) {
 
 // ── Status polling ────────────────────────────────────────────────────────────
 async function pollStatus() {
-  if (betPlaced) { pollResult(); return; }
+  if (betPlaced && !resultShown) { pollResult(); return; }
   try {
     const r = await fetch('/api/session/status');
     const d = await r.json();
@@ -148,13 +148,34 @@ async function pollStatus() {
           allBtns.forEach(btn => updateBadge(btn));
           updateTotals();
           betError.style.display = 'none';
+          betPlaced    = false;
+          resultShown  = false;
+          betSubmit.disabled = false;
+          betClear.disabled  = false;
+          allBtns.forEach(btn => btn.style.pointerEvents = '');
+          $('bet-recap').style.display = 'none';
         }
         showOnly(msgCountdown, betForm);
         startCountdown(d.time_remaining_seconds);
       } else if (d.status === 'spinning') {
-        showOnly(msgSpinning);
+        if (!resultShown) { showOnly(msgSpinning); }  // BUG 1: preserve result panel during grace period
         clearInterval(cdInterval);
       } else {
+        // BUG 2: reset all bet state when session returns to waiting
+        if (betPlaced || resultShown) {
+          betPlaced    = false;
+          betSessionId = null;
+          resultShown  = false;
+          pendingBets.clear();
+          allBtns.forEach(btn => updateBadge(btn));
+          allBtns.forEach(btn => btn.style.pointerEvents = '');
+          updateTotals();
+          betSubmit.disabled = false;
+          betClear.disabled  = false;
+          betError.style.display = 'none';
+          $('bet-recap').style.display = 'none';
+          lastOpenSession = null;
+        }
         showOnly(msgWaiting);
         clearInterval(cdInterval);
       }
@@ -208,6 +229,8 @@ async function pollResult() {
       } else {
         listEl.innerHTML = '<div class="alert alert-secondary">Tu n\'avais pas misé sur cette partie.</div>';
       }
+      // BUG 1+3: resume status polling after animation so new sessions are detected
+      pollTimer = setTimeout(pollStatus, 2000);
     }, SPIN_DURATION_MS);
   } catch(e) {
     pollTimer = setTimeout(pollResult, 2000);

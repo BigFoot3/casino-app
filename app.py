@@ -27,6 +27,8 @@ def create_app():
                     os.environ.setdefault(k.strip(), v.strip())
 
     app.config['SECRET_KEY']                = os.environ.get('CASINO_SECRET_KEY', 'dev')
+    # Set RATELIMIT_ENABLED=false in .env to disable rate limiting (load tests only)
+    app.config['RATELIMIT_ENABLED']         = os.environ.get('RATELIMIT_ENABLED', 'true').lower() != 'false'
     is_prod = os.environ.get('FLASK_ENV', 'production') == 'production'
     app.config['SESSION_COOKIE_SECURE']     = is_prod  # False on HTTP, True on HTTPS/prod
     app.config['SESSION_COOKIE_HTTPONLY']   = True

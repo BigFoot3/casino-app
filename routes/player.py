@@ -90,4 +90,11 @@ def rewards():
         rewards = conn.execute(
             "SELECT * FROM rewards WHERE active=1 ORDER BY token_cost"
         ).fetchall()
-    return render_template('rewards.html', user=user, rewards=rewards)
+        claimed_ids = {
+            row['reward_id']
+            for row in conn.execute(
+                'SELECT reward_id FROM reward_claims WHERE user_id=?',
+                (flask_session['user_id'],)
+            ).fetchall()
+        }
+    return render_template('rewards.html', user=user, rewards=rewards, claimed_ids=claimed_ids)
