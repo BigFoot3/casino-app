@@ -26,6 +26,10 @@ let spunForSessionId  = null;
 // Timestamp (ms) when the current wheel animation fully ends (t+10000ms).
 // pollHistory defers rendering until this time to avoid spoiling the result.
 let spinEndTime = 0;
+// Shared flag: true while status === 'spinning'. Used by leaderboard renderers
+// to keep the last known tops visible instead of overwriting with empty data.
+let isSpinning           = false;
+let lastLeaderboardCache = null;   // {top_winners, top_losers, top_holders}
 
 // ── UI 1 palette ─────────────────────────────────────────────────────────────
 const STATUS_LABELS = {
@@ -313,15 +317,8 @@ async function pollDisplay() {
         (d.status === 'open' && lastPollStatus !== 'open')) {
       clearChips();
     }
-    // Hide leaderboard panels during spin to avoid spoiling result
-    if (d.status === 'spinning') {
-      document.getElementById('lb-winners').style.visibility = 'hidden';
-      document.getElementById('lb-losers').style.visibility  = 'hidden';
-    } else {
-      // Always restore — guards against missed spinning→closed transitions
-      document.getElementById('lb-winners').style.visibility = 'visible';
-      document.getElementById('lb-losers').style.visibility  = 'visible';
-    }
+    // Track spin state so leaderboard renderers can guard their cache
+    isSpinning     = (d.status === 'spinning');
     lastPollStatus = d.status;
 
     // Refresh QR when session changes
@@ -430,7 +427,17 @@ function showRoundLeaderboard(data) {
 function renderTopHolders(holders) {
   const el = document.getElementById('top-holders-list');
   if (!el) return;
-  if (!holders || holders.length === 0) {
+
+  const hasData = holders && holders.length > 0;
+
+  // During a spin, never overwrite with empty data — keep the last known holders visible
+  if (!hasData && isSpinning && lastLeaderboardCache && lastLeaderboardCache.top_holders) return;
+
+  if (hasData) {
+    lastLeaderboardCache = Object.assign(lastLeaderboardCache || {}, { top_holders: holders });
+  }
+
+  if (!hasData) {
     el.innerHTML = '<div class="lb-row lb-empty">Aucun joueur…</div>';
     return;
   }
@@ -449,6 +456,18 @@ function renderLeaderboard(data) {
   const winEl   = document.getElementById('lb-winners-list');
   const loseEl  = document.getElementById('lb-losers-list');
   if (!winEl || !loseEl) return;
+
+  const hasData = data.top_winners.length > 0 || data.top_losers.length > 0;
+
+  // During a spin, never overwrite with empty data — keep the last known tops visible
+  if (!hasData && isSpinning && lastLeaderboardCache) return;
+
+  if (hasData) {
+    lastLeaderboardCache = Object.assign(lastLeaderboardCache || {}, {
+      top_winners: data.top_winners,
+      top_losers:  data.top_losers,
+    });
+  }
 
   winEl.innerHTML = data.top_winners.length === 0
     ? '<div class="lb-row lb-empty">Personne encore…</div>'

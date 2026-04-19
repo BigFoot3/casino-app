@@ -26,7 +26,7 @@ def login():
             session.permanent    = True
             if user['role'] == 'admin':
                 return redirect(url_for('admin.index'))
-            return redirect(url_for('player.dashboard'))
+            return redirect(url_for('player.play'))
         flash('Identifiants incorrects.')
     return render_template('login.html')
 

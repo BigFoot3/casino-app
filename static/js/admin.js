@@ -68,6 +68,30 @@ $('btn-spin').addEventListener('click', async () => {
   else alert('Erreur : impossible de lancer la roue.');
 });
 
+$('btn-close').addEventListener('click', () => {
+  showConfirm(
+    'Fermer la session',
+    'Forcer la fermeture de la session en cours ? Les mises en cours seront perdues.',
+    async () => {
+      const [s, d] = await post('/api/admin/session/close');
+      if (s === 200) location.reload();
+      else alert(d.error || 'Erreur : impossible de fermer la session.');
+    }
+  );
+});
+
+$('btn-stats-reset').addEventListener('click', () => {
+  showConfirm(
+    'Vider les tops',
+    'Réinitialiser le classement ? Les tops gagnants / perdants seront remis à zéro.',
+    async () => {
+      const [s, d] = await post('/api/admin/stats/reset');
+      if (s === 200) location.reload();
+      else alert(d.error || 'Erreur : impossible de réinitialiser les stats.');
+    }
+  );
+});
+
 // ── Mode ──────────────────────────────────────────────────────────────────────
 $('btn-mode').addEventListener('click', async () => {
   const mode     = $('mode-select').value;
@@ -82,6 +106,89 @@ $('btn-mode').addEventListener('click', async () => {
     statusEl.className = 'text-danger small';
   }
 });
+
+// ── Stop auto mode ────────────────────────────────────────────────────────────
+const btnStopAuto = $('btn-stop-auto');
+if (btnStopAuto) {
+  btnStopAuto.addEventListener('click', async () => {
+    const interval = parseInt($('interval-input').value) || 120;
+    const [s, d]   = await post('/api/admin/mode', {mode: 'manual', interval});
+    if (s === 200) {
+      // Immediate UI update — do not wait for the next poll cycle
+      btnStopAuto.style.display = 'none';
+      const autoBadge = $('auto-mode-badge');
+      if (autoBadge) autoBadge.style.display = 'none';
+      const modeSelect = $('mode-select');
+      if (modeSelect) modeSelect.value = 'manual';
+      const statusEl = $('mode-status');
+      statusEl.textContent = '✅ Mode manuel';
+      statusEl.className   = 'text-success small';
+    } else {
+      alert(d.error || 'Erreur');
+    }
+  });
+}
+
+// ── Session status polling — drives button states from server state ───────────
+const SESSION_STATUS_BADGE_CLASSES = {
+  waiting:  'badge fs-6 bg-secondary',
+  open:     'badge fs-6 bg-success',
+  spinning: 'badge fs-6 bg-warning text-dark',
+  closed:   'badge fs-6 bg-danger',
+};
+
+function updateControlsState(status, mode) {
+  const btnOpen  = $('btn-open');
+  const btnSpin  = $('btn-spin');
+  const btnClose = $('btn-close');
+
+  // Button enabled/disabled states are driven exclusively by server status
+  switch (status) {
+    case 'waiting':
+    case 'closed':
+      btnOpen.disabled  = false;
+      btnSpin.disabled  = true;
+      btnClose.disabled = true;
+      break;
+    case 'open':
+      btnOpen.disabled  = true;
+      btnSpin.disabled  = false;
+      btnClose.disabled = false;
+      break;
+    case 'spinning':
+      btnOpen.disabled  = true;
+      btnSpin.disabled  = true;
+      btnClose.disabled = true;
+      break;
+  }
+
+  // Status badge
+  const badge = $('session-status-badge');
+  if (badge) {
+    badge.className   = SESSION_STATUS_BADGE_CLASSES[status] || 'badge fs-6 bg-secondary';
+    badge.textContent = status.toUpperCase();
+  }
+
+  // Auto mode indicator
+  const isAuto    = (mode === 'auto');
+  const autoBadge = $('auto-mode-badge');
+  const stopBtn   = $('btn-stop-auto');
+  if (autoBadge) autoBadge.style.display = isAuto ? '' : 'none';
+  if (stopBtn)   stopBtn.style.display   = isAuto ? '' : 'none';
+}
+
+async function pollAdmin() {
+  try {
+    const r = await fetch('/api/session/status');
+    if (r.ok) {
+      const d = await r.json();
+      updateControlsState(d.status, d.mode);
+    }
+  } catch(e) { /* network hiccup — keep current button states */ }
+  setTimeout(pollAdmin, 3000);
+}
+
+pollAdmin();
 
 // ── Decrement tokens (−1, no modal needed) ───────────────────────────────────
 document.querySelectorAll('.decrement-tokens-btn').forEach(btn => {
@@ -243,6 +350,35 @@ document.querySelectorAll('.rw-toggle-btn').forEach(btn => {
     else alert('Erreur');
   });
 });
+
+// ── Give reward ───────────────────────────────────────────────────────────────
+const btnGiveReward = $('btn-give-reward');
+if (btnGiveReward) {
+  btnGiveReward.addEventListener('click', () => {
+    const username  = $('give-reward-username').value.trim();
+    const reward_id = parseInt($('give-reward-select').value);
+    if (!username) return alert('Saisissez le nom du joueur.');
+    if (!reward_id) return;
+    showConfirm(
+      'Attribuer une récompense',
+      `Attribuer la récompense à « ${username} » ?`,
+      async () => {
+        const [s, d] = await post('/api/admin/reward/give', {username, reward_id});
+        const statusEl = $('give-reward-status');
+        if (s === 200) {
+          statusEl.textContent = `✅ Attribuée à ${username}`;
+          statusEl.className = 'small text-success';
+          $('give-reward-username').value = '';
+          // Refresh page so stock counts update
+          setTimeout(() => location.reload(), 1200);
+        } else {
+          statusEl.textContent = d.error || 'Erreur';
+          statusEl.className = 'small text-danger';
+        }
+      }
+    );
+  });
+}
 
 // ── Vote ──────────────────────────────────────────────────────────────────────
 const btnVoteOpen     = $('btn-vote-open');

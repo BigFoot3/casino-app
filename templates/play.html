@@ -30,10 +30,10 @@
     transition: outline .1s;
   }
   #roulette-grid .num-btn.redNum  { background-color: #E0080B; }
-  #roulette-grid .num-btn.blackNum{ background-color: #000; }
+  #roulette-grid .num-btn.blackNum{ background-color: #0E0E13; }
   #roulette-grid .zero-btn        { background-color: #016D29; grid-row: 1 / 4; grid-column: 1; }
   #roulette-grid .col-btn         { background-color: #016D29; grid-row-end: span 1; font-size: 11px; }
-  #roulette-grid .num-btn.selected { outline: 3px solid #ffc107; outline-offset: 1px; }
+  #roulette-grid .num-btn.selected { outline: 3px solid #E9C349; outline-offset: 1px; }
 
   /* Outside bets row */
   #outside-bets {
@@ -54,27 +54,27 @@
     width: 112px; /* 3 columns each covers ~114px of the 12 number cols */
   }
   #outside-bets .out-btn:nth-child(1),
-  #outside-bets .out-btn:nth-child(4) { background: #1a1a2e; } /* even / odd */
+  #outside-bets .out-btn:nth-child(4) { background: #1A1A21; } /* even / odd */
   #outside-bets .out-btn.redNum  { background-color: #E0080B; }
-  #outside-bets .out-btn.blackNum{ background-color: #000; }
-  #outside-bets .out-btn.selected { outline: 3px solid #ffc107; outline-offset: 1px; }
+  #outside-bets .out-btn.blackNum{ background-color: #0E0E13; }
+  #outside-bets .out-btn.selected { outline: 3px solid #E9C349; outline-offset: 1px; }
 
   /* Chip denomination buttons */
   .chip-btn {
     width: 44px; height: 44px;
     border-radius: 50%;
     border: 2px solid rgba(255,255,255,.4);
-    background: #1a1a2e;
-    color: #f0f0f0;
+    background: #1A1A21;
+    color: #DDDDE8;
     font-weight: bold;
     font-size: 13px;
     cursor: pointer;
     transition: border-color .1s, background .1s;
   }
   .chip-btn.active {
-    background: #c9a84c;
-    border-color: #c9a84c;
-    color: #0d0d1a;
+    background: #E9C349;
+    border-color: #E9C349;
+    color: #0E0E13;
   }
 
   /* Amount badge on grid cells */
@@ -82,8 +82,8 @@
     position: absolute;
     top: 50%; left: 50%; transform: translate(-50%, -50%);
     min-width: 18px; height: 18px;
-    background: #c9a84c;
-    color: #0d0d1a;
+    background: #E9C349;
+    color: #0E0E13;
     font-size: 9px; font-weight: bold;
     border-radius: 9px;
     display: flex; align-items: center; justify-content: center;
@@ -97,11 +97,11 @@
     display: flex;
     justify-content: space-between;
     padding: 4px 0;
-    border-bottom: 1px solid rgba(255,255,255,.1);
+    border-bottom: 1px solid rgba(255,255,255,.08);
     font-size: .9rem;
   }
-  .result-win-row  { color: #4caf50; }
-  .result-loss-row { color: #e53935; }
+  .result-win-row  { color: #7DE0A8; }
+  .result-loss-row { color: #FFB4AB; }
   .result-total-row {
     padding-top: 6px;
     font-size: 1rem;
@@ -128,8 +128,8 @@
   }
   /* Own bet chip gets a thicker gold border */
   .play-chip.own-bet {
-    border: 3px solid #c9a84c;
-    box-shadow: 0 0 8px #c9a84c;
+    border: 3px solid #E9C349;
+    box-shadow: 0 0 8px rgba(233,195,73,0.6);
   }
 </style>
 {% endblock %}
@@ -139,7 +139,7 @@
     <div class="card p-4">
       <div class="d-flex justify-content-between align-items-center mb-3">
         <h4 class="mb-0">🎲 Placer une mise</h4>
-        <span class="badge bg-warning text-dark fs-6">
+        <span class="token-badge">
           💰 <span id="balance">{{ user['tokens'] }}</span> tokens
         </span>
       </div>
@@ -170,7 +170,7 @@
           <label class="form-label">Votre note :</label>
           <div class="d-flex align-items-center justify-content-center gap-3">
             <input type="range" id="vote-score-slider" min="1" max="10" value="5" class="form-range" style="max-width:200px">
-            <span id="vote-score-display" class="fw-bold" style="font-size:2rem;color:#c9a84c;min-width:2ch">5</span>
+            <span id="vote-score-display" class="fw-bold" style="font-size:2rem;color:#E9C349;min-width:2ch">5</span>
             <span class="text-muted">/10</span>
           </div>
         </div>
