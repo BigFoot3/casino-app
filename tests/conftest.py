@@ -67,6 +67,7 @@ def app():
     original_db = db_module.DATABASE
     db_module.DATABASE = db_path
 
+    os.environ.setdefault('CASINO_SECRET_KEY', 'test-secret-for-pytest')
     flask_app = create_app()
     flask_app.config.update({
         'TESTING': True,

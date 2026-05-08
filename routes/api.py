@@ -1,4 +1,5 @@
 import io
+import os
 import random
 import string
 import bcrypt
@@ -247,7 +248,7 @@ def session_qr():
 
     if sid not in _qr_cache:
         # Generate QR pointing to /play
-        base = request.host_url.rstrip('/')
+        base = os.environ.get('CASINO_BASE_URL', request.host_url).rstrip('/')
         url  = f'{base}/play'
         qr   = qrcode.QRCode(version=1, box_size=8, border=3)
         qr.add_data(url)
@@ -326,40 +327,6 @@ def place_bet():
         conn.execute('COMMIT')
 
     return jsonify({'bet_id': bet_id, 'new_balance': new_balance, 'session_id': bet_session_id})
-
-
-# ─── Claim reward ─────────────────────────────────────────────────────────────
-
-@api_bp.route('/api/claim', methods=['POST'])
-def claim_reward():
-    # Kept for backwards-compat; tokens are no longer deducted.
-    # Rewards are now distributed by admins via /api/admin/reward/give.
-    _require_login()
-    data      = request.get_json(force=True)
-    reward_id = data.get('reward_id')
-    user_id   = flask_session['user_id']
-
-    with db_conn() as conn:
-        conn.execute('BEGIN IMMEDIATE')
-        reward = conn.execute(
-            'SELECT * FROM rewards WHERE id=? AND active=1', (reward_id,)
-        ).fetchone()
-        if not reward:
-            conn.execute('ROLLBACK')
-            return jsonify({'error': 'Récompense introuvable'}), 400
-        if reward['stock'] <= 0:
-            conn.execute('ROLLBACK')
-            return jsonify({'error': 'Stock épuisé'}), 400
-        conn.execute(
-            'UPDATE rewards SET stock = stock - 1 WHERE id=?', (reward_id,)
-        )
-        conn.execute(
-            'INSERT INTO reward_claims(user_id, reward_id) VALUES (?,?)',
-            (user_id, reward_id)
-        )
-        conn.execute('COMMIT')
-
-    return jsonify({'ok': True})
 
 
 # ─── Vote ────────────────────────────────────────────────────────────────────

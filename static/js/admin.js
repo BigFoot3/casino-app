@@ -446,7 +446,18 @@ if (vrPanel) {
           tbody.innerHTML = '';
           (data.votes || []).forEach(v => {
             const tr = document.createElement('tr');
-            tr.innerHTML = `<td>${v.username}</td><td>${v.score}/10</td><td>${v.bonus_amount} tok</td><td>${v.weighted_score}</td>`;
+            const td1 = document.createElement('td');
+            td1.textContent = v.username;
+            const td2 = document.createElement('td');
+            td2.textContent = `${v.score}/10`;
+            const td3 = document.createElement('td');
+            td3.textContent = `${v.bonus_amount} tok`;
+            const td4 = document.createElement('td');
+            td4.textContent = String(v.weighted_score);
+            tr.appendChild(td1);
+            tr.appendChild(td2);
+            tr.appendChild(td3);
+            tr.appendChild(td4);
             tbody.appendChild(tr);
           });
           $('vote-results-loading').style.display = 'none';

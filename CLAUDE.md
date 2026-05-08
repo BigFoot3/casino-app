@@ -3,7 +3,7 @@
 Application roulette en ligne pour événements en présentiel — jusqu'à 100 joueurs simultanés.
 
 > Fichier de référence pour Claude Code. Mettre à jour après chaque milestone.
-> Dernière mise à jour : 2026-04-13
+> Dernière mise à jour : 2026-05-08
 
 ---
 
@@ -45,23 +45,32 @@ extensions.py        # Limiter Flask-Limiter (partagé entre modules)
 gunicorn.conf.py     # 1 worker, 12 threads (gthread), preload_app=True, logs/
 casino.service       # Unité systemd
 routes/
-  auth.py            # /login  /logout
+  auth.py            # /login  /logout — redirect post-login vers /play
   player.py          # /dashboard  /play  /rewards  /roulette/display
+                     # + /rewards retourne claimed_ids (IDs des récompenses déjà réclamées)
   admin.py           # /admin
-  api.py             # /api/session/*  /api/bet  /api/claim  /api/admin/*
+  api.py             # /api/session/*  /api/bet  /api/admin/*
 templates/           # Jinja2 — base.html, dashboard.html, login.html, play.html, rewards.html
 static/
+  css/
+    midnight-gala.css  # 577 lignes — tout le CSS inline extrait des templates (refactor 2026-04-19)
   js/
-    play.js          # Polling → formulaire de mise → affichage résultat
-    admin.js         # Modal mot de passe, contrôles session, gestion users/récompenses
+    play.js          # Polling → formulaire de mise → affichage résultat (+27 lignes UX)
+    admin.js         # Modal mot de passe, contrôles session, gestion users/récompenses (+136 lignes)
                      # + pollAdmin() toutes les 3s → updateControlsState(status, mode)
                      # + btn-stop-auto : arrêt mode auto immédiat sans rechargement
-    display.js       # Lance spinWheel() depuis polling /api/session/status
+    display.js       # Lance spinWheel() depuis polling /api/session/status (+39 lignes)
                      # + cache leaderboard (isSpinning + lastLeaderboardCache) : tops
                      #   jamais vidés pendant le spin
   roulette/          # milsaware/javascript-roulette (cloné)
 logs/                # access.log, error.log (Gunicorn)
 casino.db            # Créé automatiquement au premier lancement
+tests/
+  conftest.py        # Fixtures : app, admin_client, player_client, player2_client, open_session
+  test_casino.py     # 77 tests unitaires
+  locustfile.py      # Load testing Locust — 3 scénarios (CasinoPlayer, BetStorm, PollingOnly)
+  load_test_users.json  # 100 comptes de test pré-générés (ne pas commiter)
+  run_load_test.sh   # Wrapper bash pour lancer locust en headless
 ```
 
 ---
@@ -82,7 +91,6 @@ casino.db            # Créé automatiquement au premier lancement
 | `POST /api/session/open` | api | Ouvrir une session roulette (admin) |
 | `POST /api/session/spin` | api | Lancer la roue (admin) |
 | `POST /api/bet` | api | Placer une mise (joueur) |
-| `POST /api/claim` | api | Réclamer une récompense |
 | `POST /api/admin/*` | api | Actions admin (tokens, users, rewards) |
 | `POST /api/vote/open` | api | Ouvrir un vote film (admin) — body: `{film_title}` |
 | `POST /api/vote/close` | api | Fermer le vote courant (admin) |
@@ -181,8 +189,9 @@ flask --app "app:create_app()" run
 
 | Variable | Description |
 |----------|-------------|
-| `CASINO_SECRET_KEY` | Clé secrète Flask — `secrets.token_hex(32)` |
+| `CASINO_SECRET_KEY` | Clé secrète Flask — **obligatoire**, lève `RuntimeError` si absente |
 | `FLASK_ENV` | `development` ou `production` (prod requis pour cookie Secure) |
+| `CASINO_BASE_URL` | URL de base pour le QR code (ex. `https://casino.kryptide.fr`) — si absent, utilise `request.host_url` |
 
 `.env` est chargé manuellement dans `create_app()` (sans python-dotenv).
 
@@ -195,12 +204,19 @@ flask --app "app:create_app()" run
 - `resolve_spin()` est **idempotent** — sûr à rappeler après un redémarrage.
 - Le modal de mot de passe s'auto-supprime du DOM après 30s — jamais stocké côté client.
 - Sessions en `open` ou `spinning` au démarrage sont automatiquement récupérées par `startup_check()`.
+- `CASINO_SECRET_KEY` est **obligatoire** — `create_app()` lève `RuntimeError` si la variable est absente ou vide.
+- `ProxyFix(x_for=1, x_proto=1, x_host=1)` appliqué sur `app.wsgi_app` — nécessaire pour que Flask-Limiter lise la vraie IP derrière nginx.
+- Tout rendu de données API en JavaScript utilise `textContent` — jamais `innerHTML` avec données non-trusted.
 
 ---
 
 ## Pièges connus
 
 ```
+⚠️ midnight-gala.css → tout le CSS de l'app est dans static/css/midnight-gala.css — ne pas remettre de style inline dans les templates
+⚠️ claimed_ids       → /rewards retourne les IDs des récompenses déjà réclamées par le joueur — utilisé côté client pour désactiver les boutons
+⚠️ redirect /play    → routes/auth.py redirige vers /play après login (pas /dashboard)
+⚠️ RATELIMIT_ENABLED → variable d'env lue dans extensions.py — mettre à false pour les tests de charge Locust
 ⚠️ APScheduler      → un seul processus (Gunicorn master) — ne pas lancer en mode flask run
 ⚠️ SQLite WAL       → busy_timeout=10s — les connexions ne doivent pas rester ouvertes longtemps
 ⚠️ isolation_level  → None dans db_conn() — transactions manuelles (BEGIN IMMEDIATE requis)
@@ -221,6 +237,16 @@ flask --app "app:create_app()" run
                         de session font toujours location.reload() après action manuelle
 ⚠️ /api/session/status → retourne `mode` ('auto'|'manual') et `auto_interval_seconds` — utilisés par
                           admin.js pour piloter le badge ⚡ AUTO et le bouton stop-auto
+⚠️ /api/claim          → endpoint supprimé (2026-05-08) — ne plus utiliser ; les récompenses sont
+                          distribuées exclusivement via /api/admin/reward/give (admin)
+⚠️ CASINO_SECRET_KEY   → obligatoire en prod ET en test — conftest.py injecte 'test-secret-for-pytest'
+                          via os.environ.setdefault() avant create_app()
+⚠️ ProxyFix            → configuré dans app.py (x_for=1, x_proto=1, x_host=1) — ne pas le retirer,
+                          Flask-Limiter lirait 127.0.0.1 pour toutes les IPs sans lui
+⚠️ CSP nginx           → 'unsafe-inline' conservé pour scripts (inline script dans play.html)
+                          — à durcir avec nonce si les templates sont refactorisés
+⚠️ CASINO_BASE_URL     → si absent, le QR code utilise request.host_url (Host header — injectable)
+                          — toujours définir dans .env en production
 ```
 
 ---
@@ -229,14 +255,58 @@ flask --app "app:create_app()" run
 
 ```bash
 cd /root/casino && source venv/bin/activate
-pytest tests/ -v --tb=short   # 77 tests (76 passed + 1 xfail intentionnel)
+pytest tests/ -v --tb=short   # 72 tests (71 passed + 1 xfail intentionnel)
 ```
 
 Suite dans `tests/` :
 - `conftest.py` — fixtures : `app` (DB temporaire isolée), `admin_client`, `player_client`, `player2_client`, `open_session`, `open_vote_session`
-- `test_casino.py` — 77 tests sur 9 classes : `TestAuth`, `TestRoulette`, `TestBets`, `TestRewards`, `TestLeaderboard`, `TestVoteOpen`, `TestVoteSubmit`, `TestVoteClose`, `TestVoteResults`, `TestPalmares`, `TestAdminActions`
+- `test_casino.py` — 72 tests sur 11 classes : `TestAuth`, `TestRoulette`, `TestBets`, `TestRewards`, `TestLeaderboard`, `TestVoteOpen`, `TestVoteSubmit`, `TestVoteClose`, `TestVoteResults`, `TestPalmares`, `TestAdminActions`
 
 > `test_no_double_bet_same_session` → xfail intentionnel : l'app autorise les mises multiples par session (multi-bet frontend).
+
+---
+
+## Load testing (Locust)
+
+Suite de montée en charge pour valider la tenue sous 100 joueurs simultanés.
+
+```bash
+cd /root/casino && source venv/bin/activate
+
+# Prérequis : désactiver le rate limiter pour les tests
+export RATELIMIT_ENABLED=false
+
+# Créer les 100 comptes de test (une seule fois)
+python tests/setup_load_test.py
+
+# Scénario complet — 100 users, spawn 10/s, durée 3 min
+locust -f tests/locustfile.py --host=http://127.0.0.1:5000 \
+       --users=100 --spawn-rate=10 --run-time=3m --headless \
+       --class-picker CasinoPlayer
+
+# Pic de mises — 100 users, spawn rapide
+locust -f tests/locustfile.py --host=http://127.0.0.1:5000 \
+       --users=100 --spawn-rate=50 --run-time=2m --headless \
+       --class-picker BetStorm
+
+# Baseline polling seul
+locust -f tests/locustfile.py --host=http://127.0.0.1:5000 \
+       --users=100 --spawn-rate=10 --run-time=2m --headless \
+       --class-picker PollingOnly
+
+# Interface web (localhost:8089) pour visualisation temps réel
+locust -f tests/locustfile.py --host=http://127.0.0.1:5000
+```
+
+**3 scénarios Locust :**
+| Scénario | Comportement |
+|----------|-------------|
+| `CasinoPlayer` | Joueur réaliste : login → polling status → mise → navigation rewards |
+| `BetStorm` | Pic de mises simultanées lors d'une ouverture de session |
+| `PollingOnly` | Seulement `/api/session/status` — baseline latence serveur |
+
+> `load_test_users.json` — 100 comptes précréés par `setup_load_test.py`. Ne pas commiter.
+> `RATELIMIT_ENABLED=false` — variable d'env lue dans `extensions.py` pour désactiver Flask-Limiter pendant les tests de charge.
 
 ---
 

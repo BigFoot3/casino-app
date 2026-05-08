@@ -337,26 +337,6 @@ class TestBets:
 
 class TestRewards:
 
-    def test_claim_reward_success(self, app, admin_client, player_client):
-        """Claim endpoint → stock -1, claim created, tokens untouched."""
-        rid = _create_reward(admin_client, cost=100, stock=5)
-        _set_tokens('player1', 200)
-        r = player_client.post('/api/claim',
-                               json={'reward_id': rid},
-                               headers={'X-CSRFToken': 'test'})
-        assert r.status_code == 200
-        assert r.get_json().get('ok') is True
-        with db_conn() as conn:
-            rw  = conn.execute('SELECT stock FROM rewards WHERE id=?', (rid,)).fetchone()
-            uid = conn.execute('SELECT id FROM users WHERE username=?', ('player1',)).fetchone()['id']
-            clm = conn.execute(
-                'SELECT id FROM reward_claims WHERE user_id=? AND reward_id=?', (uid, rid)
-            ).fetchone()
-            tokens = conn.execute('SELECT tokens FROM users WHERE id=?', (uid,)).fetchone()['tokens']
-        assert rw['stock'] == 4
-        assert clm is not None
-        assert tokens == 200  # tokens no longer deducted
-
     def test_admin_give_reward(self, app, admin_client, player_client):
         """Admin give endpoint → stock -1, claim created, tokens untouched."""
         rid = _create_reward(admin_client, cost=100, stock=5)
@@ -399,59 +379,6 @@ class TestRewards:
                                json={'username': 'player1', 'reward_id': 1},
                                headers={'X-CSRFToken': 'test'})
         assert r.status_code == 403
-
-    def test_claim_reward_insufficient_tokens(self, app, admin_client, player_client):
-        """Token balance no longer checked on /api/claim — succeeds regardless."""
-        rid = _create_reward(admin_client, cost=500, stock=5)
-        _set_tokens('player1', 100)
-        r = player_client.post('/api/claim',
-                               json={'reward_id': rid},
-                               headers={'X-CSRFToken': 'test'})
-        assert r.status_code == 200  # token check removed
-        with db_conn() as conn:
-            rw = conn.execute('SELECT stock FROM rewards WHERE id=?', (rid,)).fetchone()
-        assert rw['stock'] == 4  # stock was decremented
-
-    def test_claim_reward_out_of_stock(self, app, admin_client, player_client):
-        """stock=0 → 400."""
-        rid = _create_reward(admin_client, cost=10, stock=0)
-        r = player_client.post('/api/claim',
-                               json={'reward_id': rid},
-                               headers={'X-CSRFToken': 'test'})
-        assert r.status_code == 400
-
-    def test_claim_reward_inactive(self, app, admin_client, player_client):
-        """Récompense inactive → 400."""
-        rid = _create_reward(admin_client, cost=10, stock=5)
-        admin_client.post(f'/api/admin/rewards/{rid}',
-                          json={'active': 0},
-                          headers={'X-CSRFToken': 'test'})
-        r = player_client.post('/api/claim',
-                               json={'reward_id': rid},
-                               headers={'X-CSRFToken': 'test'})
-        assert r.status_code == 400
-
-    def test_claim_reward_atomic_stock(self, app, admin_client, player_client, player2_client):
-        """Deux joueurs réclament la dernière unité simultanément → un seul succès."""
-        rid = _create_reward(admin_client, cost=50, stock=1)
-        results = []
-
-        def do_claim(c):
-            r = c.post('/api/claim',
-                       json={'reward_id': rid},
-                       headers={'X-CSRFToken': 'test'})
-            results.append(r.status_code)
-
-        t1 = threading.Thread(target=do_claim, args=(player_client,))
-        t2 = threading.Thread(target=do_claim, args=(player2_client,))
-        t1.start(); t2.start()
-        t1.join(); t2.join()
-
-        assert results.count(200) == 1, f"Attendu 1 succès, résultats={results}"
-        assert results.count(400) == 1
-        with db_conn() as conn:
-            stock = conn.execute('SELECT stock FROM rewards WHERE id=?', (rid,)).fetchone()['stock']
-        assert stock == 0
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
