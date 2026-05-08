@@ -4,6 +4,7 @@ from datetime import timedelta
 
 from flask import Flask
 from flask_wtf import CSRFProtect
+from werkzeug.middleware.proxy_fix import ProxyFix
 
 from extensions import limiter
 
@@ -15,6 +16,7 @@ csrf = CSRFProtect()
 
 def create_app():
     app = Flask(__name__)
+    app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)
 
     # Load .env manually (no python-dotenv dependency)
     env_path = os.path.join(os.path.dirname(__file__), '.env')
@@ -26,7 +28,10 @@ def create_app():
                     k, v = line.split('=', 1)
                     os.environ.setdefault(k.strip(), v.strip())
 
-    app.config['SECRET_KEY']                = os.environ.get('CASINO_SECRET_KEY', 'dev')
+    secret = os.environ.get('CASINO_SECRET_KEY', '')
+    if not secret:
+        raise RuntimeError("CASINO_SECRET_KEY manquante — définir la variable dans .env")
+    app.config['SECRET_KEY']                = secret
     # Set RATELIMIT_ENABLED=false in .env to disable rate limiting (load tests only)
     app.config['RATELIMIT_ENABLED']         = os.environ.get('RATELIMIT_ENABLED', 'true').lower() != 'false'
     is_prod = os.environ.get('FLASK_ENV', 'production') == 'production'

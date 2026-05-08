@@ -227,10 +227,22 @@ async function loadPalmares() {
         (i === 0 ? 'border:2px solid #ffd700;box-shadow:0 0 18px rgba(255,215,0,.4)' :
          i === 1 ? 'border:2px solid #c0c0c0' :
          i === 2 ? 'border:2px solid #cd7f32' : 'border:1px solid #2a2a4a');
-      div.innerHTML = `<span style="font-size:2rem">${medal}</span>
-        <span style="flex:1;font-size:1.25rem;font-weight:bold;color:#f0f0f0">${f.film_title}</span>
-        <span style="font-size:1.8rem;font-weight:900;color:#c9a84c">${f.avg_weighted_score}</span>
-        <span style="color:#9e9e9e;font-size:.85rem">/10 · ${f.voter_count} vote${f.voter_count !== 1 ? 's' : ''}</span>`;
+      const medalSpan = document.createElement('span');
+      medalSpan.style.fontSize = '2rem';
+      medalSpan.textContent = medal;
+      const titleSpan = document.createElement('span');
+      titleSpan.style.cssText = 'flex:1;font-size:1.25rem;font-weight:bold;color:#f0f0f0';
+      titleSpan.textContent = f.film_title;
+      const scoreSpan = document.createElement('span');
+      scoreSpan.style.cssText = 'font-size:1.8rem;font-weight:900;color:#c9a84c';
+      scoreSpan.textContent = f.avg_weighted_score;
+      const metaSpan = document.createElement('span');
+      metaSpan.style.cssText = 'color:#9e9e9e;font-size:.85rem';
+      metaSpan.textContent = `/10 · ${f.voter_count} vote${f.voter_count !== 1 ? 's' : ''}`;
+      div.appendChild(medalSpan);
+      div.appendChild(titleSpan);
+      div.appendChild(scoreSpan);
+      div.appendChild(metaSpan);
       listEl.appendChild(div);
     });
   } catch(e) { /* network hiccup */ }
@@ -385,14 +397,26 @@ function showRoundLeaderboard(data) {
   data.winners.forEach((p, i) => {
     const div = document.createElement('div');
     div.className = 'rl-row';
-    div.innerHTML = `<span>${medals[i]} ${p.username}</span><span class="rl-pos">+${p.net}</span>`;
+    const nameSpan = document.createElement('span');
+    nameSpan.textContent = `${medals[i]} ${p.username}`;
+    const netSpan = document.createElement('span');
+    netSpan.className = 'rl-pos';
+    netSpan.textContent = `+${p.net}`;
+    div.appendChild(nameSpan);
+    div.appendChild(netSpan);
     winEl.appendChild(div);
     rows.push(div);
   });
   data.losers.forEach((p, i) => {
     const div = document.createElement('div');
     div.className = 'rl-row';
-    div.innerHTML = `<span>${medals[i]} ${p.username}</span><span class="rl-neg">${p.net}</span>`;
+    const nameSpan = document.createElement('span');
+    nameSpan.textContent = `${medals[i]} ${p.username}`;
+    const netSpan = document.createElement('span');
+    netSpan.className = 'rl-neg';
+    netSpan.textContent = String(p.net);
+    div.appendChild(nameSpan);
+    div.appendChild(netSpan);
     loseEl.appendChild(div);
     rows.push(div);
   });
@@ -441,13 +465,24 @@ function renderTopHolders(holders) {
     el.innerHTML = '<div class="lb-row lb-empty">Aucun joueur…</div>';
     return;
   }
-  el.innerHTML = holders.map(h =>
-    `<div class="holder-row">
-       <span class="holder-rank rank-${h.rank}">${h.rank}</span>
-       <span class="holder-name">${h.username}</span>
-       <span class="holder-tokens">${h.tokens}</span>
-     </div>`
-  ).join('');
+  el.innerHTML = '';
+  holders.forEach(h => {
+    const row = document.createElement('div');
+    row.className = 'holder-row';
+    const rankSpan = document.createElement('span');
+    rankSpan.className = `holder-rank rank-${Number(h.rank)}`;
+    rankSpan.textContent = h.rank;
+    const nameSpan = document.createElement('span');
+    nameSpan.className = 'holder-name';
+    nameSpan.textContent = h.username;
+    const tokensSpan = document.createElement('span');
+    tokensSpan.className = 'holder-tokens';
+    tokensSpan.textContent = h.tokens;
+    row.appendChild(rankSpan);
+    row.appendChild(nameSpan);
+    row.appendChild(tokensSpan);
+    el.appendChild(row);
+  });
 }
 
 // ── Leaderboard polling (every 15s) ──────────────────────────────────────────
@@ -469,17 +504,41 @@ function renderLeaderboard(data) {
     });
   }
 
-  winEl.innerHTML = data.top_winners.length === 0
-    ? '<div class="lb-row lb-empty">Personne encore…</div>'
-    : data.top_winners.map((p, i) =>
-        `<div class="lb-row"><span>${medals[i]} ${p.username}</span><span class="lb-net-pos">+${p.net}</span></div>`
-      ).join('');
+  winEl.innerHTML = '';
+  if (data.top_winners.length === 0) {
+    winEl.innerHTML = '<div class="lb-row lb-empty">Personne encore…</div>';
+  } else {
+    data.top_winners.forEach((p, i) => {
+      const row = document.createElement('div');
+      row.className = 'lb-row';
+      const nameSpan = document.createElement('span');
+      nameSpan.textContent = `${medals[i]} ${p.username}`;
+      const netSpan = document.createElement('span');
+      netSpan.className = 'lb-net-pos';
+      netSpan.textContent = `+${p.net}`;
+      row.appendChild(nameSpan);
+      row.appendChild(netSpan);
+      winEl.appendChild(row);
+    });
+  }
 
-  loseEl.innerHTML = data.top_losers.length === 0
-    ? '<div class="lb-row lb-empty">Personne encore…</div>'
-    : data.top_losers.map((p, i) =>
-        `<div class="lb-row"><span>${medals[i]} ${p.username}</span><span class="lb-net-neg">${p.net}</span></div>`
-      ).join('');
+  loseEl.innerHTML = '';
+  if (data.top_losers.length === 0) {
+    loseEl.innerHTML = '<div class="lb-row lb-empty">Personne encore…</div>';
+  } else {
+    data.top_losers.forEach((p, i) => {
+      const row = document.createElement('div');
+      row.className = 'lb-row';
+      const nameSpan = document.createElement('span');
+      nameSpan.textContent = `${medals[i]} ${p.username}`;
+      const netSpan = document.createElement('span');
+      netSpan.className = 'lb-net-neg';
+      netSpan.textContent = String(p.net);
+      row.appendChild(nameSpan);
+      row.appendChild(netSpan);
+      loseEl.appendChild(row);
+    });
+  }
 }
 
 async function pollLeaderboard() {
