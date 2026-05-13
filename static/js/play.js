@@ -212,13 +212,15 @@ async function pollResult() {
 
       const listEl = $('result-bets-list');
       listEl.innerHTML = '';
-      let netDelta = 0;
+      let netDelta     = 0;  // net profit/loss — for display only
+      let balanceDelta = 0;  // sum of payouts — amount was already deducted at bet time
 
       if (d.user_bets && d.user_bets.length > 0) {
         d.user_bets.forEach(bet => {
           const won   = bet.payout > 0;
           const delta = won ? bet.payout - bet.amount : -bet.amount;
-          netDelta   += delta;
+          netDelta     += delta;
+          balanceDelta += bet.payout;  // 0 on loss → no-op; payout on win restores stake + profit
           const row   = document.createElement('div');
           row.className = 'result-bet-row ' + (won ? 'result-win-row' : 'result-loss-row');
           row.innerHTML =
@@ -230,7 +232,7 @@ async function pollResult() {
         totalRow.className = 'result-total-row';
         totalRow.innerHTML = `<strong>Total : ${netDelta >= 0 ? '+' : ''}${netDelta} tokens</strong>`;
         listEl.appendChild(totalRow);
-        balanceEl.textContent = (parseInt(balanceEl.textContent) || 0) + netDelta;
+        balanceEl.textContent = (parseInt(balanceEl.textContent) || 0) + balanceDelta;
       } else {
         listEl.innerHTML = '<div class="alert alert-secondary">Tu n\'avais pas misé sur cette partie.</div>';
       }
