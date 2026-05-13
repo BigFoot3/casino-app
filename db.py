@@ -208,6 +208,14 @@ def resolve_spin(session_id: int):
                     elif btype == 'number':
                         if int(bval) == winning_number:
                             payout = amount * 36
+                    elif btype == 'column':
+                        col = int(bval)
+                        if col == 1 and winning_number % 3 == 0:
+                            payout = amount * 3
+                        elif col == 2 and winning_number % 3 == 2:
+                            payout = amount * 3
+                        elif col == 3 and winning_number % 3 == 1:
+                            payout = amount * 3
 
                 conn.execute(
                     'UPDATE bets SET payout=? WHERE id=?',

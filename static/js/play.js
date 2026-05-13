@@ -40,6 +40,7 @@ const BET_LABELS = {
   number: v => `Numéro ${v}`,
   color:  v => v === 'red' ? 'Rouge' : 'Noir',
   parity: v => v === 'even' ? 'Pair' : 'Impair',
+  column: v => `Colonne ${v} (2→1)`,
 };
 
 const numBtns = document.querySelectorAll('#roulette-grid .num-btn[data-type]');

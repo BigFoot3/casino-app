@@ -115,7 +115,12 @@
 <!-- User management -->
 <div class="card p-4 mb-4">
   <div class="d-flex justify-content-between align-items-center mb-3">
-    <h5 class="mb-0">👥 Utilisateurs</h5>
+    <button class="btn btn-link text-decoration-none p-0 h5 mb-0 text-white"
+            data-bs-toggle="collapse" data-bs-target="#users-list"
+            aria-expanded="true" aria-controls="users-list">
+      👥 Utilisateurs
+      <span id="users-list-chevron" class="ms-1 small">▲</span>
+    </button>
     <button class="btn btn-sm btn-primary" data-bs-toggle="collapse" data-bs-target="#create-user-form">
       + Créer
     </button>
@@ -140,51 +145,61 @@
     </div>
   </div>
 
-  <div class="table-responsive">
-    <table class="table table-dark table-sm align-middle" id="users-table">
-      <thead>
-        <tr>
-          <th>Utilisateur</th><th>Rôle</th><th>Tokens</th>
-          <th>Ajouter tokens</th><th>Actions</th>
-        </tr>
-      </thead>
-      <tbody>
-        {% for u in users %}
-        <tr id="user-row-{{ u['id'] }}">
-          <td>{{ u['username'] }}</td>
-          <td><span class="badge {% if u['role'] == 'admin' %}bg-warning text-dark{% else %}bg-secondary{% endif %}">
-            {{ u['role'] }}</span></td>
-          <td><span class="user-tokens" data-id="{{ u['id'] }}">{{ u['tokens'] }}</span></td>
-          <td>
-            <div class="input-group input-group-sm" style="max-width:180px">
-              <input type="number" class="form-control add-tokens-input" min="1"
-                     data-id="{{ u['id'] }}" placeholder="Montant">
-              <button class="btn btn-outline-success add-tokens-btn" data-id="{{ u['id'] }}">+</button>
-            </div>
-          </td>
-          <td class="d-flex gap-1 flex-wrap">
-            <button class="btn btn-sm btn-outline-warning reset-pw-btn" data-id="{{ u['id'] }}"
-                    data-name="{{ u['username'] }}">
-              🔑 MDP
-            </button>
-            <button class="btn btn-sm btn-outline-info decrement-tokens-btn" data-id="{{ u['id'] }}">
-              −1
-            </button>
-            <button class="btn btn-sm btn-outline-secondary zero-tokens-btn" data-id="{{ u['id'] }}"
-                    data-name="{{ u['username'] }}">
-              🪙 0
-            </button>
-            {% if u['role'] != 'admin' %}
-            <button class="btn btn-sm btn-outline-danger delete-user-btn" data-id="{{ u['id'] }}"
-                    data-name="{{ u['username'] }}">
-              🗑
-            </button>
-            {% endif %}
-          </td>
-        </tr>
-        {% endfor %}
-      </tbody>
-    </table>
+  <div class="collapse show" id="users-list">
+    <div class="mb-3">
+      <input type="search" id="user-search" class="form-control form-control-sm"
+             placeholder="🔍 Rechercher un utilisateur…" autocomplete="off">
+    </div>
+
+    <div class="table-responsive" style="max-height:265px;overflow-y:auto">
+      <table class="table table-dark table-sm align-middle" id="users-table">
+        <thead>
+          <tr>
+            <th>Utilisateur</th><th>Rôle</th><th>Tokens</th>
+            <th>Ajouter tokens</th><th>Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for u in users %}
+          <tr id="user-row-{{ u['id'] }}">
+            <td>{{ u['username'] }}</td>
+            <td><span class="badge {% if u['role'] == 'admin' %}bg-warning text-dark{% else %}bg-secondary{% endif %}">
+              {{ u['role'] }}</span></td>
+            <td><span class="user-tokens" data-id="{{ u['id'] }}">{{ u['tokens'] }}</span></td>
+            <td>
+              <div class="input-group input-group-sm" style="max-width:180px">
+                <input type="number" class="form-control add-tokens-input" min="1"
+                       data-id="{{ u['id'] }}" placeholder="Montant">
+                <button class="btn btn-outline-success add-tokens-btn" data-id="{{ u['id'] }}">+</button>
+              </div>
+            </td>
+            <td class="d-flex gap-1 flex-wrap">
+              <button class="btn btn-sm btn-outline-warning reset-pw-btn" data-id="{{ u['id'] }}"
+                      data-name="{{ u['username'] }}">
+                🔑 MDP
+              </button>
+              <button class="btn btn-sm btn-outline-info decrement-tokens-btn" data-id="{{ u['id'] }}">
+                −1
+              </button>
+              <button class="btn btn-sm btn-outline-secondary zero-tokens-btn" data-id="{{ u['id'] }}"
+                      data-name="{{ u['username'] }}">
+                🪙 0
+              </button>
+              {% if u['role'] != 'admin' %}
+              <button class="btn btn-sm btn-outline-danger delete-user-btn" data-id="{{ u['id'] }}"
+                      data-name="{{ u['username'] }}">
+                🗑
+              </button>
+              {% endif %}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <div id="users-no-result" class="text-muted small text-center py-2" style="display:none">
+      Aucun utilisateur trouvé.
+    </div>
   </div>
 </div>
 
@@ -234,6 +249,10 @@
             <button class="btn btn-xs btn-sm {% if r['active'] %}btn-outline-danger{% else %}btn-outline-success{% endif %} rw-toggle-btn"
                     data-id="{{ r['id'] }}" data-active="{{ r['active'] }}">
               {% if r['active'] %}Désactiver{% else %}Activer{% endif %}
+            </button>
+            <button class="btn btn-xs btn-sm btn-outline-danger rw-delete-btn"
+                    data-id="{{ r['id'] }}" data-name="{{ r['name'] }}">
+              🗑
             </button>
           </td>
         </tr>
@@ -331,6 +350,71 @@
     {% endif %}
   </div>
   {% endif %}
+</div>
+<!-- Film management -->
+<div class="card p-4 mb-4">
+  <div class="d-flex justify-content-between align-items-center mb-3">
+    <button class="btn btn-link text-decoration-none p-0 h5 mb-0 text-white"
+            data-bs-toggle="collapse" data-bs-target="#films-list"
+            aria-expanded="true" aria-controls="films-list">
+      🎞 Films
+      <span id="films-list-chevron" class="ms-1 small">▲</span>
+    </button>
+    <span class="text-muted small">{{ vote_sessions | length }} session(s)</span>
+  </div>
+
+  <div class="collapse show" id="films-list">
+    <div class="mb-3">
+      <input type="search" id="film-search" class="form-control form-control-sm"
+             placeholder="🔍 Rechercher un film…" autocomplete="off">
+    </div>
+
+    <div class="table-responsive" style="max-height:280px;overflow-y:auto">
+      <table class="table table-dark table-sm align-middle" id="films-table">
+        <thead>
+          <tr>
+            <th>Film</th><th>Statut</th><th>Votants</th><th>Note moy.</th><th>Date</th><th>Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for vs in vote_sessions %}
+          <tr id="film-row-{{ vs['id'] }}">
+            <td id="film-title-{{ vs['id'] }}">{{ vs['film_title'] }}</td>
+            <td>
+              <span class="badge {% if vs['status'] == 'open' %}bg-success
+                                 {% elif vs['status'] == 'closed' %}bg-secondary
+                                 {% else %}bg-warning text-dark{% endif %}">
+                {{ vs['status'] | upper }}
+              </span>
+            </td>
+            <td>{{ vs['voter_count'] }}</td>
+            <td>{% if vs['avg_score'] %}{{ vs['avg_score'] }}{% else %}—{% endif %}</td>
+            <td class="text-muted small">
+              {% if vs['opened_at'] %}{{ vs['opened_at'][:10] }}{% else %}—{% endif %}
+            </td>
+            <td class="d-flex gap-1">
+              <button class="btn btn-sm btn-outline-warning film-rename-btn"
+                      data-id="{{ vs['id'] }}" data-title="{{ vs['film_title'] }}"
+                      {% if vs['status'] == 'open' %}disabled{% endif %}>
+                ✏️
+              </button>
+              <button class="btn btn-sm btn-outline-danger film-delete-btn"
+                      data-id="{{ vs['id'] }}" data-title="{{ vs['film_title'] }}"
+                      {% if vs['status'] == 'open' %}disabled{% endif %}>
+                🗑
+              </button>
+            </td>
+          </tr>
+          {% else %}
+          <tr><td colspan="6" class="text-muted text-center">Aucun film enregistré.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <div id="films-no-result" class="text-muted small text-center py-2" style="display:none">
+      Aucun film trouvé.
+    </div>
+  </div>
 </div>
 {% endblock %}
 {% block scripts %}
