@@ -3,7 +3,7 @@
 Application roulette en ligne pour événements en présentiel — jusqu'à 100 joueurs simultanés.
 
 > Fichier de référence pour Claude Code. Mettre à jour après chaque milestone.
-> Dernière mise à jour : 2026-05-08
+> Dernière mise à jour : 2026-05-13
 
 ---
 
@@ -55,11 +55,14 @@ static/
   css/
     midnight-gala.css  # 577 lignes — tout le CSS inline extrait des templates (refactor 2026-04-19)
   js/
-    play.js          # Polling → formulaire de mise → affichage résultat (+27 lignes UX)
-    admin.js         # Modal mot de passe, contrôles session, gestion users/récompenses (+136 lignes)
+    play.js          # Polling → formulaire de mise → affichage résultat
+                     # + mises colonne "2→1" (data-type=column, data-val=1/2/3)
+    admin.js         # Modal mot de passe, contrôles session, gestion users/récompenses
                      # + pollAdmin() toutes les 3s → updateControlsState(status, mode)
                      # + btn-stop-auto : arrêt mode auto immédiat sans rechargement
-    display.js       # Lance spinWheel() depuis polling /api/session/status (+39 lignes)
+                     # + filtre recherche live users et films
+                     # + CRUD films (renommer, supprimer) et suppression récompenses
+    display.js       # Lance spinWheel() depuis polling /api/session/status
                      # + cache leaderboard (isSpinning + lastLeaderboardCache) : tops
                      #   jamais vidés pendant le spin
   roulette/          # milsaware/javascript-roulette (cloné)
@@ -99,6 +102,9 @@ tests/
 | `POST /api/vote/palmares` | api | Passer en mode palmarès (admin) |
 | `GET /api/vote/summary` | api | Toutes les sessions fermées triées par note (admin) |
 | `POST /api/vote/reset-mode` | api | Repasser en mode roulette (admin) |
+| `POST /api/admin/vote/<id>/delete` | api | Supprimer une session film + ses votes (admin) |
+| `POST /api/admin/vote/<id>/rename` | api | Renommer le titre d'un film (admin) — body: `{film_title}` |
+| `POST /api/admin/rewards/<id>/delete` | api | Supprimer une récompense + son historique claims (admin) |
 
 ---
 
@@ -138,6 +144,12 @@ waiting → open (fenêtre de mise 30s) → spinning → closed → waiting
 | `color` red/black | Numéro rouge/noir (0 = House win) | ×2 |
 | `parity` even/odd | Parité (0 = House win) | ×2 |
 | `number` | Numéro exact | ×36 |
+| `column` 1/2/3 | Colonne (0 = House win) | ×3 |
+
+Correspondance colonnes :
+- `column=1` → numéros 3,6,9,…,36 (n%3==0) — bouton "2→1" haut
+- `column=2` → numéros 2,5,8,…,35 (n%3==2) — bouton "2→1" milieu
+- `column=3` → numéros 1,4,7,…,34 (n%3==1) — bouton "2→1" bas
 
 ---
 
@@ -247,6 +259,13 @@ flask --app "app:create_app()" run
                           — à durcir avec nonce si les templates sont refactorisés
 ⚠️ CASINO_BASE_URL     → si absent, le QR code utilise request.host_url (Host header — injectable)
                           — toujours définir dans .env en production
+⚠️ stats_reset_at      → stocké en isoformat() (ex: '2026-05-13T14:15:14+00:00') pour comparaison
+                          lexicographique correcte avec closed_at — ne jamais utiliser strftime()
+⚠️ column bet display  → les colBtn dans display.html doivent avoir data-type="column" et data-val
+                          — sans ces attributs renderChips() ignore silencieusement les mises colonne
+⚠️ admin films         → suppression protégée si status='open' (vote en cours) — renommer idem
+⚠️ admin users         → liste collapsible (collapse show par défaut) + filtre live + scroll 5 lignes
+⚠️ admin récompenses   → suppression cascade reward_claims via /api/admin/rewards/<id>/delete
 ```
 
 ---
@@ -255,7 +274,7 @@ flask --app "app:create_app()" run
 
 ```bash
 cd /root/casino && source venv/bin/activate
-pytest tests/ -v --tb=short   # 72 tests (71 passed + 1 xfail intentionnel)
+pytest tests/ -v --tb=short   # 72 tests (71 passed + 1 xfail intentionnel) — dernière exécution : 2026-05-13
 ```
 
 Suite dans `tests/` :
