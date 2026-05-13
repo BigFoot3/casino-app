@@ -160,11 +160,12 @@ def session_status():
 
         # Grace period: if active is 'waiting' but previous session closed < 12s ago,
         # report 'spinning' so the display page can run the wheel animation.
+        # Only applies when winning_number is set (normal spin), not admin force-close.
         if active['status'] == 'waiting':
             prev = conn.execute(
                 "SELECT * FROM game_sessions WHERE status='closed' ORDER BY id DESC LIMIT 1"
             ).fetchone()
-            if prev and prev['closed_at']:
+            if prev and prev['closed_at'] and prev['winning_number'] is not None:
                 closed_ago = (_utcnow() - _parse_dt(prev['closed_at'])).total_seconds()
                 if closed_ago < 12:
                     return jsonify({
