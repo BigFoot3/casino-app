@@ -3,7 +3,7 @@
 Application roulette en ligne pour événements en présentiel — jusqu'à 100 joueurs simultanés.
 
 > Fichier de référence pour Claude Code. Mettre à jour après chaque milestone.
-> Dernière mise à jour : 2026-05-14
+> Dernière mise à jour : 2026-05-14 (session 2)
 
 ---
 
@@ -60,7 +60,9 @@ static/
                      # + gridLocked : grille déverrouillée pendant spin pour pré-miser le tour suivant
     admin.js         # Modal mot de passe, contrôles session, gestion users/récompenses
                      # + pollAdmin() toutes les 3s → updateControlsState(status, mode)
-                     # + btn-stop-auto : arrêt mode auto immédiat sans rechargement
+                     # + btn-action : bouton contextuel unique (▶ Ouvrir / 🎯 Lancer / ⏳ En cours…)
+                     # + btn-close : visible uniquement en open (Fermer ↯)
+                     # + toggle Manuel/Auto (btn-mode-manual/auto) + interval-wrap
                      # + filtre recherche live users et films
                      # + CRUD films (renommer, supprimer) et suppression récompenses
     display.js       # Lance spinWheel() depuis polling /api/session/status
@@ -256,12 +258,19 @@ flask --app "app:create_app()" run
 ⚠️ app_mode         → stocké dans app_config — roulette par défaut, reset via /api/vote/reset-mode
 ⚠️ admin boutons    → états pilotés exclusivement par pollAdmin() (toutes les 3s) via updateControlsState()
                       — ne jamais ajouter de variable JS locale pour l'état des boutons
+                      — currentStatus (admin.js) est mis à jour par updateControlsState(), pas autrement
 ⚠️ leaderboard cache → display.js mémorise lastLeaderboardCache ; pendant isSpinning, un payload vide
                         ne vide pas les tops — comportement voulu, pas un bug
-⚠️ btn-stop-auto    → met à jour l'UI immédiatement (pas de location.reload()) ; les autres contrôles
-                        de session font toujours location.reload() après action manuelle
+⚠️ btn-action       → bouton unique contextuel : waiting→▶ Ouvrir, open→🎯 Lancer, spinning→⏳ En cours…
+                        les actions sont routées selon currentStatus — ne pas restaurer les 3 boutons séparés
+⚠️ btn-close        → affiché uniquement quand status='open' (Fermer ↯) — action d'urgence destructive
+⚠️ mode toggle      → btn-mode-manual / btn-mode-auto — applique immédiatement via applyMode()
+                        interval-wrap visible uniquement en auto ; change sur blur du champ intervalle
 ⚠️ /api/session/status → retourne `mode` ('auto'|'manual') et `auto_interval_seconds` — utilisés par
-                          admin.js pour piloter le badge ⚡ AUTO et le bouton stop-auto
+                          admin.js pour piloter le toggle et interval-wrap
+⚠️ grace period spinning → /api/session/status simule 'spinning' pendant 12s après fermeture normale
+                            pour la page display — court-circuité si winning_number IS NULL (force-close admin)
+                            — ne pas retirer la condition `prev['winning_number'] is not None`
 ⚠️ /api/claim          → endpoint supprimé (2026-05-08) — ne plus utiliser ; les récompenses sont
                           distribuées exclusivement via /api/admin/reward/give (admin)
 ⚠️ CASINO_SECRET_KEY   → obligatoire en prod ET en test — conftest.py injecte 'test-secret-for-pytest'
@@ -297,7 +306,7 @@ flask --app "app:create_app()" run
 
 ```bash
 cd /root/casino && source venv/bin/activate
-pytest tests/ -v --tb=short   # 72 tests (71 passed + 1 xfail intentionnel) — dernière exécution : 2026-05-14
+pytest tests/ -v --tb=short   # 72 tests (71 passed + 1 xfail intentionnel) — dernière exécution : 2026-05-14 (session 2)
 ```
 
 Suite dans `tests/` :
