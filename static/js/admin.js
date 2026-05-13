@@ -56,22 +56,24 @@ async function post(url, body = {}) {
 }
 
 // ── Session controls ──────────────────────────────────────────────────────────
-$('btn-open').addEventListener('click', async () => {
-  const [s] = await post('/api/admin/session/open');
-  if (s === 200) location.reload();
-  else alert('Erreur : impossible d\'ouvrir la session.');
-});
+let currentStatus = null;
 
-$('btn-spin').addEventListener('click', async () => {
-  const [s] = await post('/api/admin/session/spin');
-  if (s === 200) location.reload();
-  else alert('Erreur : impossible de lancer la roue.');
+$('btn-action').addEventListener('click', async () => {
+  if (currentStatus === 'waiting') {
+    const [s] = await post('/api/admin/session/open');
+    if (s === 200) location.reload();
+    else alert('Erreur : impossible d\'ouvrir la session.');
+  } else if (currentStatus === 'open') {
+    const [s] = await post('/api/admin/session/spin');
+    if (s === 200) location.reload();
+    else alert('Erreur : impossible de lancer la roue.');
+  }
 });
 
 $('btn-close').addEventListener('click', () => {
   showConfirm(
     'Fermer la session',
-    'Forcer la fermeture de la session en cours ? Les mises en cours seront perdues.',
+    'Forcer la fermeture ? Les mises en cours seront perdues.',
     async () => {
       const [s, d] = await post('/api/admin/session/close');
       if (s === 200) location.reload();
@@ -92,42 +94,31 @@ $('btn-stats-reset').addEventListener('click', () => {
   );
 });
 
-// ── Mode ──────────────────────────────────────────────────────────────────────
-$('btn-mode').addEventListener('click', async () => {
-  const mode     = $('mode-select').value;
-  const interval = parseInt($('interval-input').value);
+// ── Mode toggle ───────────────────────────────────────────────────────────────
+async function applyMode(mode) {
+  const interval = parseInt($('interval-input').value) || 120;
   const [s, d]   = await post('/api/admin/mode', {mode, interval});
   const statusEl = $('mode-status');
   if (s === 200) {
-    statusEl.textContent = '✅ Appliqué';
-    statusEl.className = 'text-success small';
+    const isAuto = (mode === 'auto');
+    $('btn-mode-manual').classList.toggle('active', !isAuto);
+    $('btn-mode-auto').classList.toggle('active', isAuto);
+    $('interval-wrap').style.display = isAuto ? 'flex' : 'none';
+    statusEl.textContent = isAuto ? '⚡ Activé' : '✅ Manuel';
+    statusEl.className   = 'small text-success';
+    setTimeout(() => { statusEl.textContent = ''; }, 3000);
   } else {
     statusEl.textContent = d.error || 'Erreur';
-    statusEl.className = 'text-danger small';
+    statusEl.className   = 'small text-danger';
   }
-});
-
-// ── Stop auto mode ────────────────────────────────────────────────────────────
-const btnStopAuto = $('btn-stop-auto');
-if (btnStopAuto) {
-  btnStopAuto.addEventListener('click', async () => {
-    const interval = parseInt($('interval-input').value) || 120;
-    const [s, d]   = await post('/api/admin/mode', {mode: 'manual', interval});
-    if (s === 200) {
-      // Immediate UI update — do not wait for the next poll cycle
-      btnStopAuto.style.display = 'none';
-      const autoBadge = $('auto-mode-badge');
-      if (autoBadge) autoBadge.style.display = 'none';
-      const modeSelect = $('mode-select');
-      if (modeSelect) modeSelect.value = 'manual';
-      const statusEl = $('mode-status');
-      statusEl.textContent = '✅ Mode manuel';
-      statusEl.className   = 'text-success small';
-    } else {
-      alert(d.error || 'Erreur');
-    }
-  });
 }
+
+$('btn-mode-manual').addEventListener('click', () => applyMode('manual'));
+$('btn-mode-auto').addEventListener('click',   () => applyMode('auto'));
+
+$('interval-input').addEventListener('change', () => {
+  if ($('btn-mode-auto').classList.contains('active')) applyMode('auto');
+});
 
 // ── Session status polling — drives button states from server state ───────────
 const SESSION_STATUS_BADGE_CLASSES = {
@@ -138,28 +129,35 @@ const SESSION_STATUS_BADGE_CLASSES = {
 };
 
 function updateControlsState(status, mode) {
-  const btnOpen  = $('btn-open');
-  const btnSpin  = $('btn-spin');
-  const btnClose = $('btn-close');
+  currentStatus = status;
 
-  // Button enabled/disabled states are driven exclusively by server status
+  const btnAction = $('btn-action');
+  const btnClose  = $('btn-close');
+
   switch (status) {
     case 'waiting':
-    case 'closed':
-      btnOpen.disabled  = false;
-      btnSpin.disabled  = true;
-      btnClose.disabled = true;
+      btnAction.disabled    = false;
+      btnAction.className   = 'btn btn-success';
+      btnAction.textContent = '▶ Ouvrir session';
+      btnClose.style.display = 'none';
       break;
     case 'open':
-      btnOpen.disabled  = true;
-      btnSpin.disabled  = false;
-      btnClose.disabled = false;
+      btnAction.disabled    = false;
+      btnAction.className   = 'btn btn-warning text-dark';
+      btnAction.textContent = '🎯 Lancer la roue';
+      btnClose.style.display = '';
       break;
     case 'spinning':
-      btnOpen.disabled  = true;
-      btnSpin.disabled  = true;
-      btnClose.disabled = true;
+      btnAction.disabled    = true;
+      btnAction.className   = 'btn btn-secondary';
+      btnAction.textContent = '⏳ En cours…';
+      btnClose.style.display = 'none';
       break;
+    default:
+      btnAction.disabled    = false;
+      btnAction.className   = 'btn btn-success';
+      btnAction.textContent = '▶ Ouvrir session';
+      btnClose.style.display = 'none';
   }
 
   // Status badge
@@ -169,12 +167,14 @@ function updateControlsState(status, mode) {
     badge.textContent = status.toUpperCase();
   }
 
-  // Auto mode indicator
-  const isAuto    = (mode === 'auto');
-  const autoBadge = $('auto-mode-badge');
-  const stopBtn   = $('btn-stop-auto');
-  if (autoBadge) autoBadge.style.display = isAuto ? '' : 'none';
-  if (stopBtn)   stopBtn.style.display   = isAuto ? '' : 'none';
+  // Mode toggle buttons
+  const isAuto       = (mode === 'auto');
+  const btnManual    = $('btn-mode-manual');
+  const btnAutoEl    = $('btn-mode-auto');
+  const intervalWrap = $('interval-wrap');
+  if (btnManual)    btnManual.classList.toggle('active', !isAuto);
+  if (btnAutoEl)    btnAutoEl.classList.toggle('active', isAuto);
+  if (intervalWrap) intervalWrap.style.display = isAuto ? 'flex' : 'none';
 }
 
 async function pollAdmin() {
