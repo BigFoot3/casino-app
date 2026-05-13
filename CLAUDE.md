@@ -3,7 +3,7 @@
 Application roulette en ligne pour événements en présentiel — jusqu'à 100 joueurs simultanés.
 
 > Fichier de référence pour Claude Code. Mettre à jour après chaque milestone.
-> Dernière mise à jour : 2026-05-14 (session 2)
+> Dernière mise à jour : 2026-05-13 (session 3)
 
 ---
 
@@ -73,10 +73,17 @@ logs/                # access.log, error.log (Gunicorn)
 casino.db            # Créé automatiquement au premier lancement
 tests/
   conftest.py        # Fixtures : app, admin_client, player_client, player2_client, open_session
-  test_casino.py     # 77 tests unitaires
+  test_casino.py     # 72 tests unitaires
   locustfile.py      # Load testing Locust — 3 scénarios (CasinoPlayer, BetStorm, PollingOnly)
   load_test_users.json  # 100 comptes de test pré-générés (ne pas commiter)
   run_load_test.sh   # Wrapper bash pour lancer locust en headless
+.github/
+  workflows/
+    tests.yml        # CI GitHub Actions : pytest + upload Codecov sur push/PR → main
+pytest.ini           # Config pytest (testpaths=tests, --tb=short)
+.coveragerc          # Exclut scheduler.py, locustfile.py, setup_load_test.py du rapport
+codecov.yml          # Seuil de régression couverture : tolérance 2%
+requirements-dev.txt # pytest==8.3.5, pytest-cov==6.1.0 (dépendances dev uniquement)
 ```
 
 ---
@@ -306,7 +313,8 @@ flask --app "app:create_app()" run
 
 ```bash
 cd /root/casino && source venv/bin/activate
-pytest tests/ -v --tb=short   # 72 tests (71 passed + 1 xfail intentionnel) — dernière exécution : 2026-05-14 (session 2)
+pytest tests/ -v --tb=short                          # 72 tests (71 passed + 1 xfail intentionnel)
+pytest tests/ --cov=. --cov-report=term-missing      # avec couverture (77% sur code applicatif)
 ```
 
 Suite dans `tests/` :
@@ -314,6 +322,18 @@ Suite dans `tests/` :
 - `test_casino.py` — 72 tests sur 11 classes : `TestAuth`, `TestRoulette`, `TestBets`, `TestRewards`, `TestLeaderboard`, `TestVoteOpen`, `TestVoteSubmit`, `TestVoteClose`, `TestVoteResults`, `TestPalmares`, `TestAdminActions`
 
 > `test_no_double_bet_same_session` → xfail intentionnel : l'app autorise les mises multiples par session (multi-bet frontend).
+
+---
+
+## CI / Couverture
+
+GitHub Actions (`tests.yml`) — déclenché sur push et PR vers `main` :
+1. Python 3.12, installation `requirements.txt` + `requirements-dev.txt`
+2. `pytest --cov --cov-report=xml`
+3. Upload vers Codecov (`CODECOV_TOKEN` dans GitHub Secrets)
+
+Couverture actuelle : **77%** (excluant `scheduler.py`, `locustfile.py`, `setup_load_test.py` via `.coveragerc`).
+Rapport : `https://app.codecov.io/gh/BigFoot3/casino-app`
 
 ---
 
