@@ -38,77 +38,59 @@
 
 <!-- Roulette controls -->
 <div class="card p-4 mb-4">
-  <h5>🎡 Contrôle de la roulette</h5>
-  <div class="row g-3 mt-1 align-items-end">
-    <div class="col-auto">
-      <span id="session-status-badge" class="badge fs-6
-        {% if active and active['status'] == 'open' %}bg-success
-        {% elif active and active['status'] == 'spinning' %}bg-warning text-dark
-        {% elif active and active['status'] == 'waiting' %}bg-secondary
-        {% else %}bg-danger{% endif %}">
-        {% if active %}{{ active['status'] | upper }}{% else %}–{% endif %}
-      </span>
-    </div>
-    <div class="col-auto">
-      <span id="auto-mode-badge" class="badge fs-6 bg-warning text-dark"
-            style="display:{% if cfg.get('auto_mode_enabled','0') == '1' %}inline{% else %}none{% endif %}">
-        ⚡ AUTO
-      </span>
-    </div>
-    <div class="col-auto">
-      <button id="btn-open" class="btn btn-success"
-              {% if not active or active['status'] != 'waiting' %}disabled{% endif %}>
-        Ouvrir session
-      </button>
-    </div>
-    <div class="col-auto">
-      <button id="btn-spin" class="btn btn-warning text-dark"
-              {% if not active or active['status'] not in ('open','spinning') %}disabled{% endif %}>
-        Lancer roue
-      </button>
-    </div>
-    <div class="col-auto">
-      <button id="btn-close" class="btn btn-danger"
-              {% if not active or active['status'] not in ('open','waiting') %}disabled{% endif %}>
-        Fermer session
-      </button>
-    </div>
-    <div class="col-auto">
-      <button id="btn-stats-reset" class="btn btn-outline-secondary">
-        🗑 Vider les tops
-      </button>
-    </div>
-    <div class="col-auto">
-      <a href="/roulette/display" target="_blank" class="btn btn-outline-light">📺 Affichage</a>
-    </div>
+  <div class="d-flex justify-content-between align-items-center mb-3">
+    <h5 class="mb-0">🎡 Contrôle de la roulette</h5>
+    <a href="/roulette/display" target="_blank" class="btn btn-sm btn-outline-light">📺 Affichage</a>
   </div>
 
-  <!-- Mode selector -->
-  <hr class="mt-4">
-  <h6>Mode automatique</h6>
-  <div class="row g-2 align-items-end mt-1">
-    <div class="col-auto">
-      <select id="mode-select" class="form-select form-select-sm" style="width:120px">
-        <option value="manual" {% if cfg.get('auto_mode_enabled','0') == '0' %}selected{% endif %}>Manuel</option>
-        <option value="auto"   {% if cfg.get('auto_mode_enabled','0') == '1' %}selected{% endif %}>Auto</option>
-      </select>
-    </div>
-    <div class="col-auto">
-      <input type="number" id="interval-input" class="form-control form-control-sm" style="width:110px"
-             min="10" max="3600" value="{{ cfg.get('auto_interval_seconds','120') }}" placeholder="Intervalle s">
-    </div>
-    <div class="col-auto">
-      <button id="btn-mode" class="btn btn-sm btn-outline-light">Appliquer</button>
-    </div>
-    <div class="col-auto">
-      <button id="btn-stop-auto" class="btn btn-sm btn-outline-danger"
-              style="display:{% if cfg.get('auto_mode_enabled','0') == '1' %}inline-block{% else %}none{% endif %}">
-        ⏹ Arrêter mode auto
+  <!-- Status + contextual action -->
+  <div class="d-flex align-items-center gap-3 flex-wrap">
+    <span id="session-status-badge" class="badge fs-6
+      {% if active and active['status'] == 'open' %}bg-success
+      {% elif active and active['status'] == 'spinning' %}bg-warning text-dark
+      {% elif active and active['status'] == 'waiting' %}bg-secondary
+      {% else %}bg-danger{% endif %}">
+      {% if active %}{{ active['status'] | upper }}{% else %}–{% endif %}
+    </span>
+
+    <button id="btn-action" class="btn
+      {% if active and active['status'] == 'open' %}btn-warning text-dark
+      {% elif active and active['status'] == 'spinning' %}btn-secondary
+      {% else %}btn-success{% endif %}"
+      {% if active and active['status'] == 'spinning' %}disabled{% endif %}>
+      {% if active and active['status'] == 'open' %}🎯 Lancer la roue
+      {% elif active and active['status'] == 'spinning' %}⏳ En cours…
+      {% else %}▶ Ouvrir session{% endif %}
+    </button>
+
+    <button id="btn-close" class="btn btn-sm btn-outline-danger"
+            style="display:{% if active and active['status'] == 'open' %}inline-block{% else %}none{% endif %}">
+      Fermer ↯
+    </button>
+  </div>
+
+  <!-- Mode toggle + stats reset -->
+  <hr class="mt-3 mb-3">
+  <div class="d-flex align-items-center gap-3 flex-wrap">
+    <span class="small text-muted">Mode :</span>
+    <div class="btn-group btn-group-sm" role="group">
+      <button id="btn-mode-manual" type="button"
+              class="btn btn-outline-light{% if cfg.get('auto_mode_enabled','0') == '0' %} active{% endif %}">
+        Manuel
+      </button>
+      <button id="btn-mode-auto" type="button"
+              class="btn btn-outline-warning{% if cfg.get('auto_mode_enabled','0') == '1' %} active{% endif %}">
+        ⚡ Auto
       </button>
     </div>
-    <div class="col-auto">
-      <span id="mode-status" class="text-muted small"></span>
+    <div id="interval-wrap" class="d-flex align-items-center gap-1"
+         style="display:{% if cfg.get('auto_mode_enabled','0') == '1' %}flex{% else %}none{% endif %}">
+      <input type="number" id="interval-input" class="form-control form-control-sm" style="width:90px"
+             min="10" max="3600" value="{{ cfg.get('auto_interval_seconds','120') }}">
+      <span class="small text-muted">s</span>
     </div>
+    <span id="mode-status" class="small"></span>
+    <button id="btn-stats-reset" class="btn btn-sm btn-outline-secondary ms-auto">🗑 Vider les tops</button>
   </div>
 </div>
 
