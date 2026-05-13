@@ -33,14 +33,31 @@
     /* mg-display grid — applied to body */
     .mg-display {
       display: grid;
-      grid-template-columns: 1fr 420px;
+      grid-template-columns: 1fr 380px;
       grid-template-rows: auto 1fr auto 60px;
+      grid-template-areas:
+        "strip strip"
+        "stage side"
+        "bets  side"
+        "bar   bar";
       height: 100vh;
+      background: var(--mg-noir);
     }
+
+    /* BEM placement classes (mapped to grid-template-areas) */
+    .mg-display__strip { grid-area: strip; }
+    .mg-display__stage { grid-area: stage; }
+    .mg-display__side  { grid-area: side; }
+    .mg-display__bets  { grid-area: bets; }
+    .mg-display__bar   { grid-area: bar; }
+
+    /* Flatten intermediate wrappers — children become direct grid items.
+       JS setDisplayMode() sets mainWrap.style.display='none'|'' which
+       overrides this rule, so hiding/showing the roulette view still works. */
+    #main-wrap, #center-panel { display: contents; }
 
     /* Strip */
     .mg-strip {
-      grid-column: 1 / -1;
       display: flex; align-items: center; gap: 10px;
       padding: 14px 24px;
       background: linear-gradient(90deg, var(--mg-velvet) 0%, var(--mg-noir-2) 100%);
@@ -70,7 +87,6 @@
 
     /* Stage — wheel zone (red background) */
     .mg-stage {
-      grid-column: 1; grid-row: 2;
       position: relative;
       background: var(--mg-flame);
       display: flex; align-items: center; justify-content: center;
@@ -88,7 +104,6 @@
 
     /* Side panel */
     .mg-side {
-      grid-column: 2; grid-row: 2 / 4;
       background: var(--mg-noir-2);
       border-left: 1px solid var(--mg-border-strong);
       display: flex; flex-direction: column;
@@ -97,7 +112,6 @@
 
     /* Bets panel */
     .mg-bets {
-      grid-column: 1; grid-row: 3;
       background: var(--mg-noir-2);
       border-top: 1px solid var(--mg-border-strong);
     }
@@ -131,7 +145,6 @@
 
     /* Caller / status bar */
     .mg-caller {
-      grid-column: 1 / -1; grid-row: 4;
       background: var(--mg-noir-2);
       border-top: 1px solid var(--mg-border-strong);
       display: flex; align-items: center; justify-content: center; gap: 20px;
@@ -150,11 +163,6 @@
       font-size: 0.72rem; color: var(--mg-rosewood);
     }
     .mg-qr__hint strong { display: block; color: var(--mg-ivory); font-family: var(--mg-font-display); font-size: 1rem; margin-top: 2px; }
-
-    /* ── Bridge: map existing IDs to grid layout ──────────────────────── */
-
-    /* Flatten intermediate wrappers so their children become direct grid items */
-    #main-wrap, #center-panel { display: contents; }
 
     /* ── Essential styles for existing template + JS-created elements ──── */
 
@@ -362,7 +370,7 @@
 <body class="mg-display">
 
 <!-- Draws strip — top full-width, numbers colored red/black/green -->
-<div id="draws-strip" class="mg-strip">
+<div id="draws-strip" class="mg-display__strip mg-strip">
   <span class="strip-label mg-strip__label">🎯 Derniers tirages</span>
   <div id="history-circles"></div>
 </div>
@@ -374,12 +382,12 @@
   <div id="center-panel">
 
     <!-- Wheel — large, centered, up to 80vh -->
-    <div id="wheel-panel" class="mg-stage">
+    <div id="wheel-panel" class="mg-display__stage mg-stage">
       <div id="winning-display"></div>
     </div>
 
     <!-- Live bet grid (visible, bottom of center column) -->
-    <div id="bet-panel" class="mg-bets">
+    <div id="bet-panel" class="mg-display__bets mg-bets">
       <h3>🎲 Mises en cours</h3>
       <div id="live-roulette-grid">
         <!-- Zero -->
@@ -438,7 +446,7 @@
   </div>
 
   <!-- Right column: top 10 jetons + top gagnants/perdants + QR -->
-  <div id="right-panel" class="mg-side">
+  <div id="right-panel" class="mg-display__side mg-side">
     <div class="rp-title">💰 Top 10 Jetons</div>
     <div id="top-holders-list">
       <div class="lb-row lb-empty">Chargement…</div>
@@ -451,7 +459,7 @@
       <div class="lb-title">💀 Top Perdants</div>
       <div id="lb-losers-list"><div class="lb-row lb-empty">Chargement…</div></div>
     </div>
-    <div id="qr-block">
+    <div id="qr-block" class="mg-display__qr">
       <img id="qr-img" src="/api/session/qr" alt="QR /play">
       <p>Jouer sur /play</p>
     </div>
@@ -460,7 +468,7 @@
 </div><!-- #main-wrap -->
 
 <!-- Status bar -->
-<div id="status-bar" class="mg-caller">
+<div id="status-bar" class="mg-display__bar mg-caller">
   <div id="status-badge">⏳ En attente…</div>
   <div id="last-win-display" style="display:none">
     Dernier numéro : <span id="last-win-number"></span>
