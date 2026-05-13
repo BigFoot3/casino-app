@@ -30,6 +30,7 @@ let resultShown     = false;
 let pollTimer       = null;
 let cdInterval      = null;
 let lastOpenSession = null;   // tracks session_id of last 'open' state seen
+let gridLocked      = false;  // true only between submission and spin start
 
 // ── Multi-bet state ───────────────────────────────────────────────────────────
 // pendingBets: Map<"type:value", {bet_type, bet_value, amount}>
@@ -75,7 +76,7 @@ function updateTotals() {
 // ── Grid interaction ──────────────────────────────────────────────────────────
 allBtns.forEach(btn => {
   btn.addEventListener('click', () => {
-    if (betPlaced) return;
+    if (gridLocked) return;
     const type  = btn.dataset.type;
     const value = btn.dataset.val;
     const key   = betKey(type, value);
@@ -149,12 +150,12 @@ async function pollStatus() {
         // New session detected → clear any leftover pending bets from previous round
         if (d.session_id && d.session_id !== lastOpenSession) {
           lastOpenSession = d.session_id;
-          pendingBets.clear();
-          allBtns.forEach(btn => updateBadge(btn));
+          // Keep pendingBets — user may have pre-filled during spinning
           updateTotals();
           betError.style.display = 'none';
           betPlaced    = false;
           resultShown  = false;
+          gridLocked   = false;
           betSubmit.disabled = false;
           betClear.disabled  = false;
           allBtns.forEach(btn => btn.style.pointerEvents = '');
@@ -163,16 +164,26 @@ async function pollStatus() {
         showOnly(msgCountdown, betForm);
         startCountdown(d.time_remaining_seconds);
       } else if (d.status === 'spinning') {
-        if (!resultShown) { showOnly(msgSpinning); }  // BUG 1: preserve result panel during grace period
         clearInterval(cdInterval);
+        // First tick in spinning: unlock grid, clear submitted bets so user pre-fills for next round
+        if (gridLocked) {
+          gridLocked = false;
+          pendingBets.clear();
+          allBtns.forEach(btn => { updateBadge(btn); btn.style.pointerEvents = ''; });
+          updateTotals();
+        }
+        betSubmit.disabled = true;
+        betClear.disabled  = false;
+        if (!resultShown) { showOnly(msgSpinning, betForm); }
+        else              { betForm.style.display = ''; }  // keep result panel, add form below
       } else {
         // BUG 2: reset all bet state when session returns to waiting
         if (betPlaced || resultShown) {
           betPlaced    = false;
           betSessionId = null;
           resultShown  = false;
-          pendingBets.clear();
-          allBtns.forEach(btn => updateBadge(btn));
+          gridLocked   = false;
+          // Keep pendingBets for the upcoming session
           allBtns.forEach(btn => btn.style.pointerEvents = '');
           updateTotals();
           betSubmit.disabled = false;
@@ -253,7 +264,7 @@ betForm.addEventListener('submit', async e => {
 
   betSubmit.disabled = true;
   betClear.disabled  = true;
-  // Prevent further clicks on grid
+  gridLocked = true;
   allBtns.forEach(btn => btn.style.pointerEvents = 'none');
 
   let lastSid    = null;
