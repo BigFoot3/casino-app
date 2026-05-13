@@ -318,10 +318,13 @@
 
     /* Status bar */
     #status-badge {
-      font-family: var(--mg-font-display); font-size: 1.35rem; font-weight: bold;
-      padding: .28rem 1.3rem; border-radius: 2rem;
-      background: var(--mg-noir); color: var(--mg-ivory);
-      border: 2px solid var(--mg-border-strong);
+      background: #0e0405;
+      border: 1px solid #901e16;
+      border-radius: 999px;
+      color: #f8f6f6;
+      font-family: 'Archivo Black', sans-serif;
+      font-size: 1.35rem; font-weight: bold;
+      padding: 14px 28px;
     }
     #last-win-display { font-size: .95rem; color: var(--mg-ivory); }
     #last-win-number { font-size: 1.35rem; font-weight: bold; font-family: var(--mg-font-display); color: var(--mg-ivory); }
@@ -363,6 +366,17 @@
     .rl-row.rl-popin { animation: rlPopIn 0.42s cubic-bezier(.34,1.56,.64,1) forwards; }
     .rl-pos { color: #7DE0A8; font-size: 1.05rem; }
     .rl-neg { color: #FFB4AB; font-size: 1.05rem; }
+
+    /* Palmares cards — override JS inline styles (navy → velvet, gold → claret/ivory) */
+    #palmares-list > div {
+      background: #4d0f12 !important;
+      border-color: #901e16 !important;
+      box-shadow: 0 0 0 1px #901e16 !important;
+    }
+    #palmares-list > div:first-child {
+      box-shadow: 0 0 18px rgba(144,30,22,.4), 0 0 0 1px #901e16 !important;
+    }
+    #palmares-list > div > span:nth-child(3) { color: #f8f6f6 !important; }
   </style>
 </head>
 <body class="mg-display">
@@ -474,9 +488,9 @@
 </div>
 
 <!-- ── Vote mode overlay (full-screen) ──────────────────────────────────── -->
-<div id="vote-overlay" style="display:none;position:fixed;inset:0;background:#110305;z-index:500;
+<div id="vote-overlay" style="display:none;position:fixed;inset:0;background:#1a0507;z-index:500;
      flex-direction:column;align-items:center;justify-content:center;gap:24px;text-align:center">
-  <div style="font-size:3.5rem;font-weight:900;font-family:'Neue Machina',sans-serif;color:#FFFFFF;
+  <div style="font-size:3.5rem;font-weight:900;font-family:'Archivo Black',sans-serif;color:#f8f6f6;
               text-shadow:0 0 30px rgba(255,255,255,0.6)" id="display-film-title">—</div>
   <div style="font-size:1.4rem;color:#FFFFFF">
     <span id="display-voter-count" style="font-size:2.5rem;font-weight:bold;color:#7DE0A8">0</span>
@@ -488,9 +502,9 @@
 </div>
 
 <!-- ── Palmares overlay (full-screen) ──────────────────────────────────── -->
-<div id="palmares-overlay" style="display:none;position:fixed;inset:0;background:#110305;z-index:500;
+<div id="palmares-overlay" style="display:none;position:fixed;inset:0;background:#1a0507;z-index:500;
      flex-direction:column;align-items:center;justify-content:center;padding:20px;overflow-y:auto">
-  <div style="font-size:2rem;font-weight:900;font-family:'Neue Machina',sans-serif;color:#FFFFFF;
+  <div style="font-size:2rem;font-weight:900;font-family:'Archivo Black',sans-serif;color:#f8f6f6;
               margin-bottom:24px">🏆 Palmarès</div>
   <div id="palmares-list" style="width:100%;max-width:600px"></div>
 </div>
