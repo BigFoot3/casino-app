@@ -3,7 +3,7 @@
 Application roulette en ligne pour événements en présentiel — jusqu'à 100 joueurs simultanés.
 
 > Fichier de référence pour Claude Code. Mettre à jour après chaque milestone.
-> Dernière mise à jour : 2026-05-13
+> Dernière mise à jour : 2026-05-14
 
 ---
 
@@ -56,7 +56,8 @@ static/
     midnight-gala.css  # 577 lignes — tout le CSS inline extrait des templates (refactor 2026-04-19)
   js/
     play.js          # Polling → formulaire de mise → affichage résultat
-                     # + mises colonne "2→1" (data-type=column, data-val=1/2/3)
+                     # + mises colonne/douzaine/moitié (column/dozen/half)
+                     # + gridLocked : grille déverrouillée pendant spin pour pré-miser le tour suivant
     admin.js         # Modal mot de passe, contrôles session, gestion users/récompenses
                      # + pollAdmin() toutes les 3s → updateControlsState(status, mode)
                      # + btn-stop-auto : arrêt mode auto immédiat sans rechargement
@@ -145,11 +146,23 @@ waiting → open (fenêtre de mise 30s) → spinning → closed → waiting
 | `parity` even/odd | Parité (0 = House win) | ×2 |
 | `number` | Numéro exact | ×36 |
 | `column` 1/2/3 | Colonne (0 = House win) | ×3 |
+| `dozen` 1/2/3 | 1–12 / 13–24 / 25–36 (0 = House win) | ×3 |
+| `half` low/high | 1–18 / 19–36 (0 = House win) | ×2 |
 
 Correspondance colonnes :
 - `column=1` → numéros 3,6,9,…,36 (n%3==0) — bouton "2→1" haut
 - `column=2` → numéros 2,5,8,…,35 (n%3==2) — bouton "2→1" milieu
 - `column=3` → numéros 1,4,7,…,34 (n%3==1) — bouton "2→1" bas
+
+Disposition du tableau de mise (play.html et display.html) :
+```
+[ 1-18 ]  [ 19-36 ]                      ← #half-bets / #live-half
+[ 0 ][ 3 ][ 6 ]…[ 36 ][ 2→1 ]           ← #roulette-grid / #live-roulette-grid
+     [ 2 ][ 5 ]…[ 35 ][ 2→1 ]
+     [ 1 ][ 4 ]…[ 34 ][ 2→1 ]
+[ 1ère (1-12) ][ 2ème (13-24) ][ 3ème ]  ← #dozen-bets / #live-dozens
+[ PAIR ][ ROUGE ][ NOIR ][ IMPAIR ]       ← #outside-bets / #live-outside
+```
 
 ---
 
@@ -266,6 +279,16 @@ flask --app "app:create_app()" run
 ⚠️ admin films         → suppression protégée si status='open' (vote en cours) — renommer idem
 ⚠️ admin users         → liste collapsible (collapse show par défaut) + filtre live + scroll 5 lignes
 ⚠️ admin récompenses   → suppression cascade reward_claims via /api/admin/rewards/<id>/delete
+⚠️ dozen/half display  → les cellules ldoz/lhalf dans display.html doivent avoir data-type et data-val
+                          — sans ces attributs renderChips() ignore silencieusement ces mises
+⚠️ live-half/dozens/outside → width: calc(100% - 86px) = 46px (zero) + 40px (colBtn 38px + gap 2px)
+                               — ne pas utiliser calc(100% - 46px), sinon déborde sous les 2→1
+⚠️ balanceDelta vs netDelta → play.js pollResult() : balanceDelta = sum(payout) pour mettre à jour
+                               balanceEl (amount déjà déduit à la mise) ; netDelta = sum(payout-amount)
+                               pour l'affichage du résultat (profit/perte net) — ne pas confondre les deux
+⚠️ gridLocked vs betPlaced → gridLocked : verrou UI (grille non-cliquable entre soumission et spin)
+                              betPlaced : routage vers pollResult() — les deux sont indépendants
+                              gridLocked=false dès que spinning démarre, betPlaced reste true jusqu'au résultat
 ```
 
 ---
@@ -274,7 +297,7 @@ flask --app "app:create_app()" run
 
 ```bash
 cd /root/casino && source venv/bin/activate
-pytest tests/ -v --tb=short   # 72 tests (71 passed + 1 xfail intentionnel) — dernière exécution : 2026-05-13
+pytest tests/ -v --tb=short   # 72 tests (71 passed + 1 xfail intentionnel) — dernière exécution : 2026-05-14
 ```
 
 Suite dans `tests/` :
