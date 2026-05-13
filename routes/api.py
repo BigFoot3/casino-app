@@ -276,13 +276,17 @@ def place_bet():
     bet_value = str(data.get('bet_value', ''))
     amount    = data.get('amount')
 
-    if bet_type not in ('color', 'parity', 'number', 'column'):
+    if bet_type not in ('color', 'parity', 'number', 'column', 'dozen', 'half'):
         return jsonify({'error': 'bet_type invalide'}), 400
     if bet_type == 'color' and bet_value not in ('red', 'black'):
         return jsonify({'error': 'bet_value invalide'}), 400
     if bet_type == 'parity' and bet_value not in ('even', 'odd'):
         return jsonify({'error': 'bet_value invalide'}), 400
     if bet_type == 'column' and bet_value not in ('1', '2', '3'):
+        return jsonify({'error': 'bet_value invalide'}), 400
+    if bet_type == 'dozen' and bet_value not in ('1', '2', '3'):
+        return jsonify({'error': 'bet_value invalide'}), 400
+    if bet_type == 'half' and bet_value not in ('low', 'high'):
         return jsonify({'error': 'bet_value invalide'}), 400
     if bet_type == 'number':
         try:

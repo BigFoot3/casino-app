@@ -41,11 +41,15 @@ const BET_LABELS = {
   color:  v => v === 'red' ? 'Rouge' : 'Noir',
   parity: v => v === 'even' ? 'Pair' : 'Impair',
   column: v => `Colonne ${v} (2→1)`,
+  dozen:  v => v === '1' ? '1ère douzaine (1-12)' : v === '2' ? '2ème douzaine (13-24)' : '3ème douzaine (25-36)',
+  half:   v => v === 'low' ? '1-18' : '19-36',
 };
 
-const numBtns = document.querySelectorAll('#roulette-grid .num-btn[data-type]');
-const outBtns = document.querySelectorAll('#outside-bets .out-btn[data-type]');
-const allBtns = [...numBtns, ...outBtns];
+const numBtns  = document.querySelectorAll('#roulette-grid .num-btn[data-type]');
+const halfBtns = document.querySelectorAll('#half-bets .half-btn[data-type]');
+const dozBtns  = document.querySelectorAll('#dozen-bets .doz-btn[data-type]');
+const outBtns  = document.querySelectorAll('#outside-bets .out-btn[data-type]');
+const allBtns  = [...numBtns, ...halfBtns, ...dozBtns, ...outBtns];
 
 function betKey(type, value) { return `${type}:${value}`; }
 

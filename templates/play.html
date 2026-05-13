@@ -35,26 +35,74 @@
   #roulette-grid .col-btn         { background-color: #016D29; grid-row-end: span 1; font-size: 11px; }
   #roulette-grid .num-btn.selected { outline: 3px solid #FFFFFF; outline-offset: 1px; }
 
-  /* Outside bets row */
+  /* Half bets row (above grid) — 2 buttons × 238px = 478px (6 cols each) */
+  #half-bets {
+    display: inline-flex;
+    gap: 2px;
+    margin-left: 50px;
+    margin-bottom: 2px;
+  }
+  #half-bets .half-btn {
+    border: 1px solid rgba(255,255,255,.4);
+    color: #fff;
+    font-weight: bold;
+    font-size: 12px;
+    cursor: pointer;
+    padding: 6px 0;
+    text-align: center;
+    border-radius: 3px;
+    background: #016D29;
+    width: 238px;
+    transition: outline .1s;
+    position: relative;
+    overflow: visible;
+  }
+  #half-bets .half-btn.selected { outline: 3px solid #FFFFFF; outline-offset: 1px; }
+
+  /* Dozen bets row (between grid and outside) — 3 buttons × 158px = 478px */
+  #dozen-bets {
+    display: inline-flex;
+    gap: 2px;
+    margin-left: 50px;
+    margin-top: 2px;
+  }
+  #dozen-bets .doz-btn {
+    border: 1px solid rgba(255,255,255,.4);
+    color: #fff;
+    font-weight: bold;
+    font-size: 12px;
+    cursor: pointer;
+    padding: 6px 0;
+    text-align: center;
+    border-radius: 3px;
+    background: #220A0C;
+    width: 158px;
+    transition: outline .1s;
+    position: relative;
+    overflow: visible;
+  }
+  #dozen-bets .doz-btn.selected { outline: 3px solid #FFFFFF; outline-offset: 1px; }
+
+  /* Outside bets row (bottom) — 4 buttons × 118px = 478px */
   #outside-bets {
     display: inline-flex;
     gap: 2px;
-    margin-left: 50px; /* align with number columns, skip zero column */
+    margin-left: 50px;
+    margin-top: 2px;
   }
   #outside-bets .out-btn {
     border: 1px solid rgba(255,255,255,.4);
     color: #fff;
     font-weight: bold;
-    font-size: 13px;
+    font-size: 12px;
     cursor: pointer;
     padding: 6px 0;
     text-align: center;
     border-radius: 3px;
     transition: outline .1s;
-    width: 112px; /* 3 columns each covers ~114px of the 12 number cols */
+    width: 118px;
   }
-  #outside-bets .out-btn:nth-child(1),
-  #outside-bets .out-btn:nth-child(4) { background: #220A0C; } /* even / odd */
+  #outside-bets .out-btn[data-type="parity"] { background: #220A0C; }
   #outside-bets .out-btn.redNum  { background-color: #E0080B; }
   #outside-bets .out-btn.blackNum{ background-color: #110305; }
   #outside-bets .out-btn.selected { outline: 3px solid #FFFFFF; outline-offset: 1px; }
@@ -109,6 +157,8 @@
 
   /* FEATURE 2: chip overlay on the play page betting grid */
   #roulette-grid .num-btn,
+  #half-bets .half-btn,
+  #dozen-bets .doz-btn,
   #outside-bets .out-btn {
     position: relative; /* needed for chip absolute positioning */
     overflow: visible;
@@ -210,6 +260,12 @@
           {% set rows = [[3,6,9,12,15,18,21,24,27,30,33,36],
                          [2,5,8,11,14,17,20,23,26,29,32,35],
                          [1,4,7,10,13,16,19,22,25,28,31,34]] %}
+          {# ── Half bets (above grid): 1-18 / 19-36 ── #}
+          <div id="half-bets">
+            <button type="button" class="half-btn" data-type="half" data-val="low">1-18</button>
+            <button type="button" class="half-btn" data-type="half" data-val="high">19-36</button>
+          </div>
+
           <div id="roulette-grid">
             {# Zero — spans all 3 rows #}
             <button type="button" class="num-btn zero-btn" data-type="number" data-val="0">67</button>
@@ -227,7 +283,14 @@
             {% endfor %}
           </div>
 
-          {# ── Outside bets: EVEN / RED / BLACK / ODD ── #}
+          {# ── Dozen bets (between grid and outside): 1-12 / 13-24 / 25-36 ── #}
+          <div id="dozen-bets">
+            <button type="button" class="doz-btn" data-type="dozen" data-val="1">1ère (1-12)</button>
+            <button type="button" class="doz-btn" data-type="dozen" data-val="2">2ème (13-24)</button>
+            <button type="button" class="doz-btn" data-type="dozen" data-val="3">3ème (25-36)</button>
+          </div>
+
+          {# ── Outside bets (bottom): PAIR / ROUGE / NOIR / IMPAIR ── #}
           <div id="outside-bets">
             <button type="button" class="out-btn" data-type="parity" data-val="even">PAIR</button>
             <button type="button" class="out-btn redNum"  data-type="color"  data-val="red">ROUGE</button>
