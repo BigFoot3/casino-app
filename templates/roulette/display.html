@@ -292,7 +292,7 @@
     #live-roulette-grid .lnum.zeroBtn  { background: var(--mg-roul-zero); grid-row: 1 / 4; grid-column: 1; }
     #live-roulette-grid .lnum.colBtn   { background: var(--mg-roul-zero); font-size: 7px; cursor:default; }
     #live-outside {
-      display: flex; gap: 2px; margin-left: 46px; margin-bottom: 4px;
+      display: flex; gap: 2px; margin-left: 46px; margin-bottom: 2px;
       width: calc(100% - 46px); flex-shrink: 0;
     }
     #live-outside .lout {
@@ -303,6 +303,26 @@
     #live-outside .lout.redNum   { background: var(--mg-roul-red); }
     #live-outside .lout.blackNum { background: var(--mg-roul-black); }
     #live-outside .lout.pairOdd  { background: var(--mg-noir-2); }
+    #live-half {
+      display: flex; gap: 2px; margin-left: 46px; margin-bottom: 2px;
+      width: calc(100% - 46px); flex-shrink: 0;
+    }
+    #live-half .lhalf {
+      flex: 1; border: 1px solid rgba(255,255,255,.2); border-radius: 2px;
+      font-size: 9px; font-weight: bold; color: var(--mg-ivory);
+      padding: 4px 0; text-align: center; position: relative; overflow: visible;
+      background: var(--mg-roul-zero);
+    }
+    #live-dozens {
+      display: flex; gap: 2px; margin-left: 46px; margin-bottom: 2px;
+      width: calc(100% - 46px); flex-shrink: 0;
+    }
+    #live-dozens .ldoz {
+      flex: 1; border: 1px solid rgba(255,255,255,.2); border-radius: 2px;
+      font-size: 9px; font-weight: bold; color: var(--mg-ivory);
+      padding: 4px 0; text-align: center; position: relative; overflow: visible;
+      background: var(--mg-noir-2);
+    }
     .bet-chip {
       position: absolute; width: 18px; height: 18px; border-radius: 50%;
       border: 2px solid rgba(255,255,255,.7);
@@ -401,6 +421,10 @@
     <!-- Live bet grid (visible, bottom of center column) -->
     <div id="bet-panel" class="mg-display__bets mg-bets">
       <h3>🎲 Mises en cours</h3>
+      <div id="live-half">
+        <div class="lhalf" data-type="half" data-val="low">1-18</div>
+        <div class="lhalf" data-type="half" data-val="high">19-36</div>
+      </div>
       <div id="live-roulette-grid">
         <!-- Zero -->
         <div class="lnum zeroBtn" data-type="number" data-val="0">67</div>
@@ -446,6 +470,12 @@
         <div class="lnum blackNum" data-type="number" data-val="31">31</div>
         <div class="lnum redNum"   data-type="number" data-val="34">34</div>
         <div class="lnum colBtn" data-type="column" data-val="3">2→1</div>
+      </div>
+      <!-- Dozen bets -->
+      <div id="live-dozens">
+        <div class="ldoz" data-type="dozen" data-val="1">1-12</div>
+        <div class="ldoz" data-type="dozen" data-val="2">13-24</div>
+        <div class="ldoz" data-type="dozen" data-val="3">25-36</div>
       </div>
       <!-- Outside bets -->
       <div id="live-outside">

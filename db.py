@@ -216,6 +216,19 @@ def resolve_spin(session_id: int):
                             payout = amount * 3
                         elif col == 3 and winning_number % 3 == 1:
                             payout = amount * 3
+                    elif btype == 'dozen':
+                        doz = int(bval)
+                        if doz == 1 and 1 <= winning_number <= 12:
+                            payout = amount * 3
+                        elif doz == 2 and 13 <= winning_number <= 24:
+                            payout = amount * 3
+                        elif doz == 3 and 25 <= winning_number <= 36:
+                            payout = amount * 3
+                    elif btype == 'half':
+                        if bval == 'low' and 1 <= winning_number <= 18:
+                            payout = amount * 2
+                        elif bval == 'high' and 19 <= winning_number <= 36:
+                            payout = amount * 2
 
                 conn.execute(
                     'UPDATE bets SET payout=? WHERE id=?',
