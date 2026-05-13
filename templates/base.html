@@ -7,9 +7,10 @@
   <title>{% block title %}Casino{% endblock %}</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Serif:ital,wght@0,400;0,600;0,700;1,400&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css">
-  <link rel="stylesheet" href="/static/css/midnight-gala.css">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/midnight-gala.css') }}">
+  <meta name="theme-color" content="#1a0507">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%23cc2819'/%3E%3Ctext x='16' y='22' text-anchor='middle' font-family='Archivo Black,sans-serif' font-size='18' fill='%23f8f6f6'%3EC%3C/text%3E%3C/svg%3E">
   {% block head %}{% endblock %}
 </head>
 <body>
@@ -27,6 +28,34 @@
     </div>
   </div>
 </nav>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <linearGradient id="mg-drape-grad" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#4d0f12"/>
+      <stop offset="55%" stop-color="#6d1613"/>
+      <stop offset="100%" stop-color="#cc2819" stop-opacity="0"/>
+    </linearGradient>
+    <symbol id="mg-drape" viewBox="0 0 1200 120" preserveAspectRatio="none">
+      <g fill="url(#mg-drape-grad)">
+        <path d="M0,0 H100 V60 Q50,110 0,72 Z"/>
+        <path d="M100,0 H200 V72 Q150,118 100,80 Z"/>
+        <path d="M200,0 H300 V64 Q250,108 200,76 Z"/>
+        <path d="M300,0 H400 V78 Q350,120 300,82 Z"/>
+        <path d="M400,0 H500 V66 Q450,112 400,74 Z"/>
+        <path d="M500,0 H600 V74 Q550,116 500,78 Z"/>
+        <path d="M600,0 H700 V62 Q650,108 600,72 Z"/>
+        <path d="M700,0 H800 V76 Q750,118 700,82 Z"/>
+        <path d="M800,0 H900 V68 Q850,112 800,76 Z"/>
+        <path d="M900,0 H1000 V72 Q950,116 900,80 Z"/>
+        <path d="M1000,0 H1100 V64 Q1050,108 1000,72 Z"/>
+        <path d="M1100,0 H1200 V78 Q1150,120 1100,82 Z"/>
+      </g>
+    </symbol>
+  </defs>
+</svg>
+<svg class="mg-drape-svg" aria-hidden="true" style="display:block;width:100%;height:80px;margin-bottom:-2px;">
+  <use href="#mg-drape"/>
+</svg>
 <div class="container">
   {% with msgs = get_flashed_messages() %}
     {% if msgs %}
