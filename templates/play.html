@@ -223,8 +223,7 @@
                   <button type="button" class="num-btn blackNum" data-type="number" data-val="{{ n }}">{{ n }}</button>
                 {% endif %}
               {% endfor %}
-              {# "2 to 1" column bet label (display only, not wired to API) #}
-              <div class="num-btn col-btn" style="cursor:default;opacity:.6">2→1</div>
+              <button type="button" class="num-btn col-btn" data-type="column" data-val="{{ loop.index }}">2→1</button>
             {% endfor %}
           </div>
 

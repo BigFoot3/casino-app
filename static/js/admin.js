@@ -190,6 +190,32 @@ async function pollAdmin() {
 
 pollAdmin();
 
+// ── Users list collapse — chevron toggle ─────────────────────────────────────
+const usersListEl = document.getElementById('users-list');
+const usersChevron = $('users-list-chevron');
+if (usersListEl && usersChevron) {
+  usersListEl.addEventListener('show.bs.collapse', () => { usersChevron.textContent = '▲'; });
+  usersListEl.addEventListener('hide.bs.collapse', () => { usersChevron.textContent = '▼'; });
+}
+
+// ── User search filter ────────────────────────────────────────────────────────
+const userSearch = $('user-search');
+if (userSearch) {
+  userSearch.addEventListener('input', () => {
+    const q = userSearch.value.toLowerCase().trim();
+    const rows = document.querySelectorAll('#users-table tbody tr');
+    let visible = 0;
+    rows.forEach(row => {
+      const name = row.querySelector('td')?.textContent.toLowerCase() || '';
+      const show = !q || name.includes(q);
+      row.style.display = show ? '' : 'none';
+      if (show) visible++;
+    });
+    const noResult = $('users-no-result');
+    if (noResult) noResult.style.display = (visible === 0 && rows.length > 0) ? '' : 'none';
+  });
+}
+
 // ── Decrement tokens (−1, no modal needed) ───────────────────────────────────
 document.querySelectorAll('.decrement-tokens-btn').forEach(btn => {
   btn.addEventListener('click', async () => {
@@ -340,6 +366,27 @@ document.querySelectorAll('.rw-save-btn').forEach(btn => {
   });
 });
 
+// ── Delete reward ─────────────────────────────────────────────────────────────
+document.querySelectorAll('.rw-delete-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const rid  = parseInt(btn.dataset.id);
+    const name = btn.dataset.name;
+    showConfirm(
+      'Supprimer la récompense',
+      `Supprimer « ${name} » ? L'historique des attributions sera également supprimé.`,
+      async () => {
+        const [s, d] = await post(`/api/admin/rewards/${rid}/delete`);
+        if (s === 200) {
+          const row = document.getElementById(`reward-row-${rid}`);
+          if (row) row.remove();
+        } else {
+          alert(d.error || 'Erreur');
+        }
+      }
+    );
+  });
+});
+
 // ── Toggle reward ─────────────────────────────────────────────────────────────
 document.querySelectorAll('.rw-toggle-btn').forEach(btn => {
   btn.addEventListener('click', async () => {
@@ -420,6 +467,73 @@ if (btnVoteRoulette) {
     else alert(d.error || 'Erreur');
   });
 }
+
+// ── Films list collapse — chevron toggle ─────────────────────────────────────
+const filmsListEl  = document.getElementById('films-list');
+const filmsChevron = $('films-list-chevron');
+if (filmsListEl && filmsChevron) {
+  filmsListEl.addEventListener('show.bs.collapse', () => { filmsChevron.textContent = '▲'; });
+  filmsListEl.addEventListener('hide.bs.collapse', () => { filmsChevron.textContent = '▼'; });
+}
+
+// ── Film search filter ────────────────────────────────────────────────────────
+const filmSearch = $('film-search');
+if (filmSearch) {
+  filmSearch.addEventListener('input', () => {
+    const q = filmSearch.value.toLowerCase().trim();
+    const rows = document.querySelectorAll('#films-table tbody tr');
+    let visible = 0;
+    rows.forEach(row => {
+      const title = row.querySelector('td')?.textContent.toLowerCase() || '';
+      const show  = !q || title.includes(q);
+      row.style.display = show ? '' : 'none';
+      if (show) visible++;
+    });
+    const noResult = $('films-no-result');
+    if (noResult) noResult.style.display = (visible === 0 && rows.length > 0) ? '' : 'none';
+  });
+}
+
+// ── Film delete ───────────────────────────────────────────────────────────────
+document.querySelectorAll('.film-delete-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const vid   = parseInt(btn.dataset.id);
+    const title = btn.dataset.title;
+    showConfirm(
+      'Supprimer le film',
+      `Supprimer « ${title} » et tous ses votes ? Cette action est irréversible.`,
+      async () => {
+        const [s, d] = await post(`/api/admin/vote/${vid}/delete`);
+        if (s === 200) {
+          const row = document.getElementById(`film-row-${vid}`);
+          if (row) row.remove();
+        } else {
+          alert(d.error || 'Erreur');
+        }
+      }
+    );
+  });
+});
+
+// ── Film rename ───────────────────────────────────────────────────────────────
+document.querySelectorAll('.film-rename-btn').forEach(btn => {
+  btn.addEventListener('click', async () => {
+    const vid      = parseInt(btn.dataset.id);
+    const current  = btn.dataset.title;
+    const newTitle = prompt(`Nouveau titre pour « ${current} » :`, current);
+    if (!newTitle || newTitle.trim() === current) return;
+    const [s, d] = await post(`/api/admin/vote/${vid}/rename`, {film_title: newTitle.trim()});
+    if (s === 200) {
+      const cell = document.getElementById(`film-title-${vid}`);
+      if (cell) cell.textContent = d.film_title;
+      btn.dataset.title = d.film_title;
+      const delBtn = document.querySelector(`.film-delete-btn[data-id="${vid}"]`);
+      if (delBtn) delBtn.dataset.title = d.film_title;
+    } else {
+      alert(d.error || 'Erreur');
+    }
+  });
+});
 
 // ── Vote results polling (when vote is open) ──────────────────────────────────
 const vrPanel = $('vote-results-panel');

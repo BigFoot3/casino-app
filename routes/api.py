@@ -276,11 +276,13 @@ def place_bet():
     bet_value = str(data.get('bet_value', ''))
     amount    = data.get('amount')
 
-    if bet_type not in ('color', 'parity', 'number'):
+    if bet_type not in ('color', 'parity', 'number', 'column'):
         return jsonify({'error': 'bet_type invalide'}), 400
     if bet_type == 'color' and bet_value not in ('red', 'black'):
         return jsonify({'error': 'bet_value invalide'}), 400
     if bet_type == 'parity' and bet_value not in ('even', 'odd'):
+        return jsonify({'error': 'bet_value invalide'}), 400
+    if bet_type == 'column' and bet_value not in ('1', '2', '3'):
         return jsonify({'error': 'bet_value invalide'}), 400
     if bet_type == 'number':
         try:
@@ -565,6 +567,51 @@ def vote_summary():
     return jsonify(result)
 
 
+# ─── Admin — vote session management ─────────────────────────────────────────
+
+@api_bp.route('/api/admin/vote/<int:vid>/delete', methods=['POST'])
+def admin_vote_delete(vid):
+    _require_admin()
+    with db_conn() as conn:
+        conn.execute('BEGIN IMMEDIATE')
+        vs = conn.execute("SELECT id, status FROM vote_sessions WHERE id=?", (vid,)).fetchone()
+        if not vs:
+            conn.execute('ROLLBACK')
+            return jsonify({'error': 'Session introuvable'}), 404
+        if vs['status'] == 'open':
+            conn.execute('ROLLBACK')
+            return jsonify({'error': 'Impossible de supprimer un vote en cours'}), 400
+        # Clear current_vote_session_id if it points to this session
+        cfg = conn.execute("SELECT value FROM app_config WHERE key='current_vote_session_id'").fetchone()
+        if cfg and cfg['value'] == str(vid):
+            conn.execute("INSERT OR REPLACE INTO app_config(key,value) VALUES ('current_vote_session_id','')")
+        conn.execute("DELETE FROM votes WHERE vote_session_id=?", (vid,))
+        conn.execute("DELETE FROM vote_sessions WHERE id=?", (vid,))
+        conn.execute('COMMIT')
+    return jsonify({'ok': True})
+
+
+@api_bp.route('/api/admin/vote/<int:vid>/rename', methods=['POST'])
+def admin_vote_rename(vid):
+    _require_admin()
+    data  = request.get_json(silent=True) or {}
+    title = (data.get('film_title') or '').strip()
+    if not title:
+        return jsonify({'error': 'Titre requis'}), 400
+    with db_conn() as conn:
+        conn.execute('BEGIN IMMEDIATE')
+        vs = conn.execute("SELECT id, status FROM vote_sessions WHERE id=?", (vid,)).fetchone()
+        if not vs:
+            conn.execute('ROLLBACK')
+            return jsonify({'error': 'Session introuvable'}), 404
+        if vs['status'] == 'open':
+            conn.execute('ROLLBACK')
+            return jsonify({'error': 'Impossible de renommer un vote en cours'}), 400
+        conn.execute("UPDATE vote_sessions SET film_title=? WHERE id=?", (title, vid))
+        conn.execute('COMMIT')
+    return jsonify({'ok': True, 'film_title': title})
+
+
 # ─── Admin — session control ──────────────────────────────────────────────────
 
 @api_bp.route('/api/admin/session/open', methods=['POST'])
@@ -638,7 +685,7 @@ def admin_stats_reset():
         # Use SQLite datetime format to match bets.created_at DEFAULT (datetime('now'))
         conn.execute(
             "INSERT OR REPLACE INTO app_config(key,value) VALUES ('stats_reset_at',?)",
-            (_utcnow().strftime('%Y-%m-%d %H:%M:%S'),)
+            (_utcnow().isoformat(),)
         )
         conn.execute('COMMIT')
     return jsonify({'ok': True})
@@ -825,6 +872,21 @@ def admin_update_reward(rid):
             (name, desc, cost, stock, active, rid)
         )
         conn.commit()
+    return jsonify({'ok': True})
+
+
+@api_bp.route('/api/admin/rewards/<int:rid>/delete', methods=['POST'])
+def admin_delete_reward(rid):
+    _require_admin()
+    with db_conn() as conn:
+        conn.execute('BEGIN IMMEDIATE')
+        reward = conn.execute('SELECT id FROM rewards WHERE id=?', (rid,)).fetchone()
+        if not reward:
+            conn.execute('ROLLBACK')
+            return jsonify({'error': 'Introuvable'}), 404
+        conn.execute('DELETE FROM reward_claims WHERE reward_id=?', (rid,))
+        conn.execute('DELETE FROM rewards WHERE id=?', (rid,))
+        conn.execute('COMMIT')
     return jsonify({'ok': True})
 
 

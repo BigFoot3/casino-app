@@ -290,7 +290,7 @@
     #live-roulette-grid .lnum.redNum   { background: var(--mg-roul-red); }
     #live-roulette-grid .lnum.blackNum { background: var(--mg-roul-black); }
     #live-roulette-grid .lnum.zeroBtn  { background: var(--mg-roul-zero); grid-row: 1 / 4; grid-column: 1; }
-    #live-roulette-grid .lnum.colBtn   { background: var(--mg-roul-zero); font-size: 7px; opacity:.6; cursor:default; }
+    #live-roulette-grid .lnum.colBtn   { background: var(--mg-roul-zero); font-size: 7px; cursor:default; }
     #live-outside {
       display: flex; gap: 2px; margin-left: 46px; margin-bottom: 4px;
       width: calc(100% - 46px); flex-shrink: 0;
@@ -417,7 +417,7 @@
         <div class="lnum redNum"   data-type="number" data-val="30">30</div>
         <div class="lnum blackNum" data-type="number" data-val="33">33</div>
         <div class="lnum redNum"   data-type="number" data-val="36">36</div>
-        <div class="lnum colBtn">2→1</div>
+        <div class="lnum colBtn" data-type="column" data-val="1">2→1</div>
         <!-- Row 2: 2,5,...,35 -->
         <div class="lnum blackNum" data-type="number" data-val="2">2</div>
         <div class="lnum redNum"   data-type="number" data-val="5">5</div>
@@ -431,7 +431,7 @@
         <div class="lnum blackNum" data-type="number" data-val="29">29</div>
         <div class="lnum redNum"   data-type="number" data-val="32">32</div>
         <div class="lnum blackNum" data-type="number" data-val="35">35</div>
-        <div class="lnum colBtn">2→1</div>
+        <div class="lnum colBtn" data-type="column" data-val="2">2→1</div>
         <!-- Row 3: 1,4,...,34 -->
         <div class="lnum redNum"   data-type="number" data-val="1">1</div>
         <div class="lnum blackNum" data-type="number" data-val="4">4</div>
@@ -445,7 +445,7 @@
         <div class="lnum blackNum" data-type="number" data-val="28">28</div>
         <div class="lnum blackNum" data-type="number" data-val="31">31</div>
         <div class="lnum redNum"   data-type="number" data-val="34">34</div>
-        <div class="lnum colBtn">2→1</div>
+        <div class="lnum colBtn" data-type="column" data-val="3">2→1</div>
       </div>
       <!-- Outside bets -->
       <div id="live-outside">
