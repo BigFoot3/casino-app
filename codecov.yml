@@ -1,0 +1,15 @@
+coverage:
+  status:
+    project:
+      default:
+        target: auto
+        threshold: 2%
+    patch:
+      default:
+        target: auto
+        threshold: 2%
+
+ignore:
+  - "tests/"
+  - "venv/"
+  - "gunicorn.conf.py"
