@@ -16,12 +16,15 @@
 <body>
 <nav class="navbar navbar-dark navbar-expand-lg mb-4">
   <div class="container">
-    <a class="navbar-brand fw-bold" href="/">🎰 Casino</a>
+    <a class="navbar-brand" href="/">
+      <img src="{{ url_for('static', filename='img/logo1.png') }}" height="32" alt="Casino" class="mg-brand-logo">
+      Casino · Midnight Gala
+    </a>
     <div class="d-flex align-items-center gap-3">
       {% if session.username %}
         <a href="{{ url_for('player.dashboard') }}" class="text-light text-decoration-none">{{ session.username }}</a>
         {% if session.role == 'admin' %}
-          <a href="/admin" class="btn btn-sm btn-outline-warning">Admin</a>
+          <a href="/admin" class="btn btn-sm btn-primary">Admin</a>
         {% endif %}
         <a href="/logout" class="btn btn-sm btn-outline-secondary">Déconnexion</a>
       {% endif %}

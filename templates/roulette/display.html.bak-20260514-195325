@@ -256,8 +256,8 @@
       display: flex; justify-content: space-between; gap: 8px;
       margin-bottom: 3px;
     }
-    .lb-net-pos { color: var(--mg-blush); }
-    .lb-net-neg { color: var(--mg-ember); }
+    .lb-net-pos { color: #7DE0A8; }
+    .lb-net-neg { color: #FFB4AB; }
     .lb-empty   { color: var(--mg-rosewood); font-size: .7rem; font-style: italic; }
 
     /* QR block */
@@ -384,13 +384,8 @@
       margin-bottom: 4px; opacity: 0;
     }
     .rl-row.rl-popin { animation: rlPopIn 0.42s cubic-bezier(.34,1.56,.64,1) forwards; }
-    .rl-pos { color: var(--mg-blush); font-size: 1.05rem; }
-    .rl-neg { color: var(--mg-ember); font-size: 1.05rem; }
-
-    /* Vote overlay — inline color overrides (hors-palette → DS tokens) */
-    #display-voter-count { color: var(--mg-blush) !important; }
-    #vote-overlay > div:nth-child(2) span:last-child,
-    #vote-overlay > div:nth-child(3) { color: var(--mg-rosewood) !important; }
+    .rl-pos { color: #7DE0A8; font-size: 1.05rem; }
+    .rl-neg { color: #FFB4AB; font-size: 1.05rem; }
 
     /* Palmares cards — override JS inline styles (navy → velvet, gold → claret/ivory) */
     #palmares-list > div {

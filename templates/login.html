@@ -2,20 +2,26 @@
 {% block title %}Connexion — Casino{% endblock %}
 {% block content %}
 <div class="login-wrap">
-  <div class="card p-4 login-card">
-    <h3 class="text-center mb-4">🎰 Connexion</h3>
-    <form method="POST" action="/login">
-      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-      <div class="mb-3">
-        <label class="form-label">Nom d'utilisateur</label>
-        <input type="text" name="username" class="form-control" required autofocus>
-      </div>
-      <div class="mb-3">
-        <label class="form-label">Mot de passe</label>
-        <input type="password" name="password" class="form-control" required>
-      </div>
-      <button class="btn btn-primary w-100">Se connecter</button>
-    </form>
+  <div class="login-card">
+    <div class="text-center mb-4">
+      <img src="{{ url_for('static', filename='img/logo1.png') }}" height="64" alt="Casino" class="mb-3">
+      <span class="mg-eyebrow d-block">Casino événementiel</span>
+      <h1 class="mg-page-title mg-page-title--login">Connexion</h1>
+    </div>
+    <div class="card p-4">
+      <form method="POST" action="/login">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <div class="mb-3">
+          <label class="form-label">Nom d'utilisateur</label>
+          <input type="text" name="username" class="form-control" required autofocus>
+        </div>
+        <div class="mb-3">
+          <label class="form-label">Mot de passe</label>
+          <input type="password" name="password" class="form-control" required>
+        </div>
+        <button class="btn btn-primary w-100 btn-lg">Se connecter</button>
+      </form>
+    </div>
   </div>
 </div>
 {% endblock %}

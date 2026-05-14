@@ -165,6 +165,11 @@ a:hover { color: var(--mg-ivory); }
   color: var(--mg-ivory) !important;
   display: inline-flex; align-items: center; gap: 12px;
 }
+.navbar-brand .mg-brand-logo {
+  border-radius: var(--mg-radius);
+  object-fit: contain;
+  flex-shrink: 0;
+}
 .navbar-brand .mg-brand-mark {
   display: inline-flex; align-items: center; justify-content: center;
   width: 32px; height: 32px;
@@ -496,6 +501,11 @@ a:hover { color: var(--mg-ivory); }
   text-transform: uppercase;
   margin: 0;
 }
+.mg-page-title--login {
+  font-size: 2.4rem;
+  line-height: 1;
+  margin-top: 6px;
+}
 
 /* Status pill (live, idle, etc.) */
 .mg-status {
@@ -583,6 +593,36 @@ a:hover { color: var(--mg-ivory); }
   background-position: 0 0, 60px 0;
   filter: drop-shadow(0 2px 0 rgba(0,0,0,0.35));
   opacity: 0.9;
+}
+
+/* Login page centering */
+.login-wrap {
+  min-height: calc(100vh - 180px);
+  display: flex; align-items: center; justify-content: center;
+  padding: 24px 16px;
+}
+.login-card {
+  width: 100%;
+  max-width: 420px;
+}
+
+/* Token pill (navbar / play / rewards) */
+.token-badge {
+  display: inline-flex; align-items: center; gap: 8px;
+  background: var(--mg-surface);
+  border: 1px solid var(--mg-border-strong);
+  border-radius: 999px;
+  padding: 6px 14px;
+  font-family: var(--mg-font-display);
+  font-size: 0.88rem;
+  color: var(--mg-ivory);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.token-badge .token-count {
+  color: var(--mg-blush);
+  font-size: 1.05rem;
+  letter-spacing: -0.01em;
 }
 
 /* ============================================================================
