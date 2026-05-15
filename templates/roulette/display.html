@@ -4,6 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Roulette — Affichage</title>
+  <link rel="icon" type="image/png" href="{{ url_for('static', filename='img/logo1.png') }}">
   <link rel="stylesheet" href="/static/roulette/assets/css/style.css">
   <style>
     /* ── Midnight Gala design system — display-inline.html ────────────────── */
@@ -402,6 +403,8 @@
       box-shadow: 0 0 18px rgba(144,30,22,.4), 0 0 0 1px #901e16 !important;
     }
     #palmares-list > div > span:nth-child(3) { color: #f8f6f6 !important; }
+    .mg-display-logo { position: absolute; top: 90px; left: 24px; z-index: 10; }
+    .mg-display-logo img { height: 110px; width: auto; display: block; opacity: 0.90; border-radius: 6px; object-fit: contain; }
   </style>
 </head>
 <body class="mg-display">
@@ -414,6 +417,7 @@
 
 <!-- Main wrap (id kept for setDisplayMode() in display.js) -->
 <div id="main-wrap">
+  <div class="mg-display-logo"><img src="{{ url_for('static', filename='img/logo2.png') }}" alt="Logo"></div>
 
   <!-- Center: wheel panel + bottom cards -->
   <div id="center-panel">
