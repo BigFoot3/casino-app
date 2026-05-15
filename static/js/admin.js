@@ -103,7 +103,7 @@ async function applyMode(mode) {
     const isAuto = (mode === 'auto');
     $('btn-mode-manual').classList.toggle('active', !isAuto);
     $('btn-mode-auto').classList.toggle('active', isAuto);
-    $('interval-wrap').style.display = isAuto ? 'flex' : 'none';
+    $('interval-wrap').style.display = 'flex';
     statusEl.textContent = isAuto ? '⚡ Activé' : '✅ Manuel';
     statusEl.className   = 'small text-success';
     setTimeout(() => { statusEl.textContent = ''; }, 3000);
@@ -117,7 +117,13 @@ $('btn-mode-manual').addEventListener('click', () => applyMode('manual'));
 $('btn-mode-auto').addEventListener('click',   () => applyMode('auto'));
 
 $('interval-input').addEventListener('change', () => {
-  if ($('btn-mode-auto').classList.contains('active')) applyMode('auto');
+  const mode = $('btn-mode-auto').classList.contains('active') ? 'auto' : 'manual';
+  applyMode(mode);
+});
+
+$('btn-interval-apply').addEventListener('click', () => {
+  const mode = $('btn-mode-auto').classList.contains('active') ? 'auto' : 'manual';
+  applyMode(mode);
 });
 
 // ── Session status polling — drives button states from server state ───────────
@@ -174,7 +180,7 @@ function updateControlsState(status, mode) {
   const intervalWrap = $('interval-wrap');
   if (btnManual)    btnManual.classList.toggle('active', !isAuto);
   if (btnAutoEl)    btnAutoEl.classList.toggle('active', isAuto);
-  if (intervalWrap) intervalWrap.style.display = isAuto ? 'flex' : 'none';
+  if (intervalWrap) intervalWrap.style.display = 'flex';
 }
 
 async function pollAdmin() {

@@ -3,7 +3,7 @@
 Application roulette en ligne pour événements en présentiel — jusqu'à 100 joueurs simultanés.
 
 > Fichier de référence pour Claude Code. Mettre à jour après chaque milestone.
-> Dernière mise à jour : 2026-05-13 (session 3)
+> Dernière mise à jour : 2026-05-15 (session 6)
 
 ---
 
@@ -34,6 +34,54 @@ Application roulette en ligne pour événements en présentiel — jusqu'à 100 
 
 ---
 
+## Design System — Midnight Gala
+
+Direction artistique appliquée en session 4 (2026-05-14). Référence : `design-livraison/` (mockups JSX + CSS livré).
+
+### Palette de tokens CSS
+
+| Token | Valeur | Usage |
+|-------|--------|-------|
+| `--mg-flame` | `#cc2819` | Accent principal — bordures, strips, boutons primaires |
+| `--mg-ember` | `#ec2415` | Signal danger/perte — titres perdants, montants négatifs |
+| `--mg-velvet` | `#4d0f12` | Surface secondaire profonde |
+| `--mg-oxblood` | `#6d1613` | Accent intermédiaire |
+| `--mg-claret` | `#901e16` | `--mg-border-strong` — bordures fortes |
+| `--mg-rosewood` | `#a35e57` | Texte secondaire / labels muted |
+| `--mg-blush` | `#f0afa7` | Accent positif/gain — highlights, montants positifs |
+| `--mg-ivory` | `#f8f6f6` | Texte principal |
+| `--mg-noir` | `#1a0507` | Fond body |
+| `--mg-noir-2` | `#0e0405` | Surfaces cartes, sidebars |
+
+### Composants DS dans midnight-gala.css
+
+| Classe | Usage |
+|--------|-------|
+| `.mg-page-head` | En-tête de page : eyebrow + titre h1 |
+| `.mg-eyebrow` | Label chapeau uppercase |
+| `.mg-page-title` | H1 display (Archivo Black) |
+| `.mg-page-title--login` | Variante login (2.4rem) |
+| `.mg-kpi` / `.mg-kpi__label` / `.mg-kpi__value` | Carte KPI (tokens dashboard) |
+| `.mg-brand-logo` | Logo img dans navbar (border-radius + object-fit) |
+| `.login-wrap` / `.login-card` | Centrage vertical page login (max-width 420px) |
+| `.token-badge` / `.token-count` | Badge jetons (pill, Archivo Black, blush) |
+| `.mg-chip` / `.mg-chip--black` / `.mg-chip--zero` / `.mg-chip--latest` | Jetons roulette strip |
+| `.mg-strip` / `.mg-strip__label` | Bande derniers tirages (display.html) |
+| `.mg-display-logo` | Logo absolu dans display.html — `position: absolute; top: 90px; left: 24px` dans `#main-wrap` |
+
+### Templates modifiés (session 4–5)
+
+| Template | Modifications |
+|----------|---------------|
+| `base.html` | Navbar : logo1.png (32px) + texte, admin btn → `btn-primary` ; favicon → logo1.png (remplace SVG data URI) |
+| `login.html` | `.login-wrap` / `.login-card`, logo (64px), eyebrow, `.mg-page-title--login` |
+| `dashboard.html` | `.mg-page-head`, `.mg-kpi` pour tokens, suppression style inline, `btn-primary` |
+| `rewards.html` | `.mg-page-head`, `.token-badge` |
+| `admin/index.html` | `.mg-page-head`, suppression `table-dark` (3 tables), suppression emojis sections, nettoyage couleurs boutons |
+| `roulette/display.html` | CSS : `#7DE0A8`→`--mg-blush`, `#FFB4AB`→`--mg-ember`, overrides `#72727F`→`--mg-rosewood` ; logo2.png en `position: absolute` dans `#main-wrap` ; favicon logo1.png ajoutée |
+
+---
+
 ## Structure du projet
 
 ```
@@ -53,7 +101,10 @@ routes/
 templates/           # Jinja2 — base.html, dashboard.html, login.html, play.html, rewards.html
 static/
   css/
-    midnight-gala.css  # 577 lignes — tout le CSS inline extrait des templates (refactor 2026-04-19)
+    midnight-gala.css  # 951 lignes — tout le CSS de l'app (refactor 2026-04-19, DA midnight-gala 2026-05-14)
+  img/
+    logo1.png          # 206×205px — logo principal (utilisé dans navbar et login)
+    logo2.png          # 209×205px — variante logo
   js/
     play.js          # Polling → formulaire de mise → affichage résultat
                      # + mises colonne/douzaine/moitié (column/dozen/half)
@@ -62,7 +113,8 @@ static/
                      # + pollAdmin() toutes les 3s → updateControlsState(status, mode)
                      # + btn-action : bouton contextuel unique (▶ Ouvrir / 🎯 Lancer / ⏳ En cours…)
                      # + btn-close : visible uniquement en open (Fermer ↯)
-                     # + toggle Manuel/Auto (btn-mode-manual/auto) + interval-wrap
+                     # + toggle Manuel/Auto (btn-mode-manual/auto) + interval-wrap (toujours visible)
+                     # + btn-interval-apply : bouton OK pour valider l'intervalle sans quitter le champ
                      # + filtre recherche live users et films
                      # + CRUD films (renommer, supprimer) et suppression récompenses
     display.js       # Lance spinWheel() depuis polling /api/session/status
@@ -126,7 +178,7 @@ game_sessions  (id, status, mode, auto_interval_seconds, winning_number, opened_
 bets           (id, session_id, user_id, bet_type, bet_value, amount, payout)
 rewards        (id, name, description, token_cost, stock, active)
 reward_claims  (id, user_id, reward_id, claimed_at)
-app_config     (key, value)   -- auto_mode_enabled, auto_interval_seconds, app_mode, current_vote_session_id
+app_config     (key, value)   -- auto_mode_ui, auto_mode_enabled, auto_interval_seconds, app_mode, current_vote_session_id
 vote_sessions  (id, film_title, status, opened_at, closed_at, created_at)
 votes          (id, vote_session_id, user_id, score, bonus_amount, weighted_score, updated_at)
                UNIQUE(vote_session_id, user_id)
@@ -145,7 +197,8 @@ waiting → open (fenêtre de mise 30s) → spinning → closed → waiting
 ```
 
 - **Mode manuel** : l'admin clique "Ouvrir session" puis "Lancer roue".
-- **Mode auto** : le scheduler ouvre et résout les sessions à intervalle configurable (60–300s).
+- **Mode auto** : le toggle ⚡ Auto définit l'intention (`auto_mode_ui='1'`). L'activation réelle du scheduler (`auto_mode_enabled='1'`) se fait au moment où l'admin clique ▶ Ouvrir — la **première session est toujours manuelle**. Les sessions suivantes s'enchaînent automatiquement (5s après fermeture).
+- **Fermer ↯** : désactive `auto_mode_enabled` (chaining stoppé) mais conserve `auto_mode_ui` (toggle reste ⚡ Auto — le prochain ▶ Ouvrir relance l'enchaînement).
 - **Redémarrage** : `startup_check()` dans `db.py` récupère automatiquement toute session en `spinning` ou `open` stale.
 
 ### Payouts roulette
@@ -248,6 +301,19 @@ flask --app "app:create_app()" run
 
 ```
 ⚠️ midnight-gala.css → tout le CSS de l'app est dans static/css/midnight-gala.css — ne pas remettre de style inline dans les templates
+⚠️ display.html CSS  → le CSS de display.html vit dans un bloc <style> inline (template standalone, pas d'extend base.html)
+                        — ne pas déplacer ce CSS dans midnight-gala.css
+⚠️ DA midnight-gala  → ne jamais introduire de couleurs hors-palette (#7DE0A8, #FFB4AB, #72727F, etc.)
+                        — utiliser exclusivement les tokens --mg-* définis dans :root
+⚠️ admin.js className → admin.js écrase admin.js className complet à chaque pollAdmin() (3s)
+                          — la classe CSS initiale dans Jinja est cosmétique seulement au runtime
+                          — seul le sélecteur d'ID (btn-action, btn-close, etc.) est stable
+⚠️ table-dark        → Bootstrap table-dark écrase --bs-table-bg et entre en conflit avec les overrides
+                          midnight-gala.css — ne jamais utiliser table-dark dans les templates admin
+⚠️ mg-display-logo   → position: absolute dans #main-wrap — #main-wrap a display:contents donc
+                          position:relative y est inopérant ; le logo se positionne par rapport au viewport
+                          — disparaît automatiquement quand JS met mainWrap.style.display='none' (vote/palmares)
+⚠️ favicon           → base.html et display.html utilisent logo1.png — remplace l'ancien SVG data URI dans base.html
 ⚠️ claimed_ids       → /rewards retourne les IDs des récompenses déjà réclamées par le joueur — utilisé côté client pour désactiver les boutons
 ⚠️ redirect /play    → routes/auth.py redirige vers /play après login (pas /dashboard)
 ⚠️ RATELIMIT_ENABLED → variable d'env lue dans extensions.py — mettre à false pour les tests de charge Locust
@@ -271,10 +337,17 @@ flask --app "app:create_app()" run
 ⚠️ btn-action       → bouton unique contextuel : waiting→▶ Ouvrir, open→🎯 Lancer, spinning→⏳ En cours…
                         les actions sont routées selon currentStatus — ne pas restaurer les 3 boutons séparés
 ⚠️ btn-close        → affiché uniquement quand status='open' (Fermer ↯) — action d'urgence destructive
-⚠️ mode toggle      → btn-mode-manual / btn-mode-auto — applique immédiatement via applyMode()
-                        interval-wrap visible uniquement en auto ; change sur blur du champ intervalle
-⚠️ /api/session/status → retourne `mode` ('auto'|'manual') et `auto_interval_seconds` — utilisés par
-                          admin.js pour piloter le toggle et interval-wrap
+⚠️ auto_mode_ui vs auto_mode_enabled → deux clés distinctes dans app_config :
+                        auto_mode_ui     = intent du toggle (ce que session_status() retourne comme `mode`)
+                        auto_mode_enabled = ce que scheduler.py lit pour l'enchaînement automatique
+                        — auto_mode_enabled n'est activé ('1') que par admin_open_session() quand auto_mode_ui='1'
+                        — admin_close_session() remet auto_mode_enabled='0' mais laisse auto_mode_ui intact
+                        — admin_set_mode(manual) remet les deux à '0'
+⚠️ mode toggle      → btn-mode-manual / btn-mode-auto — écrit auto_mode_ui via applyMode()
+                        interval-wrap toujours visible (auto_interval_seconds contrôle la durée de mise dans les deux modes)
+                        bouton btn-interval-apply (OK) pour valider sans quitter le champ ; event change (Enter/blur) en filet
+⚠️ /api/session/status → retourne `mode` ('auto'|'manual') basé sur auto_mode_ui (pas auto_mode_enabled)
+                          et `auto_interval_seconds` — utilisés par admin.js pour piloter le toggle
 ⚠️ grace period spinning → /api/session/status simule 'spinning' pendant 12s après fermeture normale
                             pour la page display — court-circuité si winning_number IS NULL (force-close admin)
                             — ne pas retirer la condition `prev['winning_number'] is not None`

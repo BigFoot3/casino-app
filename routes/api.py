@@ -129,6 +129,7 @@ def session_status():
     with db_conn() as conn:
         active = get_active_session(conn)
         cfg    = get_config(conn)
+        mode_val = 'auto' if cfg.get('auto_mode_ui', '0') == '1' else 'manual'
 
         app_mode = cfg.get('app_mode', 'roulette')
 
@@ -153,7 +154,7 @@ def session_status():
         if not active:
             return jsonify({'status': 'waiting', 'time_remaining_seconds': 0,
                             'winning_number': None,
-                            'mode': cfg.get('auto_mode_enabled','0') == '1' and 'auto' or 'manual',
+                            'mode': mode_val,
                             'auto_interval_seconds': int(cfg.get('auto_interval_seconds', 120)),
                             'app_mode': app_mode,
                             'vote_session': vote_session})
@@ -173,7 +174,7 @@ def session_status():
                         'winning_number': prev['winning_number'],
                         'time_remaining_seconds': 0,
                         'session_id': prev['id'],
-                        'mode': active['mode'],
+                        'mode': mode_val,
                         'auto_interval_seconds': active['auto_interval_seconds'],
                         'app_mode': app_mode,
                         'vote_session': vote_session,
@@ -190,7 +191,7 @@ def session_status():
             'winning_number': active['winning_number'],
             'time_remaining_seconds': time_remaining,
             'session_id': active['id'],
-            'mode': active['mode'],
+            'mode': mode_val,
             'auto_interval_seconds': active['auto_interval_seconds'],
             'app_mode': app_mode,
             'vote_session': vote_session,
@@ -628,10 +629,15 @@ def admin_open_session():
         if not active or active['status'] != 'waiting':
             conn.execute('ROLLBACK')
             return jsonify({'error': 'Aucune session en attente'}), 400
+        cfg = get_config(conn)
         conn.execute(
             "UPDATE game_sessions SET status='open', opened_at=? WHERE id=?",
             (_utcnow().isoformat(), active['id'])
         )
+        if cfg.get('auto_mode_ui', '0') == '1':
+            conn.execute(
+                "INSERT OR REPLACE INTO app_config(key,value) VALUES ('auto_mode_enabled','1')"
+            )
         conn.execute('COMMIT')
     return jsonify({'ok': True})
 
@@ -677,6 +683,10 @@ def admin_close_session():
             "UPDATE game_sessions SET status='closed', closed_at=? WHERE id=?",
             (_utcnow().isoformat(), active['id'])
         )
+        # Switch to manual so the scheduler doesn't auto-reopen after a force-close
+        conn.execute(
+            "INSERT OR REPLACE INTO app_config(key,value) VALUES ('auto_mode_enabled','0')"
+        )
         conn.execute('COMMIT')
     return jsonify({'ok': True})
 
@@ -711,15 +721,19 @@ def admin_set_mode():
         return jsonify({'error': 'interval doit être entre 10 et 3600s'}), 400
 
     with db_conn() as conn:
-        enabled = '1' if mode == 'auto' else '0'
         conn.execute('BEGIN IMMEDIATE')
         conn.execute(
-            "INSERT OR REPLACE INTO app_config(key,value) VALUES ('auto_mode_enabled',?)", (enabled,)
+            "INSERT OR REPLACE INTO app_config(key,value) VALUES ('auto_mode_ui',?)",
+            ('1' if mode == 'auto' else '0',)
         )
         conn.execute(
             "INSERT OR REPLACE INTO app_config(key,value) VALUES ('auto_interval_seconds',?)",
             (str(interval),)
         )
+        if mode == 'manual':
+            conn.execute(
+                "INSERT OR REPLACE INTO app_config(key,value) VALUES ('auto_mode_enabled','0')"
+            )
         conn.execute('COMMIT')
 
     return jsonify({'ok': True, 'mode': mode, 'interval': interval})

@@ -80,19 +80,20 @@
     <span class="small text-muted">Mode :</span>
     <div class="btn-group btn-group-sm" role="group">
       <button id="btn-mode-manual" type="button"
-              class="btn btn-outline-light{% if cfg.get('auto_mode_enabled','0') == '0' %} active{% endif %}">
+              class="btn btn-outline-light{% if cfg.get('auto_mode_ui','0') == '0' %} active{% endif %}">
         Manuel
       </button>
       <button id="btn-mode-auto" type="button"
-              class="btn btn-outline-light{% if cfg.get('auto_mode_enabled','0') == '1' %} active{% endif %}">
+              class="btn btn-outline-light{% if cfg.get('auto_mode_ui','0') == '1' %} active{% endif %}">
         ⚡ Auto
       </button>
     </div>
-    <div id="interval-wrap" class="d-flex align-items-center gap-1"
-         style="display:{% if cfg.get('auto_mode_enabled','0') == '1' %}flex{% else %}none{% endif %}">
+    <div id="interval-wrap" class="align-items-center gap-1"
+         style="display:flex">
       <input type="number" id="interval-input" class="form-control form-control-sm" style="width:90px"
              min="10" max="3600" value="{{ cfg.get('auto_interval_seconds','120') }}">
       <span class="small text-muted">s</span>
+      <button id="btn-interval-apply" type="button" class="btn btn-sm btn-outline-secondary">OK</button>
     </div>
     <span id="mode-status" class="small"></span>
     <button id="btn-stats-reset" class="btn btn-sm btn-outline-secondary ms-auto">🗑 Vider les tops</button>
