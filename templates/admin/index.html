@@ -123,7 +123,9 @@
         <div class="col-auto">
           <select id="new-role" class="form-select form-select-sm">
             <option value="player">Joueur</option>
+            {% if session['username'] == 'admin' %}
             <option value="admin">Admin</option>
+            {% endif %}
           </select>
         </div>
         <div class="col-auto">
@@ -173,10 +175,16 @@
                       data-name="{{ u['username'] }}">
                 🪙 0
               </button>
-              {% if u['role'] != 'admin' %}
+              {% if u['username'] != 'admin' and (u['role'] != 'admin' or session['username'] == 'admin') %}
               <button class="btn btn-sm btn-outline-danger delete-user-btn" data-id="{{ u['id'] }}"
                       data-name="{{ u['username'] }}">
                 🗑
+              </button>
+              {% endif %}
+              {% if session['username'] == 'admin' and u['username'] != 'admin' %}
+              <button class="btn btn-sm btn-outline-warning set-role-btn"
+                      data-id="{{ u['id'] }}" data-role="{{ u['role'] }}">
+                {% if u['role'] == 'player' %}→ Admin{% else %}→ Joueur{% endif %}
               </button>
               {% endif %}
             </td>

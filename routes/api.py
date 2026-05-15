@@ -760,13 +760,17 @@ def admin_delete_user(uid):
     _require_admin()
     with db_conn() as conn:
         conn.execute('BEGIN IMMEDIATE')
-        user = conn.execute('SELECT id, role FROM users WHERE id=?', (uid,)).fetchone()
+        user = conn.execute('SELECT id, role, username FROM users WHERE id=?', (uid,)).fetchone()
         if not user:
             conn.execute('ROLLBACK')
             return jsonify({'error': 'Utilisateur introuvable'}), 404
         if user['role'] == 'admin':
-            conn.execute('ROLLBACK')
-            return jsonify({'error': 'Impossible de supprimer un administrateur'}), 403
+            if flask_session.get('username') != 'admin':
+                conn.execute('ROLLBACK')
+                return jsonify({'error': 'Impossible de supprimer un administrateur'}), 403
+            if user['username'] == 'admin':
+                conn.execute('ROLLBACK')
+                return jsonify({'error': 'Impossible de supprimer le super-admin'}), 403
         # Delete associated data (no FK cascade defined)
         conn.execute('DELETE FROM reward_claims WHERE user_id=?', (uid,))
         conn.execute('DELETE FROM bets WHERE user_id=?', (uid,))
@@ -820,6 +824,8 @@ def admin_create_user():
         return jsonify({'error': 'Nom requis'}), 400
     if role not in ('admin', 'player'):
         return jsonify({'error': 'Role invalide'}), 400
+    if role == 'admin' and flask_session.get('username') != 'admin':
+        return jsonify({'error': 'Seul le super-admin peut créer des comptes admin'}), 403
     password = _gen_password()
     pw_hash  = bcrypt.hashpw(password.encode(), bcrypt.gensalt(rounds=10)).decode()
     with db_conn() as conn:
@@ -834,6 +840,29 @@ def admin_create_user():
                 return jsonify({'error': 'Nom d\'utilisateur déjà pris'}), 409
             raise
     return jsonify({'username': username, 'password': password})
+
+
+@api_bp.route('/api/admin/users/<int:uid>/set-role', methods=['POST'])
+def admin_set_role(uid):
+    _require_admin()
+    if flask_session.get('username') != 'admin':
+        return jsonify({'error': 'Seul le super-admin peut modifier les rôles'}), 403
+    data = request.get_json(force=True)
+    role = data.get('role', '')
+    if role not in ('admin', 'player'):
+        return jsonify({'error': 'Rôle invalide'}), 400
+    with db_conn() as conn:
+        conn.execute('BEGIN IMMEDIATE')
+        user = conn.execute('SELECT id, username FROM users WHERE id=?', (uid,)).fetchone()
+        if not user:
+            conn.execute('ROLLBACK')
+            return jsonify({'error': 'Utilisateur introuvable'}), 404
+        if user['username'] == 'admin':
+            conn.execute('ROLLBACK')
+            return jsonify({'error': 'Impossible de modifier le super-admin'}), 403
+        conn.execute('UPDATE users SET role=? WHERE id=?', (role, uid))
+        conn.execute('COMMIT')
+    return jsonify({'ok': True, 'role': role})
 
 
 @api_bp.route('/api/admin/users/<int:uid>/reset-password', methods=['POST'])

@@ -3,7 +3,7 @@
 Application roulette en ligne pour événements en présentiel — jusqu'à 100 joueurs simultanés.
 
 > Fichier de référence pour Claude Code. Mettre à jour après chaque milestone.
-> Dernière mise à jour : 2026-05-15 (session 7)
+> Dernière mise à jour : 2026-05-15 (session 9)
 
 ---
 
@@ -59,12 +59,12 @@ Direction artistique appliquée en session 4 (2026-05-14). Référence : `design
 |--------|-------|
 | `.mg-page-head` | En-tête de page : eyebrow + titre h1 |
 | `.mg-eyebrow` | Label chapeau uppercase |
-| `.mg-page-title` | H1 display (Archivo Black) |
+| `.mg-page-title` | H1 display (Neue Machina) |
 | `.mg-page-title--login` | Variante login (2.4rem) |
 | `.mg-kpi` / `.mg-kpi__label` / `.mg-kpi__value` | Carte KPI (tokens dashboard) |
 | `.mg-brand-logo` | Logo img dans navbar (border-radius + object-fit) |
 | `.login-wrap` / `.login-card` | Centrage vertical page login (max-width 420px) |
-| `.token-badge` / `.token-count` | Badge jetons (pill, Archivo Black, blush) |
+| `.token-badge` / `.token-count` | Badge jetons (pill, Neue Machina, blush) |
 | `.mg-chip` / `.mg-chip--black` / `.mg-chip--zero` / `.mg-chip--latest` | Jetons roulette strip |
 | `.mg-strip` / `.mg-strip__label` | Bande derniers tirages (display.html) |
 | `.mg-display-logo` | Logo absolu dans display.html — `position: absolute; top: 90px; left: 24px` dans `#main-wrap` |
@@ -79,6 +79,15 @@ Direction artistique appliquée en session 4 (2026-05-14). Référence : `design
 | `rewards.html` | `.mg-page-head`, `.token-badge` |
 | `admin/index.html` | `.mg-page-head`, suppression `table-dark` (3 tables), suppression emojis sections, nettoyage couleurs boutons |
 | `roulette/display.html` | CSS : `#7DE0A8`→`--mg-blush`, `#FFB4AB`→`--mg-ember`, overrides `#72727F`→`--mg-rosewood` ; logo2.png en `position: absolute` dans `#main-wrap` ; favicon logo1.png ajoutée |
+
+### Modifications session 7 (2026-05-15)
+
+| Fichier | Modifications |
+|---------|---------------|
+| `midnight-gala.css` | Police migrée Archivo/Archivo Black → **Neue Machina Ultrabold** (self-hosted OTF) ; `@font-face` + tokens `--mg-font-display`/`--mg-font-body` mis à jour ; tokens felt `--mg-felt-light/felt/felt-dark` ajoutés |
+| `roulette/display.html` | Stage background → radial-gradient felt vert (`--mg-felt-*`) ; logo2.png retiré ; `@font-face` Neue Machina ajouté (standalone template) ; 3 occurrences `'Archivo Black'` remplacées |
+| `static/roulette/assets/css/style.css` | `font-family: arial` → `'Neue Machina', sans-serif` ; 6× `font-weight: bold` → `font-weight: 800` ; `.double` → `transform: rotate(3deg) scaleX(0.75)` + `left: 147px` (compression doubles chiffres Neue Machina) |
+| `static/fonts/` | `NeueMachina-Ultrabold.otf` copié depuis `fonts/` → servi par Flask sur `/static/fonts/` |
 
 ---
 
@@ -101,7 +110,9 @@ routes/
 templates/           # Jinja2 — base.html, dashboard.html, login.html, play.html, rewards.html
 static/
   css/
-    midnight-gala.css  # 951 lignes — tout le CSS de l'app (refactor 2026-04-19, DA midnight-gala 2026-05-14)
+    midnight-gala.css  # tout le CSS de l'app (refactor 2026-04-19, DA midnight-gala 2026-05-14, Neue Machina 2026-05-15)
+  fonts/
+    NeueMachina-Ultrabold.otf  # police self-hosted — servie sur /static/fonts/
   img/
     logo1.png          # 206×205px — logo principal (utilisé dans navbar et login)
     logo2.png          # 209×205px — variante logo
@@ -117,6 +128,7 @@ static/
                      # + btn-interval-apply : bouton OK pour valider l'intervalle sans quitter le champ
                      # + filtre recherche live users et films
                      # + CRUD films (renommer, supprimer) et suppression récompenses
+                     # + set-role-btn : bascule player↔admin en place (super-admin uniquement)
     display.js       # Lance spinWheel() depuis polling /api/session/status
                      # + cache leaderboard (isSpinning + lastLeaderboardCache) : tops
                      #   jamais vidés pendant le spin
@@ -167,6 +179,9 @@ requirements-dev.txt # pytest==8.3.5, pytest-cov==6.1.0 (dépendances dev unique
 | `POST /api/admin/vote/<id>/delete` | api | Supprimer une session film + ses votes (admin) |
 | `POST /api/admin/vote/<id>/rename` | api | Renommer le titre d'un film (admin) — body: `{film_title}` |
 | `POST /api/admin/rewards/<id>/delete` | api | Supprimer une récompense + son historique claims (admin) |
+| `POST /api/admin/users/create` | api | Créer un utilisateur — rôle admin réservé au super-admin |
+| `POST /api/admin/users/<id>/delete` | api | Supprimer un utilisateur — admins réservés au super-admin |
+| `POST /api/admin/users/<id>/set-role` | api | Changer le rôle player↔admin (super-admin uniquement) |
 
 ---
 
@@ -386,6 +401,21 @@ flask --app "app:create_app()" run
 ⚠️ roulette centrage       → après session 7 : ballTrack 212×212 (left/top 49), pocketsRim (left/top 37.5),
                               cone (left/top 65, gradient circle at 90px 90px), turret (left/top 132),
                               turretHandle (left 111) — ne pas revenir aux valeurs originales
+⚠️ roulette police         → style.css : font-family 'Neue Machina' (session 8) ; font-weight 800 sur tous
+                              les éléments texte ; .double overridé avec transform: rotate(3deg) scaleX(0.75)
+                              + left: 147px pour compenser la largeur de Neue Machina vs Arial sur les doubles
+                              chiffres — .single inchangé (left: 152px, font-size: 14px partagé)
+⚠️ Neue Machina font       → self-hosted OTF dans static/fonts/ — @font-face déclaré dans midnight-gala.css
+                              (pages app) ET dans le <style> inline de display.html (standalone)
+                              — font-weight: 100 900 mappé sur le fichier Ultrabold unique
+⚠️ super-admin             → username == 'admin' exactement — pas de colonne DB, pas de rôle distinct
+                              droits exclusifs : créer des admins, supprimer des admins, changer les rôles
+                              protégé contre sa propre suppression et modification (anti-lockout)
+                              — session['username'] accessible nativement dans les templates Jinja
+⚠️ set-role                → /api/admin/users/<id>/set-role — super-admin uniquement (403 sinon)
+                              interdit sur username='admin' — met à jour badge + bouton en place sans reload
+⚠️ admin delete user       → super-admin peut supprimer des admins (sauf username='admin')
+                              admin classique → 403 sur tout compte admin
 ```
 
 ---

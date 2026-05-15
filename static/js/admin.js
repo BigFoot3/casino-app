@@ -332,6 +332,24 @@ document.querySelectorAll('.delete-user-btn').forEach(btn => {
   });
 });
 
+// ── Set role ──────────────────────────────────────────────────────────────────
+document.querySelectorAll('.set-role-btn').forEach(btn => {
+  btn.addEventListener('click', async () => {
+    const uid     = parseInt(btn.dataset.id);
+    const newRole = btn.dataset.role === 'player' ? 'admin' : 'player';
+    const [s, d]  = await post(`/api/admin/users/${uid}/set-role`, {role: newRole});
+    if (s === 200) {
+      btn.dataset.role  = newRole;
+      btn.textContent   = newRole === 'admin' ? '→ Joueur' : '→ Admin';
+      const badge = btn.closest('tr').querySelector('.badge');
+      badge.className   = `badge ${newRole === 'admin' ? 'bg-warning text-dark' : 'bg-secondary'}`;
+      badge.textContent = newRole;
+    } else {
+      alert(d.error || 'Erreur');
+    }
+  });
+});
+
 // ── Reset password ────────────────────────────────────────────────────────────
 document.querySelectorAll('.reset-pw-btn').forEach(btn => {
   btn.addEventListener('click', async () => {
