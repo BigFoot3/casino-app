@@ -3,7 +3,7 @@
 Application roulette en ligne pour événements en présentiel — jusqu'à 100 joueurs simultanés.
 
 > Fichier de référence pour Claude Code. Mettre à jour après chaque milestone.
-> Dernière mise à jour : 2026-05-15 (session 6)
+> Dernière mise à jour : 2026-05-15 (session 7)
 
 ---
 
@@ -378,6 +378,14 @@ flask --app "app:create_app()" run
 ⚠️ gridLocked vs betPlaced → gridLocked : verrou UI (grille non-cliquable entre soumission et spin)
                               betPlaced : routage vers pollResult() — les deux sont indépendants
                               gridLocked=false dès que spinning démarre, betPlaced reste true jusqu'au résultat
+⚠️ roulette lib CSS        → static/roulette/assets/css/style.css — repo git imbriqué (milsaware/javascript-roulette)
+                              PAS de .gitmodules dans casino : les modifs CSS sont commitées localement dans le
+                              sous-repo mais ne peuvent pas être poussées vers l'upstream milsaware
+                              — référence visuelle : tous les éléments concentriques centrés sur (155, 155)
+                              dans le repère .wheel 312×312 px (session 7, 2026-05-15)
+⚠️ roulette centrage       → après session 7 : ballTrack 212×212 (left/top 49), pocketsRim (left/top 37.5),
+                              cone (left/top 65, gradient circle at 90px 90px), turret (left/top 132),
+                              turretHandle (left 111) — ne pas revenir aux valeurs originales
 ```
 
 ---
