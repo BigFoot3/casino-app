@@ -40,6 +40,13 @@ Thumbs.db
 *.log
 
 # SQLite
+*.db
 *.db-journal
 *.db-wal
 *.db-shm
+
+# Backups
+*.bak*
+
+# Load test data (generated, not source)
+tests/load_test_users.json
