@@ -5,7 +5,7 @@ const $ = id => document.getElementById(id);
 
 // ── Password modal ────────────────────────────────────────────────────────────
 let pwTimer = null;
-const pwModal    = new bootstrap.Modal($('pwModal'), {backdrop: 'static', keyboard: false});
+const pwModal    = new bootstrap.Modal($('pwModal'), {backdrop: true, keyboard: false});
 const pwDisplay  = $('pw-display');
 const pwCountdown= $('pw-countdown');
 const pwCopyBtn  = $('pw-copy-btn');
