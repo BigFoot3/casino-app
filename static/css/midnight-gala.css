@@ -1026,11 +1026,4 @@ a:hover { color: var(--mg-ivory); }
     flex: 1 1 calc(50% - 4px);
   }
 
-  /* Boutons +150 / +350 : toujours visibles, taille tap-friendly */
-  .add-tokens-quick-btn {
-    min-height: 44px;
-    font-size: 0.95rem;
-    font-weight: 800;
-    flex: 1;
-  }
 }
