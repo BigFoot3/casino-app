@@ -968,12 +968,15 @@ a:hover { color: var(--mg-ivory); }
    ============================================================================ */
 @media (max-width: 768px) {
 
-  /* Cache les colonnes non-essentielles sur mobile */
-  #users-table thead th:nth-child(3),
-  #users-table tbody td:nth-child(3),
+  /* Cache la colonne Ajouter tokens (input libre) sur mobile */
   #users-table thead th:nth-child(4),
   #users-table tbody td:nth-child(4) {
     display: none;
+  }
+
+  /* Colonne Tokens : espacement dans la carte */
+  #users-table tbody td:nth-child(3) {
+    padding: 4px 0;
   }
 
   /* Transforme chaque ligne en carte verticale */

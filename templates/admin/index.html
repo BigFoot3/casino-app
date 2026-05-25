@@ -155,7 +155,7 @@
             <td data-label="Joueur">{{ u['username'] }}</td>
             <td data-label="Rôle"><span class="badge {% if u['role'] == 'admin' %}bg-warning text-dark{% else %}bg-secondary{% endif %}">
               {{ u['role'] }}</span></td>
-            <td><span class="user-tokens" data-id="{{ u['id'] }}">{{ u['tokens'] }}</span></td>
+            <td data-label="Tokens"><span class="user-tokens" data-id="{{ u['id'] }}">{{ u['tokens'] }}</span></td>
             <td>
               <div class="input-group input-group-sm" style="max-width:180px">
                 <input type="number" class="form-control add-tokens-input" min="1"

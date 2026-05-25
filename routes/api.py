@@ -150,13 +150,23 @@ def session_status():
                         'voter_count': voter_count,
                     }
 
+        # Token balance for the logged-in player (None for unauthenticated callers)
+        user_tokens = None
+        if 'user_id' in flask_session:
+            row = conn.execute(
+                'SELECT tokens FROM users WHERE id=?', (flask_session['user_id'],)
+            ).fetchone()
+            if row:
+                user_tokens = row['tokens']
+
         if not active:
             return jsonify({'status': 'waiting', 'time_remaining_seconds': 0,
                             'winning_number': None,
                             'mode': mode_val,
                             'auto_interval_seconds': int(cfg.get('auto_interval_seconds', 120)),
                             'app_mode': app_mode,
-                            'vote_session': vote_session})
+                            'vote_session': vote_session,
+                            'tokens': user_tokens})
 
         # Grace period: if active is 'waiting' but previous session closed < 12s ago,
         # report 'spinning' so the display page can run the wheel animation.
@@ -177,6 +187,7 @@ def session_status():
                         'auto_interval_seconds': active['auto_interval_seconds'],
                         'app_mode': app_mode,
                         'vote_session': vote_session,
+                        'tokens': user_tokens,
                     })
 
         time_remaining = 0
@@ -194,6 +205,7 @@ def session_status():
             'auto_interval_seconds': active['auto_interval_seconds'],
             'app_mode': app_mode,
             'vote_session': vote_session,
+            'tokens': user_tokens,
         })
 
 

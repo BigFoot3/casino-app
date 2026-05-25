@@ -434,12 +434,15 @@ flask --app "app:create_app()" run
 ⚠️ admin delete user       → super-admin peut supprimer des admins (sauf username='admin')
                               admin classique → 403 sur tout compte admin
 ⚠️ admin mobile            → @media (max-width:768px) dans midnight-gala.css : #users-table en cartes flex,
-                              colonnes 3 (Tokens) et 4 (Ajouter tokens) cachées (display:none),
-                              data-label="Joueur/Rôle/Actions" sur td 1/2/5 — thead masqué, labels via ::before
+                              seule colonne 4 (Ajouter tokens) cachée — colonne 3 (Tokens) visible avec padding:4px 0
+                              data-label="Joueur/Rôle/Tokens/Actions" sur td 1/2/3/5 — thead masqué, labels via ::before
                               boutons +150/+350 dans colonne 5 (Actions), PAS dans colonne 4 (cachée mobile)
 ⚠️ boutons +150/+350       → double-tap requis sur touch (window.matchMedia('hover:none')),
                               timer 3s via quickBtnPendingMap (Map uid+amount → timer) ;
                               desktop : action immédiate sans confirmation — jamais de alert()
+⚠️ play.js tokens polling  → pollStatus() met à jour balanceEl depuis data.tokens (toutes les 2s)
+                              /api/session/status inclut 'tokens' pour les sessions Flask authentifiées
+                              (None pour les appelants non connectés — display page non affectée)
 ```
 
 ---

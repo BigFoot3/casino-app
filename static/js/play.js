@@ -135,6 +135,11 @@ async function pollStatus() {
 
     const appMode = d.app_mode || 'roulette';
 
+    // Sync token balance from server (reflects admin additions within 2s)
+    if (d.tokens !== null && d.tokens !== undefined) {
+      balanceEl.textContent = d.tokens;
+    }
+
     if (lastKnownMode !== null && appMode !== lastKnownMode) {
       window.location.reload();
       return;
