@@ -351,6 +351,8 @@ flask --app "app:create_app()" run
 ⚠️ admin boutons    → états pilotés exclusivement par pollAdmin() (toutes les 3s) via updateControlsState()
                       — ne jamais ajouter de variable JS locale pour l'état des boutons
                       — currentStatus (admin.js) est mis à jour par updateControlsState(), pas autrement
+⚠️ #right-panel display.html → flex column uniquement — ne jamais mettre grid multi-colonnes (grid-template-columns: 1fr 1fr
+                        met lb-winners et lb-losers côte à côte au lieu d'être empilés)
 ⚠️ leaderboard cache → display.js mémorise lastLeaderboardCache {top_winners, top_losers} ; pendant isSpinning,
                         un payload vide ne vide pas les tops — comportement voulu, pas un bug
                         — top_holders supprimé (session 8, 2026-05-25) : plus de renderTopHolders() ni de #top-holders-list

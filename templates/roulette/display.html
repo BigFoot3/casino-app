@@ -214,12 +214,11 @@
     .history-circle.black-num { background: var(--mg-roul-black); border: 1px solid rgba(255,255,255,.15); }
     .history-circle.zero-num  { background: var(--mg-roul-zero); }
 
-    /* Right panel inner layout */
+    /* Right panel inner layout — flex column uniquement, jamais grid multi-colonnes */
     #right-panel {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      grid-template-rows: 1fr auto;
-      gap: 6px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
       padding: 14px 12px 10px;
       overflow: hidden;
     }
@@ -227,27 +226,29 @@
     /* Leaderboard mini panels */
     #lb-winners, #lb-losers {
       background: rgba(0,0,0,0.35); border-radius: 8px;
-      padding: 7px 10px 8px; overflow: hidden; min-height: 0;
+      padding: 7px 10px 8px; overflow: hidden; width: 100%;
     }
     #lb-winners { border: 1px solid var(--mg-ivory); box-shadow: 0 0 8px rgba(255,255,255,0.1); }
     #lb-losers  { border: 1px solid var(--mg-flame); box-shadow: 0 0 8px rgba(204,40,25,0.15); }
     .lb-title {
-      font-family: var(--mg-font-display); font-size: 12px; font-weight: 900;
+      font-family: var(--mg-font-display); font-size: 0.85rem; font-weight: 900;
       text-transform: uppercase; letter-spacing: .05em; margin-bottom: 6px;
+      white-space: normal; overflow: visible; text-overflow: unset; word-break: break-word;
     }
     #lb-winners .lb-title { color: var(--mg-ivory); }
     #lb-losers  .lb-title { color: var(--mg-ember); }
     .lb-row {
       font-size: 14px; font-weight: bold; color: var(--mg-ivory);
-      display: flex; justify-content: space-between; gap: 8px;
+      display: flex; justify-content: space-between; align-items: center; gap: 8px;
       margin-bottom: 3px;
     }
-    .lb-net-pos { color: var(--mg-blush); }
-    .lb-net-neg { color: var(--mg-ember); }
+    .lb-row span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 60%; }
+    .lb-net-pos { color: var(--mg-blush); font-weight: 800; flex-shrink: 0; }
+    .lb-net-neg { color: var(--mg-ember); font-weight: 800; flex-shrink: 0; }
     .lb-empty   { color: var(--mg-rosewood); font-size: .7rem; font-style: italic; }
 
     /* QR block */
-    #qr-block { grid-column: 1 / -1; display: flex; flex-direction: column; align-items: center; margin-top: auto; padding-top: 10px; }
+    #qr-block { display: flex; flex-direction: column; align-items: center; margin-top: auto; padding-top: 10px; }
     #qr-block img { width: 96px; height: 96px; display: block; background: var(--mg-ivory); border-radius: 4px; }
     #qr-block p   { font-size: 10px; text-align: center; color: var(--mg-rosewood); margin-top: 4px; font-weight: 700; text-transform: uppercase; letter-spacing: .1em; }
 
