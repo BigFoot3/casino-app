@@ -449,6 +449,20 @@ class TestLeaderboard:
         assert len(d['winners']) >= 1
         assert d['winners'][0]['net'] > 0
 
+    def test_leaderboard_boost_deducted_from_net(self, app, player_client):
+        """Vote boost spend est déduit du net P&L dans le leaderboard."""
+        # player1 gagne 50 au roulette (bet 50 → payout 100, net = +50)
+        _insert_closed_session_with_bet('player1', 'color', 'red', 50, 100, 3)
+        # player1 a dépensé 25 en boost vote
+        with db_conn() as conn:
+            uid = conn.execute('SELECT id FROM users WHERE username=?', ('player1',)).fetchone()['id']
+            conn.execute('INSERT INTO vote_boosts(user_id, amount) VALUES (?,?)', (uid, 25))
+            conn.commit()
+        r = player_client.get('/api/leaderboard')
+        d = r.get_json()
+        # net = 50 (roulette) - 25 (boost) = 25 > 0 → doit apparaître dans top_winners
+        assert any(w['username'] == 'player1' and w['net'] == 25 for w in d['top_winners'])
+
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # TestVoteOpen

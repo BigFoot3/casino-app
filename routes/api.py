@@ -50,37 +50,36 @@ def _gen_password(n=8):
 
 @api_bp.route('/api/leaderboard')
 def leaderboard():
-    """Top 3 winners / top 3 losers over closed sessions only.
-    Excludes bets from sessions still open or spinning (payout not yet resolved).
+    """Top 3 winners / top 3 losers by net P&L over closed sessions.
+    Net = SUM(payout - amount) from closed sessions minus vote boost spend.
+    Bets on open/spinning sessions are excluded (JOIN + NULL guard).
     Filtered by stats_reset_at if set in app_config.
     """
     _Q = '''
-        SELECT u.username, SUM(b.payout - b.amount) AS net
-        FROM bets b
-        JOIN users u          ON b.user_id    = u.id
-        JOIN game_sessions gs ON b.session_id = gs.id
-        WHERE gs.status = 'closed'
-          AND gs.closed_at > ?
-        GROUP BY b.user_id
+        SELECT u.username,
+               COALESCE(SUM(b.payout - b.amount), 0)
+                 - COALESCE((SELECT SUM(vb.amount) FROM vote_boosts vb WHERE vb.user_id = u.id), 0)
+               AS net
+        FROM users u
+        LEFT JOIN bets b          ON b.user_id    = u.id
+        LEFT JOIN game_sessions gs ON b.session_id = gs.id
+                                   AND gs.status   = 'closed'
+                                   AND gs.closed_at > ?
+        WHERE u.role = 'player'
+          AND (b.id IS NULL OR gs.id IS NOT NULL)
+        GROUP BY u.id
         HAVING net {cmp} 0
         ORDER BY net {order}
         LIMIT 3
     '''
     with db_conn() as conn:
         cfg      = get_config(conn)
-        # Default: epoch — all bets pass. Format matches SQLite datetime('now'): 'YYYY-MM-DD HH:MM:SS'
         reset_at = cfg.get('stats_reset_at', '1970-01-01 00:00:00')
         winners  = conn.execute(_Q.format(cmp='>', order='DESC'), (reset_at,)).fetchall()
         losers   = conn.execute(_Q.format(cmp='<', order='ASC'),  (reset_at,)).fetchall()
-        h_rows   = conn.execute(
-            "SELECT username, tokens FROM users WHERE role='player' ORDER BY tokens DESC LIMIT 10"
-        ).fetchall()
-    top_holders = [{'rank': i + 1, 'username': r['username'], 'tokens': r['tokens']}
-                   for i, r in enumerate(h_rows)]
     return jsonify({
         'top_winners': [{'username': r['username'], 'net': r['net']} for r in winners],
         'top_losers':  [{'username': r['username'], 'net': r['net']} for r in losers],
-        'top_holders': top_holders,
     })
 
 

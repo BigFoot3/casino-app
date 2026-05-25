@@ -103,6 +103,11 @@ def init_db():
                 updated_at       TEXT DEFAULT (datetime('now')),
                 UNIQUE(vote_session_id, user_id)
             );
+            CREATE TABLE IF NOT EXISTS vote_boosts (
+                id         INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id    INTEGER NOT NULL REFERENCES users(id),
+                amount     INTEGER NOT NULL DEFAULT 0
+            );
         ''')
         conn.execute("INSERT OR IGNORE INTO app_config(key,value) VALUES ('auto_mode_enabled','0')")
         conn.execute("INSERT OR IGNORE INTO app_config(key,value) VALUES ('auto_interval_seconds','120')")

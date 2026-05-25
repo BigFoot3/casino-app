@@ -3,7 +3,7 @@
 Application roulette en ligne pour événements en présentiel — jusqu'à 100 joueurs simultanés.
 
 > Fichier de référence pour Claude Code. Mettre à jour après chaque milestone.
-> Dernière mise à jour : 2026-05-25 (chip 67 + auto-reload mode + boutons +150/+350)
+> Dernière mise à jour : 2026-05-25 (leaderboard P&L — top plus-values/moins-values, suppression top10 holders)
 
 ---
 
@@ -164,6 +164,7 @@ requirements-dev.txt # pytest==8.3.5, pytest-cov==6.1.0 (dépendances dev unique
 | `GET /rewards` | player | Catalogue de récompenses |
 | `GET /roulette/display` | player | Affichage salle (grand écran) |
 | `GET /admin` | admin | Panel administrateur |
+| `GET /api/leaderboard` | api | Top 3 plus-values / top 3 moins-values — net P&L = roulette gains − vote_boosts spend. Retourne `top_winners` + `top_losers` (plus de `top_holders`). |
 | `GET /api/session/status` | api | Statut courant (JSON) + `app_mode` + `vote_session` |
 | `POST /api/session/open` | api | Ouvrir une session roulette (admin) |
 | `POST /api/session/spin` | api | Lancer la roue (admin) |
@@ -197,6 +198,7 @@ app_config     (key, value)   -- auto_mode_ui, auto_mode_enabled, auto_interval_
 vote_sessions  (id, film_title, status, opened_at, closed_at, created_at)
 votes          (id, vote_session_id, user_id, score, bonus_amount, weighted_score, updated_at)
                UNIQUE(vote_session_id, user_id)
+vote_boosts    (id, user_id, amount)   -- stub Prompt 5 — déduit du net P&L leaderboard
 ```
 
 `status` roulette : `waiting → open (30s) → spinning → closed → waiting`
@@ -349,8 +351,11 @@ flask --app "app:create_app()" run
 ⚠️ admin boutons    → états pilotés exclusivement par pollAdmin() (toutes les 3s) via updateControlsState()
                       — ne jamais ajouter de variable JS locale pour l'état des boutons
                       — currentStatus (admin.js) est mis à jour par updateControlsState(), pas autrement
-⚠️ leaderboard cache → display.js mémorise lastLeaderboardCache ; pendant isSpinning, un payload vide
-                        ne vide pas les tops — comportement voulu, pas un bug
+⚠️ leaderboard cache → display.js mémorise lastLeaderboardCache {top_winners, top_losers} ; pendant isSpinning,
+                        un payload vide ne vide pas les tops — comportement voulu, pas un bug
+                        — top_holders supprimé (session 8, 2026-05-25) : plus de renderTopHolders() ni de #top-holders-list
+⚠️ vote_boosts stub    → table minimale ajoutée dans db.py init_db() (session 8) — sera remplacée en Prompt 5
+                          net P&L leaderboard = SUM(payout-amount) closed sessions − SUM(vote_boosts.amount)
 ⚠️ btn-action       → bouton unique contextuel : waiting→▶ Ouvrir, open→🎯 Lancer, spinning→⏳ En cours…
                         les actions sont routées selon currentStatus — ne pas restaurer les 3 boutons séparés
 ⚠️ btn-close        → affiché uniquement quand status='open' (Fermer ↯) — action d'urgence destructive

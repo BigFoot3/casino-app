@@ -8,7 +8,14 @@
   <link rel="stylesheet" href="/static/roulette/assets/css/style.css">
   <style>
     /* ── Midnight Gala design system — display-inline.html ────────────────── */
-    @import url('https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;700;900&family=Archivo+Black&family=JetBrains+Mono:wght@400;500;700&display=swap');
+    @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&display=swap');
+    @font-face {
+      font-family: 'Neue Machina';
+      src: url('/static/fonts/NeueMachina-Ultrabold.otf') format('opentype');
+      font-weight: 100 900;
+      font-style: normal;
+      font-display: swap;
+    }
 
     :root {
       --mg-flame:#cc2819; --mg-ember:#ec2415; --mg-velvet:#4d0f12;
@@ -18,8 +25,8 @@
       --mg-border:rgba(248,246,246,0.08);
       --mg-border-strong:#901e16;
       --mg-roul-red:#cc2819; --mg-roul-black:#14080a; --mg-roul-zero:#1f5a3a;
-      --mg-font-display:'Archivo Black','Archivo',system-ui,sans-serif;
-      --mg-font-body:'Archivo',system-ui,-apple-system,sans-serif;
+      --mg-font-display:'Neue Machina',system-ui,sans-serif;
+      --mg-font-body:'Neue Machina',system-ui,-apple-system,sans-serif;
       --mg-font-mono:'JetBrains Mono',ui-monospace,monospace;
     }
 
@@ -53,7 +60,12 @@
 
     /* Stage : rouge uniquement dans cette zone */
     .mg-display__stage {
-      background: var(--mg-flame);
+      background: radial-gradient(
+        ellipse 90% 75% at 50% 50%,
+        #1a6b48 0%,
+        #0e4a32 55%,
+        #082a1d 100%
+      );
       display: flex; align-items: center; justify-content: center;
       position: relative; overflow: hidden;
     }
@@ -206,43 +218,16 @@
     #right-panel {
       display: grid;
       grid-template-columns: 1fr 1fr;
-      grid-template-rows: auto 1fr auto auto;
+      grid-template-rows: 1fr auto;
       gap: 6px;
       padding: 14px 12px 10px;
       overflow: hidden;
     }
-    .rp-title {
-      font-family: var(--mg-font-display);
-      font-size: .82rem; font-weight: 900;
-      text-transform: uppercase; letter-spacing: .07em;
-      color: var(--mg-ivory);
-      text-shadow: 0 0 8px rgba(255,255,255,0.25);
-      grid-column: 1 / -1;
-    }
-    #top-holders-list { grid-column: 1 / -1; min-height: 0; overflow-y: auto; overflow-x: hidden; }
-    #top-holders-list::-webkit-scrollbar { width: 0; }
-
-    .holder-row {
-      display: flex; align-items: center; gap: 6px;
-      padding: 6px 0; border-bottom: 1px solid var(--mg-border);
-    }
-    .holder-rank {
-      font-family: var(--mg-font-display); font-size: 15px; font-weight: 700;
-      color: var(--mg-ivory); min-width: 20px; text-align: right; flex-shrink: 0;
-    }
-    .holder-rank.rank-1 { color: #FFD700; }
-    .holder-rank.rank-2 { color: #C0C0C0; }
-    .holder-rank.rank-3 { color: #CD7F32; }
-    .holder-name {
-      flex: 1; font-size: 15px; font-weight: 600; color: var(--mg-ivory);
-      overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-    }
-    .holder-tokens { font-size: 14px; font-weight: 700; color: var(--mg-ivory); white-space: nowrap; flex-shrink: 0; }
 
     /* Leaderboard mini panels */
     #lb-winners, #lb-losers {
       background: rgba(0,0,0,0.35); border-radius: 8px;
-      padding: 7px 10px 8px; overflow: hidden;
+      padding: 7px 10px 8px; overflow: hidden; min-height: 0;
     }
     #lb-winners { border: 1px solid var(--mg-ivory); box-shadow: 0 0 8px rgba(255,255,255,0.1); }
     #lb-losers  { border: 1px solid var(--mg-flame); box-shadow: 0 0 8px rgba(204,40,25,0.15); }
@@ -343,7 +328,7 @@
       border: 1px solid #901e16;
       border-radius: 999px;
       color: #f8f6f6;
-      font-family: 'Archivo Black', sans-serif;
+      font-family: 'Neue Machina', sans-serif;
       font-size: 1.35rem; font-weight: bold;
       padding: 14px 28px;
     }
@@ -417,8 +402,6 @@
 
 <!-- Main wrap (id kept for setDisplayMode() in display.js) -->
 <div id="main-wrap">
-  <div class="mg-display-logo"><img src="{{ url_for('static', filename='img/logo2.png') }}" alt="Logo"></div>
-
   <!-- Center: wheel panel + bottom cards -->
   <div id="center-panel">
 
@@ -496,18 +479,14 @@
     </div>
   </div>
 
-  <!-- Right column: top 10 jetons + top gagnants/perdants + QR -->
+  <!-- Right column: top plus-values/moins-values + QR -->
   <div id="right-panel" class="mg-display__side mg-side">
-    <div class="rp-title">💰 Top 10 Jetons</div>
-    <div id="top-holders-list">
-      <div class="lb-row lb-empty">Chargement…</div>
-    </div>
     <div id="lb-winners">
-      <div class="lb-title">🏆 Top Gagnants</div>
+      <div class="lb-title">🏆 Top plus-values</div>
       <div id="lb-winners-list"><div class="lb-row lb-empty">Chargement…</div></div>
     </div>
     <div id="lb-losers">
-      <div class="lb-title">💀 Top Perdants</div>
+      <div class="lb-title">💸 Top moins-values</div>
       <div id="lb-losers-list"><div class="lb-row lb-empty">Chargement…</div></div>
     </div>
     <div id="qr-block" class="mg-display__qr">
@@ -529,7 +508,7 @@
 <!-- ── Vote mode overlay (full-screen) ──────────────────────────────────── -->
 <div id="vote-overlay" style="display:none;position:fixed;inset:0;background:#1a0507;z-index:500;
      flex-direction:column;align-items:center;justify-content:center;gap:24px;text-align:center">
-  <div style="font-size:3.5rem;font-weight:900;font-family:'Archivo Black',sans-serif;color:#f8f6f6;
+  <div style="font-size:3.5rem;font-weight:900;font-family:'Neue Machina',sans-serif;color:#f8f6f6;
               text-shadow:0 0 30px rgba(255,255,255,0.6)" id="display-film-title">—</div>
   <div style="font-size:1.4rem;color:#FFFFFF">
     <span id="display-voter-count" style="font-size:2.5rem;font-weight:bold;color:#7DE0A8">0</span>
@@ -543,7 +522,7 @@
 <!-- ── Palmares overlay (full-screen) ──────────────────────────────────── -->
 <div id="palmares-overlay" style="display:none;position:fixed;inset:0;background:#1a0507;z-index:500;
      flex-direction:column;align-items:center;justify-content:center;padding:20px;overflow-y:auto">
-  <div style="font-size:2rem;font-weight:900;font-family:'Archivo Black',sans-serif;color:#f8f6f6;
+  <div style="font-size:2rem;font-weight:900;font-family:'Neue Machina',sans-serif;color:#f8f6f6;
               margin-bottom:24px">🏆 Palmarès</div>
   <div id="palmares-list" style="width:100%;max-width:600px"></div>
 </div>

@@ -29,7 +29,7 @@ let spinEndTime = 0;
 // Shared flag: true while status === 'spinning'. Used by leaderboard renderers
 // to keep the last known tops visible instead of overwriting with empty data.
 let isSpinning           = false;
-let lastLeaderboardCache = null;   // {top_winners, top_losers, top_holders}
+let lastLeaderboardCache = null;   // {top_winners, top_losers}
 
 // ── UI 1 palette ─────────────────────────────────────────────────────────────
 const STATUS_LABELS = {
@@ -447,44 +447,6 @@ function showRoundLeaderboard(data) {
   }, 5000);
 }
 
-// ── Top holders panel ─────────────────────────────────────────────────────────
-function renderTopHolders(holders) {
-  const el = document.getElementById('top-holders-list');
-  if (!el) return;
-
-  const hasData = holders && holders.length > 0;
-
-  // During a spin, never overwrite with empty data — keep the last known holders visible
-  if (!hasData && isSpinning && lastLeaderboardCache && lastLeaderboardCache.top_holders) return;
-
-  if (hasData) {
-    lastLeaderboardCache = Object.assign(lastLeaderboardCache || {}, { top_holders: holders });
-  }
-
-  if (!hasData) {
-    el.innerHTML = '<div class="lb-row lb-empty">Aucun joueur…</div>';
-    return;
-  }
-  el.innerHTML = '';
-  holders.forEach(h => {
-    const row = document.createElement('div');
-    row.className = 'holder-row';
-    const rankSpan = document.createElement('span');
-    rankSpan.className = `holder-rank rank-${Number(h.rank)}`;
-    rankSpan.textContent = h.rank;
-    const nameSpan = document.createElement('span');
-    nameSpan.className = 'holder-name';
-    nameSpan.textContent = h.username;
-    const tokensSpan = document.createElement('span');
-    tokensSpan.className = 'holder-tokens';
-    tokensSpan.textContent = h.tokens;
-    row.appendChild(rankSpan);
-    row.appendChild(nameSpan);
-    row.appendChild(tokensSpan);
-    el.appendChild(row);
-  });
-}
-
 // ── Leaderboard polling (every 15s) ──────────────────────────────────────────
 function renderLeaderboard(data) {
   const medals  = ['🥇', '🥈', '🥉'];
@@ -547,7 +509,6 @@ async function pollLeaderboard() {
     if (r.ok) {
       const data = await r.json();
       renderLeaderboard(data);
-      renderTopHolders(data.top_holders || []);
     }
   } catch(e) { /* network hiccup */ }
   setTimeout(pollLeaderboard, 15000);
