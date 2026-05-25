@@ -235,6 +235,20 @@ document.querySelectorAll('.decrement-tokens-btn').forEach(btn => {
   });
 });
 
+// ── Quick-add tokens (+150 / +350) ───────────────────────────────────────────
+document.querySelectorAll('.add-tokens-quick-btn').forEach(btn => {
+  btn.addEventListener('click', async () => {
+    const uid    = parseInt(btn.dataset.id);
+    const amount = parseInt(btn.dataset.amount);
+    const [s, d] = await post(`/api/admin/users/${uid}/add-tokens`, {amount});
+    if (s === 200) {
+      document.querySelector(`.user-tokens[data-id="${uid}"]`).textContent = d.new_balance;
+    } else {
+      console.error('add-tokens-quick-btn error:', d.error);
+    }
+  });
+});
+
 // ── Tokens ────────────────────────────────────────────────────────────────────
 document.querySelectorAll('.add-tokens-btn').forEach(btn => {
   btn.addEventListener('click', async () => {

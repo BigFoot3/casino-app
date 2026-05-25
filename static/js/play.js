@@ -31,6 +31,7 @@ let pollTimer       = null;
 let cdInterval      = null;
 let lastOpenSession = null;   // tracks session_id of last 'open' state seen
 let gridLocked      = false;  // true only between submission and spin start
+let lastKnownMode   = null;   // detects app_mode transitions → triggers reload
 
 // ── Multi-bet state ───────────────────────────────────────────────────────────
 // pendingBets: Map<"type:value", {bet_type, bet_value, amount}>
@@ -133,6 +134,12 @@ async function pollStatus() {
     const d = await r.json();
 
     const appMode = d.app_mode || 'roulette';
+
+    if (lastKnownMode !== null && appMode !== lastKnownMode) {
+      window.location.reload();
+      return;
+    }
+    lastKnownMode = appMode;
 
     if (appMode === 'vote') {
       showOnly(votePanel);

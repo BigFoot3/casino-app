@@ -3,7 +3,7 @@
 Application roulette en ligne pour événements en présentiel — jusqu'à 100 joueurs simultanés.
 
 > Fichier de référence pour Claude Code. Mettre à jour après chaque milestone.
-> Dernière mise à jour : 2026-05-15 (session 9)
+> Dernière mise à jour : 2026-05-25 (chip 67 + auto-reload mode + boutons +150/+350)
 
 ---
 
@@ -23,7 +23,7 @@ Application roulette en ligne pour événements en présentiel — jusqu'à 100 
 
 | Package | Version | Rôle |
 |---------|---------|------|
-| Flask | 3.1.0 | Web framework (factory pattern) |
+| Flask | 3.1.3 | Web framework (factory pattern) |
 | Gunicorn | 23.0.0 | WSGI — 1 worker, 12 threads (gthread), `preload_app=True` |
 | APScheduler | 3.10.4 | Game tick toutes les 5s |
 | SQLite WAL | — | Base de données — `busy_timeout=10s` |
@@ -226,6 +226,8 @@ waiting → open (fenêtre de mise 30s) → spinning → closed → waiting
 | `dozen` 1/2/3 | 1–12 / 13–24 / 25–36 (0 = House win) | ×3 |
 | `half` low/high | 1–18 / 19–36 (0 = House win) | ×2 |
 
+Dénominations de jetons disponibles (play.html `.chip-btn`) : **1, 5, 10, 50, 67, 100**
+
 Correspondance colonnes :
 - `column=1` → numéros 3,6,9,…,36 (n%3==0) — bouton "2→1" haut
 - `column=2` → numéros 2,5,8,…,35 (n%3==2) — bouton "2→1" milieu
@@ -393,6 +395,10 @@ flask --app "app:create_app()" run
 ⚠️ gridLocked vs betPlaced → gridLocked : verrou UI (grille non-cliquable entre soumission et spin)
                               betPlaced : routage vers pollResult() — les deux sont indépendants
                               gridLocked=false dès que spinning démarre, betPlaced reste true jusqu'au résultat
+⚠️ auto-reload mode        → play.js : lastKnownMode détecte les transitions app_mode (roulette↔vote↔palmares)
+                              → window.location.reload() + return au prochain pollStatus() (2s max)
+                              — premier appel silencieux (lastKnownMode=null → init sans reload)
+                              — ne pas supprimer le bloc showOnly() : reste fallback dans le même tick
 ⚠️ roulette lib CSS        → static/roulette/assets/css/style.css — repo git imbriqué (milsaware/javascript-roulette)
                               PAS de .gitmodules dans casino : les modifs CSS sont commitées localement dans le
                               sous-repo mais ne peuvent pas être poussées vers l'upstream milsaware
