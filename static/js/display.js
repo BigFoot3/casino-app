@@ -449,7 +449,7 @@ function showRoundLeaderboard(data) {
 
 // ── Leaderboard polling (every 15s) ──────────────────────────────────────────
 function renderLeaderboard(data) {
-  const medals  = ['🥇', '🥈', '🥉'];
+  const medals  = ['🥇', '🥈', '🥉', '4.', '5.'];
   const winEl   = document.getElementById('lb-winners-list');
   const loseEl  = document.getElementById('lb-losers-list');
   if (!winEl || !loseEl) return;

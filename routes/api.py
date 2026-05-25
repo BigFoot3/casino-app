@@ -70,7 +70,7 @@ def leaderboard():
         GROUP BY u.id
         HAVING net {cmp} 0
         ORDER BY net {order}
-        LIMIT 3
+        LIMIT 5
     '''
     with db_conn() as conn:
         cfg      = get_config(conn)
