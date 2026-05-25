@@ -962,3 +962,75 @@ a:hover { color: var(--mg-ivory); }
 ::-webkit-scrollbar-track { background: var(--mg-noir); }
 ::-webkit-scrollbar-thumb { background: var(--mg-claret); border-radius: 999px; border: 2px solid var(--mg-noir); }
 ::-webkit-scrollbar-thumb:hover { background: var(--mg-flame); }
+
+/* ============================================================================
+   ADMIN — users-table responsive (mobile ≤ 768px)
+   ============================================================================ */
+@media (max-width: 768px) {
+
+  /* Cache les colonnes non-essentielles sur mobile */
+  #users-table thead th:nth-child(3),
+  #users-table tbody td:nth-child(3),
+  #users-table thead th:nth-child(4),
+  #users-table tbody td:nth-child(4) {
+    display: none;
+  }
+
+  /* Transforme chaque ligne en carte verticale */
+  #users-table tbody tr {
+    display: flex;
+    flex-direction: column;
+    border: 1px solid var(--mg-claret);
+    border-radius: 6px;
+    margin-bottom: 10px;
+    padding: 10px;
+    background: var(--mg-noir-2);
+  }
+
+  /* Masque le thead (les labels passent en data-label) */
+  #users-table thead {
+    display: none;
+  }
+
+  /* Chaque cellule visible affiche son label en eyebrow */
+  #users-table tbody td::before {
+    content: attr(data-label);
+    display: block;
+    font-size: 0.65rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--mg-rosewood);
+    margin-bottom: 4px;
+  }
+
+  /* Colonne Utilisateur + Rôle : sur une ligne */
+  #users-table tbody td:nth-child(1),
+  #users-table tbody td:nth-child(2) {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    width: auto;
+    border: none;
+    padding: 2px 0;
+  }
+
+  /* Colonne Actions : boutons en grille tap-friendly */
+  #users-table tbody td:nth-child(5) {
+    padding-top: 8px;
+  }
+
+  #users-table tbody td:nth-child(5) .btn {
+    min-height: 44px;
+    min-width: 44px;
+    font-size: 0.85rem;
+    flex: 1 1 calc(50% - 4px);
+  }
+
+  /* Boutons +150 / +350 : toujours visibles, taille tap-friendly */
+  .add-tokens-quick-btn {
+    min-height: 44px;
+    font-size: 0.95rem;
+    font-weight: 800;
+    flex: 1;
+  }
+}

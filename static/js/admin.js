@@ -235,11 +235,35 @@ document.querySelectorAll('.decrement-tokens-btn').forEach(btn => {
   });
 });
 
-// ── Quick-add tokens (+150 / +350) ───────────────────────────────────────────
+// ── Quick-add tokens (+150 / +350) — double-tap confirmation on touch ────────
+const quickBtnPendingMap = new Map(); // key: "uid-amount" → timer
+
 document.querySelectorAll('.add-tokens-quick-btn').forEach(btn => {
   btn.addEventListener('click', async () => {
     const uid    = parseInt(btn.dataset.id);
     const amount = parseInt(btn.dataset.amount);
+    const isTouchDevice = window.matchMedia('(hover: none)').matches;
+
+    if (isTouchDevice) {
+      const key = `${uid}-${amount}`;
+      if (quickBtnPendingMap.has(key)) {
+        // Second tap within 3s → execute
+        clearTimeout(quickBtnPendingMap.get(key));
+        quickBtnPendingMap.delete(key);
+        btn.textContent = `+${amount}`;
+      } else {
+        // First tap → request confirmation
+        btn.textContent = '✓ Confirmer';
+        const timer = setTimeout(() => {
+          quickBtnPendingMap.delete(key);
+          btn.textContent = `+${amount}`;
+        }, 3000);
+        quickBtnPendingMap.set(key, timer);
+        return;
+      }
+    }
+
+    // Send request (desktop: immediate; touch: after second tap)
     const [s, d] = await post(`/api/admin/users/${uid}/add-tokens`, {amount});
     if (s === 200) {
       document.querySelector(`.user-tokens[data-id="${uid}"]`).textContent = d.new_balance;

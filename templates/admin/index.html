@@ -152,8 +152,8 @@
         <tbody>
           {% for u in users %}
           <tr id="user-row-{{ u['id'] }}">
-            <td>{{ u['username'] }}</td>
-            <td><span class="badge {% if u['role'] == 'admin' %}bg-warning text-dark{% else %}bg-secondary{% endif %}">
+            <td data-label="Joueur">{{ u['username'] }}</td>
+            <td data-label="Rôle"><span class="badge {% if u['role'] == 'admin' %}bg-warning text-dark{% else %}bg-secondary{% endif %}">
               {{ u['role'] }}</span></td>
             <td><span class="user-tokens" data-id="{{ u['id'] }}">{{ u['tokens'] }}</span></td>
             <td>
@@ -167,7 +167,7 @@
               <button class="btn btn-sm btn-outline-secondary add-tokens-quick-btn"
                       data-id="{{ u['id'] }}" data-amount="350">+350</button>
             </td>
-            <td class="d-flex gap-1 flex-wrap">
+            <td data-label="Actions" class="d-flex gap-1 flex-wrap">
               <button class="btn btn-sm btn-secondary reset-pw-btn" data-id="{{ u['id'] }}"
                       data-name="{{ u['username'] }}">
                 🔑 MDP
