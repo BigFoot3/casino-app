@@ -3,7 +3,15 @@
    Override Bootstrap 5 + composants custom
    ============================================================================ */
 
-@import url('https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700;900&family=Archivo+Black&family=JetBrains+Mono:wght@400;500;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&display=swap');
+
+@font-face {
+  font-family: 'Neue Machina';
+  src: url('/static/fonts/NeueMachina-Ultrabold.otf') format('opentype');
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
 
 /* ---------- Tokens ---------- */
 :root {
@@ -43,9 +51,14 @@
   --mg-roul-black: #14080a;
   --mg-roul-zero:  #1f5a3a;
 
+  /* Felt — tapis display */
+  --mg-felt-light: #1a6b48;
+  --mg-felt:       #0e4a32;
+  --mg-felt-dark:  #082a1d;
+
   /* Type */
-  --mg-font-display: 'Archivo Black', 'Archivo', system-ui, sans-serif;
-  --mg-font-body:    'Archivo', system-ui, -apple-system, sans-serif;
+  --mg-font-display: 'Neue Machina', system-ui, sans-serif;
+  --mg-font-body:    'Neue Machina', system-ui, -apple-system, sans-serif;
   --mg-font-mono:    'JetBrains Mono', ui-monospace, 'Menlo', monospace;
 
   /* Geometry */

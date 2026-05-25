@@ -3,7 +3,7 @@
 Application roulette en ligne pour événements en présentiel — jusqu'à 100 joueurs simultanés.
 
 > Fichier de référence pour Claude Code. Mettre à jour après chaque milestone.
-> Dernière mise à jour : 2026-05-25 (leaderboard P&L — top plus-values/moins-values, suppression top10 holders)
+> Dernière mise à jour : 2026-05-25 (feuille de chêne en centre roulette — turretHandle masqué)
 
 ---
 
@@ -414,6 +414,9 @@ flask --app "app:create_app()" run
 ⚠️ roulette centrage       → après session 7 : ballTrack 212×212 (left/top 49), pocketsRim (left/top 37.5),
                               cone (left/top 65, gradient circle at 90px 90px), turret (left/top 132),
                               turretHandle (left 111) — ne pas revenir aux valeurs originales
+⚠️ roulette turret         → feuille.png (static/img/feuille.png, RGBA 697×354) remplace le gradient or — turret 60×60px
+                              (top:124px, left:124px) pour lisibilité ; turretHandle + thendOne/thendTwo masqués (display:none)
+                              — ne pas rétablir le gradient ni le handle doré
 ⚠️ roulette police         → style.css : font-family 'Neue Machina' (session 8) ; font-weight 800 sur tous
                               les éléments texte ; .double overridé avec transform: rotate(3deg) scaleX(0.75)
                               + left: 147px pour compenser la largeur de Neue Machina vs Arial sur les doubles
