@@ -36,6 +36,78 @@ def db_conn():
         conn.close()
 
 
+def _migrate_vote_boosts_amount():
+    """Replace CHECK(amount IN (0,25,50)) with CHECK(amount >= 0) on vote_boosts."""
+    with db_conn() as conn:
+        row = conn.execute(
+            "SELECT sql FROM sqlite_master WHERE type='table' AND name='vote_boosts'"
+        ).fetchone()
+        if not row or 'amount IN (0,25,50)' not in row['sql']:
+            return
+        conn.execute('BEGIN IMMEDIATE')
+        conn.execute('PRAGMA foreign_keys=OFF')
+        conn.execute('''
+            CREATE TABLE vote_boosts_new (
+                id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                session_id  INTEGER NOT NULL REFERENCES vote_sessions(id),
+                user_id     INTEGER NOT NULL REFERENCES users(id),
+                category_id INTEGER NOT NULL REFERENCES vote_categories(id),
+                amount      INTEGER NOT NULL DEFAULT 0
+                            CHECK(amount >= 0),
+                updated_at  TEXT DEFAULT (datetime('now')),
+                UNIQUE(session_id, user_id, category_id)
+            )
+        ''')
+        conn.execute('INSERT INTO vote_boosts_new SELECT * FROM vote_boosts')
+        conn.execute('DROP TABLE vote_boosts')
+        conn.execute('ALTER TABLE vote_boosts_new RENAME TO vote_boosts')
+        conn.execute('PRAGMA foreign_keys=ON')
+        conn.execute('COMMIT')
+        print('DB migration: vote_boosts CHECK(amount >= 0) applied.', flush=True)
+
+
+def _migrate_vote_schema(conn):
+    """Upgrade old vote_sessions/vote_boosts schemas if they exist with pre-Phase-2 columns."""
+    cols = [r[1] for r in conn.execute('PRAGMA table_info(vote_sessions)').fetchall()]
+    if 'film_title' not in cols:
+        return
+    conn.execute('PRAGMA foreign_keys=OFF')
+    for tbl in ('votes', 'vote_rankings', 'vote_boosts', 'vote_sessions'):
+        conn.execute(f'DROP TABLE IF EXISTS {tbl}')
+    conn.executescript('''
+        CREATE TABLE vote_sessions (
+            id         INTEGER PRIMARY KEY AUTOINCREMENT,
+            status     TEXT NOT NULL DEFAULT 'waiting'
+                       CHECK(status IN ('waiting','open','closed','palmares')),
+            opened_at  TEXT,
+            closed_at  TEXT,
+            created_at TEXT DEFAULT (datetime('now'))
+        );
+        CREATE TABLE vote_boosts (
+            id          INTEGER PRIMARY KEY AUTOINCREMENT,
+            session_id  INTEGER NOT NULL REFERENCES vote_sessions(id),
+            user_id     INTEGER NOT NULL REFERENCES users(id),
+            category_id INTEGER NOT NULL REFERENCES vote_categories(id),
+            amount      INTEGER NOT NULL DEFAULT 0
+                        CHECK(amount >= 0),
+            updated_at  TEXT DEFAULT (datetime('now')),
+            UNIQUE(session_id, user_id, category_id)
+        );
+        CREATE TABLE vote_rankings (
+            id         INTEGER PRIMARY KEY AUTOINCREMENT,
+            session_id INTEGER NOT NULL REFERENCES vote_sessions(id),
+            user_id    INTEGER NOT NULL REFERENCES users(id),
+            film_id    INTEGER NOT NULL REFERENCES vote_films(id),
+            rank       INTEGER NOT NULL,
+            points     REAL NOT NULL DEFAULT 0,
+            updated_at TEXT DEFAULT (datetime('now')),
+            UNIQUE(session_id, user_id, film_id)
+        );
+    ''')
+    conn.execute('PRAGMA foreign_keys=ON')
+    conn.commit()
+
+
 def init_db():
     with db_conn() as conn:
         conn.executescript('''
@@ -66,54 +138,61 @@ def init_db():
                 amount     INTEGER NOT NULL,
                 payout     INTEGER NOT NULL DEFAULT 0
             );
-            CREATE TABLE IF NOT EXISTS rewards (
-                id          INTEGER PRIMARY KEY AUTOINCREMENT,
-                name        TEXT NOT NULL,
-                description TEXT,
-                token_cost  INTEGER CHECK(token_cost > 0) NOT NULL,
-                stock       INTEGER DEFAULT 0,
-                active      INTEGER DEFAULT 1
-            );
-            CREATE TABLE IF NOT EXISTS reward_claims (
-                id         INTEGER PRIMARY KEY AUTOINCREMENT,
-                user_id    INTEGER NOT NULL REFERENCES users(id),
-                reward_id  INTEGER NOT NULL REFERENCES rewards(id),
-                claimed_at TEXT DEFAULT (datetime('now'))
-            );
             CREATE TABLE IF NOT EXISTS app_config (
                 key   TEXT PRIMARY KEY,
                 value TEXT NOT NULL
             );
-            CREATE TABLE IF NOT EXISTS vote_sessions (
-                id          INTEGER PRIMARY KEY AUTOINCREMENT,
-                film_title  TEXT NOT NULL,
-                status      TEXT NOT NULL DEFAULT 'waiting'
-                                CHECK(status IN ('waiting','open','closed')),
-                opened_at   TEXT,
-                closed_at   TEXT,
-                created_at  TEXT DEFAULT (datetime('now'))
+            CREATE TABLE IF NOT EXISTS vote_categories (
+                id            INTEGER PRIMARY KEY AUTOINCREMENT,
+                name          TEXT NOT NULL UNIQUE,
+                display_order INTEGER NOT NULL DEFAULT 0,
+                created_at    TEXT DEFAULT (datetime('now'))
             );
-            CREATE TABLE IF NOT EXISTS votes (
-                id               INTEGER PRIMARY KEY AUTOINCREMENT,
-                vote_session_id  INTEGER NOT NULL REFERENCES vote_sessions(id),
-                user_id          INTEGER NOT NULL REFERENCES users(id),
-                score            INTEGER NOT NULL CHECK(score BETWEEN 1 AND 10),
-                bonus_amount     INTEGER NOT NULL DEFAULT 0 CHECK(bonus_amount IN (0,25,50)),
-                weighted_score   REAL NOT NULL,
-                updated_at       TEXT DEFAULT (datetime('now')),
-                UNIQUE(vote_session_id, user_id)
+            CREATE TABLE IF NOT EXISTS vote_films (
+                id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                category_id INTEGER NOT NULL REFERENCES vote_categories(id),
+                title       TEXT NOT NULL,
+                created_at  TEXT DEFAULT (datetime('now')),
+                UNIQUE(category_id, title)
+            );
+            CREATE TABLE IF NOT EXISTS vote_sessions (
+                id         INTEGER PRIMARY KEY AUTOINCREMENT,
+                status     TEXT NOT NULL DEFAULT 'waiting'
+                           CHECK(status IN ('waiting','open','closed','palmares')),
+                opened_at  TEXT,
+                closed_at  TEXT,
+                created_at TEXT DEFAULT (datetime('now'))
+            );
+            CREATE TABLE IF NOT EXISTS vote_rankings (
+                id         INTEGER PRIMARY KEY AUTOINCREMENT,
+                session_id INTEGER NOT NULL REFERENCES vote_sessions(id),
+                user_id    INTEGER NOT NULL REFERENCES users(id),
+                film_id    INTEGER NOT NULL REFERENCES vote_films(id),
+                rank       INTEGER NOT NULL,
+                points     REAL NOT NULL DEFAULT 0,
+                updated_at TEXT DEFAULT (datetime('now')),
+                UNIQUE(session_id, user_id, film_id)
             );
             CREATE TABLE IF NOT EXISTS vote_boosts (
-                id         INTEGER PRIMARY KEY AUTOINCREMENT,
-                user_id    INTEGER NOT NULL REFERENCES users(id),
-                amount     INTEGER NOT NULL DEFAULT 0
+                id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                session_id  INTEGER NOT NULL REFERENCES vote_sessions(id),
+                user_id     INTEGER NOT NULL REFERENCES users(id),
+                category_id INTEGER NOT NULL REFERENCES vote_categories(id),
+                amount      INTEGER NOT NULL DEFAULT 0
+                            CHECK(amount >= 0),
+                updated_at  TEXT DEFAULT (datetime('now')),
+                UNIQUE(session_id, user_id, category_id)
             );
         ''')
         conn.execute("INSERT OR IGNORE INTO app_config(key,value) VALUES ('auto_mode_enabled','0')")
         conn.execute("INSERT OR IGNORE INTO app_config(key,value) VALUES ('auto_interval_seconds','120')")
         conn.execute("INSERT OR IGNORE INTO app_config(key,value) VALUES ('app_mode','roulette')")
         conn.execute("INSERT OR IGNORE INTO app_config(key,value) VALUES ('current_vote_session_id','')")
+        conn.execute("INSERT OR IGNORE INTO app_config(key,value) VALUES ('vote_revealed_categories','[]')")
+        conn.execute("INSERT OR IGNORE INTO app_config(key,value) VALUES ('vote_display_category_id','')")
         conn.commit()
+        _migrate_vote_schema(conn)
+        _migrate_vote_boosts_amount()
 
 
 def get_config(conn) -> dict:

@@ -206,48 +206,6 @@
           ⏱ Temps restant : <strong id="countdown">—</strong>s
         </div>
       </div>
-      <div id="msg-palmares" class="alert alert-warning" style="display:none">
-        🏆 En attente du palmarès…
-      </div>
-
-      <!-- Vote panel -->
-      <div id="vote-panel" style="display:none">
-        <div class="mb-3">
-          <h5 id="vote-film-name" class="text-center mb-1">—</h5>
-          <p class="text-center text-muted small">🎬 Votez pour ce film</p>
-        </div>
-        <div class="mb-4 text-center">
-          <label class="form-label">Votre note :</label>
-          <div class="d-flex align-items-center justify-content-center gap-3">
-            <input type="range" id="vote-score-slider" min="1" max="10" value="5" class="form-range" style="max-width:200px">
-            <span id="vote-score-display" class="fw-bold" style="font-size:2rem;color:#FFFFFF;min-width:2ch">5</span>
-            <span class="text-muted">/10</span>
-          </div>
-        </div>
-        <div class="mb-4">
-          <label class="form-label small">Booster votre vote (dépense des jetons) :</label>
-          <div class="d-flex gap-2 justify-content-center flex-wrap">
-            <button type="button" class="btn btn-outline-secondary vote-bonus-btn active" data-bonus="0">
-              ✕0 — sans bonus
-            </button>
-            <button type="button" class="btn btn-outline-primary vote-bonus-btn" data-bonus="25" id="vote-bonus-25">
-              ×1.5 — 25 jetons
-            </button>
-            <button type="button" class="btn btn-outline-warning vote-bonus-btn" data-bonus="50" id="vote-bonus-50">
-              ×2 — 50 jetons
-            </button>
-          </div>
-        </div>
-        <div class="text-center mb-3 small text-muted">
-          Solde après vote : <strong id="vote-balance-preview">—</strong> jetons
-        </div>
-        <button id="btn-vote-submit" class="btn btn-primary w-100 mb-2">Voter</button>
-        <div id="vote-feedback" class="alert mt-2" style="display:none"></div>
-        <div id="vote-confirmed" class="alert alert-success mt-2" style="display:none">
-          ✅ Vote enregistré ! Vous pouvez modifier jusqu'à la fermeture.
-        </div>
-      </div>
-
       <!-- ── Betting table (extracted from static/roulette/) ── -->
       <form id="bet-form" style="display:none">
         <div id="bet-board-wrap" class="mb-3">
@@ -336,14 +294,25 @@
         <div id="result-bets-list" class="mb-2"></div>
         <a href="/play" class="btn btn-outline-light mt-2">Nouvelle partie</a>
       </div>
+
+      <!-- Vote panel -->
+      <div id="vote-panel" style="display:none">
+        <h4 class="mb-3">Vote en cours</h4>
+        <div id="vote-categories-container"></div>
+        <button id="btn-vote-submit" class="btn btn-primary w-100 mt-3">Valider mon classement</button>
+        <div id="vote-feedback" class="mt-2"></div>
+      </div>
+
+      <!-- Palmares message -->
+      <div id="msg-palmares" class="alert alert-info" style="display:none">
+        🏆 Palmarès en cours d'affichage…
+      </div>
     </div>
   </div>
 </div>
 {% endblock %}
 {% block scripts %}
-<script>
-  window.INITIAL_APP_MODE    = {{ app_mode | tojson }};
-  window.INITIAL_VOTE_SESSION = {{ vote_session | tojson }};
-</script>
+<script>window.INITIAL_APP_MODE = "{{ app_mode }}";</script>
+<script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.2/Sortable.min.js"></script>
 <script src="/static/js/play.js"></script>
 {% endblock %}

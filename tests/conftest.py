@@ -131,13 +131,3 @@ def open_session(app, admin_client):
         ).fetchone()
     assert active is not None, "open_session: aucune session open trouvée"
     return active['id']
-
-
-@pytest.fixture
-def open_vote_session(app, admin_client):
-    """Ouvre une vote_session 'Film Test' via l'API admin, retourne vote_session_id."""
-    r = admin_client.post('/api/vote/open',
-                          json={'film_title': 'Film Test'},
-                          headers={'X-CSRFToken': 'test'})
-    assert r.status_code == 200, f"open_vote_session fixture failed ({r.status_code}): {r.data}"
-    return r.get_json()['vote_session_id']

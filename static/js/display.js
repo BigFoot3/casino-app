@@ -179,73 +179,161 @@ async function pollBets() {
   setTimeout(pollBets, 2000);
 }
 
-// ── App mode helpers ─────────────────────────────────────────────────────────
+let lastPollStatus    = null;
+let lastDisplayMode   = null;
+
 const voteOverlay     = document.getElementById('vote-overlay');
 const palmaresOverlay = document.getElementById('palmares-overlay');
-const mainWrap        = document.getElementById('main-wrap');
-let lastAppMode       = null;
-let lastPollStatus    = null;
-let palmaresLoaded    = false;
 
 function setDisplayMode(mode) {
-  if (mode === lastAppMode) return;
-  lastAppMode = mode;
-
+  const showWheel = (mode === 'roulette' || mode === 'closed' || !mode);
+  if (voteOverlay)     voteOverlay.classList.toggle('active',     mode === 'vote');
+  if (palmaresOverlay) palmaresOverlay.classList.toggle('active', mode === 'palmares');
+  const mainWrap = document.getElementById('main-wrap');
+  if (mainWrap) mainWrap.style.display = showWheel ? '' : 'none';
+  const statusBar = document.getElementById('status-bar');
+  if (statusBar) statusBar.style.display = showWheel ? '' : 'none';
+  const drawsStrip = document.getElementById('draws-strip');
+  if (drawsStrip) drawsStrip.style.display = showWheel ? '' : 'none';
+  const qrCorner = document.getElementById('qr-corner');
+  if (qrCorner) qrCorner.style.display = (mode === 'palmares') ? 'none' : '';
+  if (mode === 'palmares') {
+    lastPalmaresSig     = '';
+    currentDisplayCatId = null;
+  }
   if (mode === 'vote') {
-    mainWrap.style.display        = 'none';
-    palmaresOverlay.style.display = 'none';
-    voteOverlay.style.display     = 'flex';
-  } else if (mode === 'palmares') {
-    mainWrap.style.display        = 'none';
-    voteOverlay.style.display     = 'none';
-    palmaresOverlay.style.display = 'flex';
-    if (!palmaresLoaded) {
-      palmaresLoaded = true;
-      loadPalmares();
-    }
-  } else {
-    // roulette
-    voteOverlay.style.display     = 'none';
-    palmaresOverlay.style.display = 'none';
-    mainWrap.style.display        = '';
+    currentDisplayCatId = null;
+    lastVoteStateSig = '';  // force fresh fetch on mode entry
+    pollVoteDisplay();
+  }
+  if (mode !== 'vote') {
+    currentDisplayCatId = null;
   }
 }
 
-async function loadPalmares() {
+let lastVoteStateSig   = '';
+let lastPalmaresSig    = '';
+let lastVoteStateData  = null;
+let currentDisplayCatId = null;
+
+async function pollVoteDisplay() {
   try {
-    const r = await fetch('/api/vote/summary');
+    const r = await fetch('/api/vote/display-state');
     if (!r.ok) return;
-    const films = await r.json();
-    const medals = ['🥇', '🥈', '🥉'];
-    const listEl = document.getElementById('palmares-list');
-    listEl.innerHTML = '';
-    films.forEach((f, i) => {
-      const medal = medals[i] || `${i + 1}.`;
-      const div = document.createElement('div');
-      div.style.cssText = 'display:flex;align-items:center;gap:16px;padding:14px 20px;' +
-        'background:#1a1a2e;border-radius:12px;margin-bottom:12px;' +
-        (i === 0 ? 'border:2px solid #ffd700;box-shadow:0 0 18px rgba(255,215,0,.4)' :
-         i === 1 ? 'border:2px solid #c0c0c0' :
-         i === 2 ? 'border:2px solid #cd7f32' : 'border:1px solid #2a2a4a');
-      const medalSpan = document.createElement('span');
-      medalSpan.style.fontSize = '2rem';
-      medalSpan.textContent = medal;
-      const titleSpan = document.createElement('span');
-      titleSpan.style.cssText = 'flex:1;font-size:1.25rem;font-weight:bold;color:#f0f0f0';
-      titleSpan.textContent = f.film_title;
-      const scoreSpan = document.createElement('span');
-      scoreSpan.style.cssText = 'font-size:1.8rem;font-weight:900;color:#c9a84c';
-      scoreSpan.textContent = f.avg_weighted_score;
-      const metaSpan = document.createElement('span');
-      metaSpan.style.cssText = 'color:#9e9e9e;font-size:.85rem';
-      metaSpan.textContent = `/10 · ${f.voter_count} vote${f.voter_count !== 1 ? 's' : ''}`;
-      div.appendChild(medalSpan);
-      div.appendChild(titleSpan);
-      div.appendChild(scoreSpan);
-      div.appendChild(metaSpan);
-      listEl.appendChild(div);
-    });
-  } catch(e) { /* network hiccup */ }
+    const data = await r.json();
+    const sig  = JSON.stringify(data);
+    if (sig === lastVoteStateSig) return;
+    lastVoteStateSig  = sig;
+    lastVoteStateData = data;
+    if (lastDisplayMode === 'vote') {
+      renderSingleVoteCategory(lastVoteStateData);
+    }
+  } catch(e) {}
+}
+
+function renderSingleVoteCategory(data) {
+  const cont = document.getElementById('vote-categories-display');
+  if (!cont) return;
+  cont.innerHTML = '';
+
+  const cat = data && data.display_category;
+  if (!cat) {
+    const msg = document.createElement('div');
+    msg.className = 'vote-waiting-msg';
+    msg.textContent = 'En attente…';
+    cont.appendChild(msg);
+    return;
+  }
+
+  const block = document.createElement('div');
+  block.className = 'vote-category-block vote-category-fadein';
+
+  const title = document.createElement('h3');
+  title.textContent = cat.name;
+  block.appendChild(title);
+
+  const social = cat.social_boost || 0;
+  const pct    = Math.min(100, Math.round(social / 5));
+
+  const boostLabel = document.createElement('div');
+  boostLabel.className = 'social-boost-label';
+  boostLabel.textContent = `💰 ${social} jetons misés`;
+  block.appendChild(boostLabel);
+
+  const barWrap = document.createElement('div');
+  barWrap.className = 'social-boost-bar-wrap';
+  const bar = document.createElement('div');
+  bar.className = 'social-boost-bar';
+  bar.style.width = pct + '%';
+  barWrap.appendChild(bar);
+  block.appendChild(barWrap);
+
+  const voterCount = document.createElement('div');
+  voterCount.className = 'vote-voter-count';
+  voterCount.textContent = `${cat.voter_count || 0} votant(s)`;
+  block.appendChild(voterCount);
+
+  cont.appendChild(block);
+}
+
+async function pollPalmaresDisplay() {
+  try {
+    const r = await fetch('/api/vote/results');
+    if (!r.ok) return;
+    const data = await r.json();
+    const sig  = JSON.stringify(data) + '|' + currentDisplayCatId;
+    if (sig === lastPalmaresSig) return;
+    lastPalmaresSig = sig;
+    renderPalmaresDisplay(data, currentDisplayCatId);
+  } catch(e) {}
+}
+
+function renderPalmaresDisplay(data, forcedCatId) {
+  const cont = document.getElementById('palmares-category-display');
+  if (!cont) return;
+  const allCats      = data.categories || [];
+  const revealedCats = allCats.filter(c => c.revealed);
+  if (!revealedCats.length) { cont.innerHTML = ''; return; }
+
+  let cat = forcedCatId ? revealedCats.find(c => c.id === forcedCatId) : null;
+  if (!cat) cat = revealedCats[revealedCats.length - 1];
+
+  const progressEl = document.getElementById('palmares-progress');
+  if (progressEl) progressEl.textContent = `Catégorie ${revealedCats.length} / ${allCats.length}`;
+
+  cont.innerHTML = '';
+  const block = document.createElement('div');
+  block.className = 'palmares-category palmares-reveal';
+
+  const title = document.createElement('div');
+  title.className = 'palmares-category-title';
+  title.textContent = cat.name;
+  block.appendChild(title);
+
+  const sep = document.createElement('div');
+  sep.className = 'palmares-separator';
+  block.appendChild(sep);
+
+  const medals = ['🥇', '🥈', '🥉'];
+  (cat.films || []).forEach((f, i) => {
+    const row = document.createElement('div');
+    row.className = 'palmares-film' + (i === 0 ? ' palmares-film--first' : '');
+    const medal = document.createElement('span');
+    medal.className = 'palmares-film-medal';
+    medal.textContent = medals[i] || `#${f.rank || i + 1}`;
+    const filmTitle = document.createElement('span');
+    filmTitle.className = 'palmares-film-title';
+    filmTitle.textContent = f.title;
+    const score = document.createElement('span');
+    score.className = 'palmares-film-score';
+    score.textContent = (f.score !== null && f.score !== undefined) ? f.score + ' pts' : '';
+    row.appendChild(medal);
+    row.appendChild(filmTitle);
+    row.appendChild(score);
+    block.appendChild(row);
+  });
+
+  cont.appendChild(block);
 }
 
 // ── Main display poll ─────────────────────────────────────────────────────────
@@ -254,20 +342,34 @@ async function pollDisplay() {
     const r = await fetch('/api/session/status');
     const d = await r.json();
 
-    const appMode = d.app_mode || 'roulette';
-    setDisplayMode(appMode);
-
-    if (appMode === 'vote') {
-      if (d.vote_session) {
-        document.getElementById('display-film-title').textContent  = d.vote_session.film_title;
-        document.getElementById('display-voter-count').textContent = d.vote_session.voter_count;
-      }
-      setTimeout(pollDisplay, 3000);
-      return;
+    // Handle app_mode transitions
+    const newMode = d.app_mode || 'roulette';
+    if (newMode !== lastDisplayMode) {
+      lastDisplayMode = newMode;
+      setDisplayMode(newMode);
     }
 
-    if (appMode === 'palmares') {
-      setTimeout(pollDisplay, 5000);
+    // Vote mode: update single-category display when admin selects a category
+    if (newMode === 'vote') {
+      const catId = d.vote_display_category_id || null;
+      if (catId !== currentDisplayCatId) {
+        currentDisplayCatId = catId;
+        pollVoteDisplay();  // force fresh fetch for new category
+      }
+    }
+
+    // Palmares mode: re-render when admin changes the projected category
+    if (newMode === 'palmares') {
+      const catId = d.vote_display_category_id || null;
+      if (catId !== currentDisplayCatId) {
+        currentDisplayCatId = catId;
+        await pollPalmaresDisplay();
+      }
+    }
+
+    // Non-roulette modes: skip roulette UI updates
+    if (newMode !== 'roulette') {
+      setTimeout(pollDisplay, 2000);
       return;
     }
 
@@ -514,8 +616,33 @@ async function pollLeaderboard() {
   setTimeout(pollLeaderboard, 15000);
 }
 
+// ── Vote / palmares sub-pollers ───────────────────────────────────────────────
+async function voteDisplayLoop() {
+  if (lastDisplayMode === 'vote') await pollVoteDisplay();
+  setTimeout(voteDisplayLoop, 5000);
+}
+
+async function palmaresDisplayLoop() {
+  if (lastDisplayMode === 'palmares') await pollPalmaresDisplay();
+  setTimeout(palmaresDisplayLoop, 5000);
+}
+
 // Start all pollers
 pollDisplay();
 pollBets();
 pollHistory();
 pollLeaderboard();
+voteDisplayLoop();
+palmaresDisplayLoop();
+
+// QR code init
+(function() {
+  const canvas = document.getElementById('qr-corner-canvas');
+  if (!canvas || typeof QRCode === 'undefined') return;
+  new QRCode(canvas, {
+    text: 'https://casino.kryptide.fr/login',
+    width: 120, height: 120,
+    colorDark: '#1a0507',
+    colorLight: '#f8f6f6',
+  });
+})();

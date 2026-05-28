@@ -26,6 +26,7 @@ def dashboard():
         user = conn.execute(
             'SELECT * FROM users WHERE id=?', (flask_session['user_id'],)
         ).fetchone()
+        cfg    = get_config(conn)
         active = get_active_session(conn)
         # Last result: most recent closed session within 60s
         last_result = None
@@ -45,7 +46,9 @@ def dashboard():
     return render_template('dashboard.html',
                            user=user,
                            active=active,
-                           last_result=last_result)
+                           last_result=last_result,
+                           app_mode=cfg.get('app_mode', 'roulette'),
+                           vote_display_category_id=cfg.get('vote_display_category_id', ''))
 
 
 @player_bp.route('/play')
@@ -54,47 +57,15 @@ def play():
     if redir:
         return redir
     with db_conn() as conn:
-        user = conn.execute(
+        user     = conn.execute(
             'SELECT * FROM users WHERE id=?', (flask_session['user_id'],)
         ).fetchone()
-        cfg = get_config(conn)
+        cfg      = get_config(conn)
         app_mode = cfg.get('app_mode', 'roulette')
-        vote_session = None
-        if app_mode == 'vote':
-            vsid = cfg.get('current_vote_session_id', '')
-            if vsid:
-                vs = conn.execute(
-                    'SELECT id, film_title FROM vote_sessions WHERE id=?', (int(vsid),)
-                ).fetchone()
-                if vs:
-                    vote_session = {'id': vs['id'], 'film_title': vs['film_title']}
-    return render_template('play.html', user=user,
-                           app_mode=app_mode, vote_session=vote_session)
+    return render_template('play.html', user=user, app_mode=app_mode)
 
 
 @player_bp.route('/roulette/display')
 def roulette_display():
     """Public fullscreen display page — no auth required."""
     return render_template('roulette/display.html')
-
-
-@player_bp.route('/rewards')
-def rewards():
-    redir = _require_player()
-    if redir:
-        return redir
-    with db_conn() as conn:
-        user = conn.execute(
-            'SELECT * FROM users WHERE id=?', (flask_session['user_id'],)
-        ).fetchone()
-        rewards = conn.execute(
-            "SELECT * FROM rewards WHERE active=1 ORDER BY token_cost"
-        ).fetchall()
-        claimed_ids = {
-            row['reward_id']
-            for row in conn.execute(
-                'SELECT reward_id FROM reward_claims WHERE user_id=?',
-                (flask_session['user_id'],)
-            ).fetchall()
-        }
-    return render_template('rewards.html', user=user, rewards=rewards, claimed_ids=claimed_ids)

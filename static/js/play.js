@@ -12,7 +12,6 @@ const $ = id => document.getElementById(id);
 const msgWaiting   = $('msg-waiting');
 const msgSpinning  = $('msg-spinning');
 const msgCountdown = $('msg-countdown');
-const msgPalmares  = $('msg-palmares');
 const betForm      = $('bet-form');
 const betSubmit    = $('bet-submit');
 const betClear     = $('bet-clear');
@@ -23,6 +22,7 @@ const balanceEl    = $('balance');
 const totalMisedEl = $('total-mised');
 const soldeResteEl = $('solde-reste');
 const votePanel    = $('vote-panel');
+const msgPalmares  = $('msg-palmares');
 
 let betPlaced       = false;
 let betSessionId    = null;
@@ -31,7 +31,7 @@ let pollTimer       = null;
 let cdInterval      = null;
 let lastOpenSession = null;   // tracks session_id of last 'open' state seen
 let gridLocked      = false;  // true only between submission and spin start
-let lastKnownMode   = null;   // detects app_mode transitions → triggers reload
+let lastKnownMode   = null;   // tracks app_mode transitions
 
 // ── Multi-bet state ───────────────────────────────────────────────────────────
 // pendingBets: Map<"type:value", {bet_type, bet_value, amount}>
@@ -111,7 +111,7 @@ betClear.addEventListener('click', () => {
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 function showOnly(...els) {
-  [msgWaiting, msgSpinning, msgCountdown, betForm, resultPanel, msgPalmares, votePanel]
+  [msgWaiting, msgSpinning, msgCountdown, betForm, resultPanel, votePanel, msgPalmares]
     .forEach(e => e.style.display = 'none');
   els.forEach(e => { if (e) e.style.display = ''; });
 }
@@ -133,80 +133,83 @@ async function pollStatus() {
     const r = await fetch('/api/session/status');
     const d = await r.json();
 
-    const appMode = d.app_mode || 'roulette';
-
     // Sync token balance from server (reflects admin additions within 2s)
     if (d.tokens !== null && d.tokens !== undefined) {
       balanceEl.textContent = d.tokens;
     }
 
-    if (lastKnownMode !== null && appMode !== lastKnownMode) {
-      window.location.reload();
+    // App mode transition handling
+    const newMode = d.app_mode || 'roulette';
+    if (lastKnownMode !== null && newMode !== lastKnownMode) {
+      lastKnownMode = newMode;
+      pollTimer = setTimeout(pollStatus, 2000);
       return;
     }
-    lastKnownMode = appMode;
+    if (lastKnownMode === null) lastKnownMode = newMode;
 
-    if (appMode === 'vote') {
+    if (newMode === 'vote') {
       showOnly(votePanel);
-      clearInterval(cdInterval);
-      if (d.vote_session) {
-        $('vote-film-name').textContent = d.vote_session.film_title;
-      }
-      updateVoteBalancePreview();
-    } else if (appMode === 'palmares') {
+      loadVoteState();
+      // Strategy 3: slow down polling while user types in a boost input
+      const hasActiveInput = document.activeElement?.type === 'number' &&
+                             document.activeElement?.closest('#vote-panel');
+      pollTimer = setTimeout(pollStatus, hasActiveInput ? 5000 : 3000);
+      return;
+    }
+    if (newMode === 'palmares') {
       showOnly(msgPalmares);
-      clearInterval(cdInterval);
-    } else {
-      // Normal roulette mode
-      if (d.status === 'open') {
-        // New session detected → clear any leftover pending bets from previous round
-        if (d.session_id && d.session_id !== lastOpenSession) {
-          lastOpenSession = d.session_id;
-          // Keep pendingBets — user may have pre-filled during spinning
-          updateTotals();
-          betError.style.display = 'none';
-          betPlaced    = false;
-          resultShown  = false;
-          gridLocked   = false;
-          betSubmit.disabled = false;
-          betClear.disabled  = false;
-          allBtns.forEach(btn => btn.style.pointerEvents = '');
-          $('bet-recap').style.display = 'none';
-        }
-        showOnly(msgCountdown, betForm);
-        startCountdown(d.time_remaining_seconds);
-      } else if (d.status === 'spinning') {
-        clearInterval(cdInterval);
-        // First tick in spinning: unlock grid, clear submitted bets so user pre-fills for next round
-        if (gridLocked) {
-          gridLocked = false;
-          pendingBets.clear();
-          allBtns.forEach(btn => { updateBadge(btn); btn.style.pointerEvents = ''; });
-          updateTotals();
-        }
-        betSubmit.disabled = true;
+      pollTimer = setTimeout(pollStatus, 3000);
+      return;
+    }
+
+    if (d.status === 'open') {
+      // New session detected → clear any leftover pending bets from previous round
+      if (d.session_id && d.session_id !== lastOpenSession) {
+        lastOpenSession = d.session_id;
+        // Keep pendingBets — user may have pre-filled during spinning
+        updateTotals();
+        betError.style.display = 'none';
+        betPlaced    = false;
+        resultShown  = false;
+        gridLocked   = false;
+        betSubmit.disabled = false;
         betClear.disabled  = false;
-        if (!resultShown) { showOnly(msgSpinning, betForm); }
-        else              { betForm.style.display = ''; }  // keep result panel, add form below
-      } else {
-        // BUG 2: reset all bet state when session returns to waiting
-        if (betPlaced || resultShown) {
-          betPlaced    = false;
-          betSessionId = null;
-          resultShown  = false;
-          gridLocked   = false;
-          // Keep pendingBets for the upcoming session
-          allBtns.forEach(btn => btn.style.pointerEvents = '');
-          updateTotals();
-          betSubmit.disabled = false;
-          betClear.disabled  = false;
-          betError.style.display = 'none';
-          $('bet-recap').style.display = 'none';
-          lastOpenSession = null;
-        }
-        showOnly(msgWaiting);
-        clearInterval(cdInterval);
+        allBtns.forEach(btn => btn.style.pointerEvents = '');
+        $('bet-recap').style.display = 'none';
       }
+      showOnly(msgCountdown, betForm);
+      startCountdown(d.time_remaining_seconds);
+    } else if (d.status === 'spinning') {
+      clearInterval(cdInterval);
+      // First tick in spinning: unlock grid, clear submitted bets so user pre-fills for next round
+      if (gridLocked) {
+        gridLocked = false;
+        pendingBets.clear();
+        allBtns.forEach(btn => { updateBadge(btn); btn.style.pointerEvents = ''; });
+        updateTotals();
+      }
+      betSubmit.disabled = true;
+      betClear.disabled  = false;
+      if (!resultShown) { showOnly(msgSpinning, betForm); }
+      else              { betForm.style.display = ''; }  // keep result panel, add form below
+    } else {
+      // BUG 2: reset all bet state when session returns to waiting
+      if (betPlaced || resultShown) {
+        betPlaced    = false;
+        betSessionId = null;
+        resultShown  = false;
+        gridLocked   = false;
+        // Keep pendingBets for the upcoming session
+        allBtns.forEach(btn => btn.style.pointerEvents = '');
+        updateTotals();
+        betSubmit.disabled = false;
+        betClear.disabled  = false;
+        betError.style.display = 'none';
+        $('bet-recap').style.display = 'none';
+        lastOpenSession = null;
+      }
+      showOnly(msgWaiting);
+      clearInterval(cdInterval);
     }
   } catch(e) {
     pollTimer = setTimeout(pollStatus, 3000);
@@ -380,89 +383,286 @@ async function pollPlayBets() {
   setTimeout(pollPlayBets, 2000);
 }
 
-// ── Vote UI ───────────────────────────────────────────────────────────────────
-let selectedBonus = 0;
+// ── Vote state ────────────────────────────────────────────────────────────────
+let voteStateData   = null;
+let voteBoostState  = {};   // category_id → amount (local pending)
+let voteRankState   = {};   // category_id → [{film_id, rank}]
+let sortableInstances = []; // track to destroy on reload
 
-const scoreSlider = $('vote-score-slider');
-const scoreDisplay = $('vote-score-display');
-
-if (scoreSlider) {
-  scoreSlider.addEventListener('input', () => {
-    scoreDisplay.textContent = scoreSlider.value;
-    updateVoteBalancePreview();
-  });
+function estimatePoints(n, rank, boostAmount) {
+  const base = Math.max(10, n * 2.5);
+  const rawFloat = base * Math.pow(0.55, rank - 1);
+  const pts = Math.max(1, Math.round(rawFloat * (1 + boostAmount / 100)));
+  return pts;
 }
 
-document.querySelectorAll('.vote-bonus-btn').forEach(btn => {
-  btn.addEventListener('click', () => {
-    const bonus = parseInt(btn.dataset.bonus);
-    const balance = parseInt(balanceEl.textContent) || 0;
-    // Check affordability for new bonus vs current selection
-    const cost = bonus - selectedBonus;  // net cost (negative = refund)
-    if (balance + selectedBonus - bonus < 0) {
-      const fb = $('vote-feedback');
-      fb.textContent = 'Solde insuffisant pour ce bonus.';
-      fb.className = 'alert alert-danger mt-2';
-      fb.style.display = '';
-      return;
-    }
-    $('vote-feedback').style.display = 'none';
-    selectedBonus = bonus;
-    document.querySelectorAll('.vote-bonus-btn').forEach(b => b.classList.remove('active'));
-    btn.classList.add('active');
-    updateVoteBalancePreview();
+async function loadVoteState() {
+  try {
+    const r = await fetch('/api/vote/state');
+    if (!r.ok) return;
+    voteStateData = await r.json();
+    // Strategy 1: skip re-render while user types in a boost input
+    if (document.activeElement?.type === 'number' &&
+        document.activeElement?.closest('#vote-panel')) return;
+    renderVotePanel(voteStateData);
+  } catch(e) {}
+}
+
+function renderVotePanel(data) {
+  const submitBtn = $('btn-vote-submit');
+  if (!data || !data.session) {
+    $('vote-categories-container').innerHTML = '<p class="text-muted">Aucune session de vote active.</p>';
+    if (submitBtn) submitBtn.style.display = 'none';
+    return;
+  }
+  if (!data.categories || data.categories.length === 0) {
+    $('vote-categories-container').innerHTML =
+      '<p class="text-muted">⏳ En attente de la prochaine catégorie…</p>';
+    if (submitBtn) submitBtn.style.display = 'none';
+    return;
+  }
+  if (submitBtn) submitBtn.style.display = '';
+  // Destroy old sortables
+  sortableInstances.forEach(s => s.destroy());
+  sortableInstances = [];
+
+  const container = $('vote-categories-container');
+
+  // Strategy 2: save boost input values + focused input before wiping DOM
+  const savedBoosts = {};
+  container.querySelectorAll('input[type="number"][id^="boost-input-"]').forEach(inp => {
+    const v = parseInt(inp.value);
+    if (!isNaN(v)) savedBoosts[inp.id] = v;
   });
+  const focusedId = document.activeElement?.id || null;
+
+  container.innerHTML = '';
+
+  data.categories.forEach(cat => {
+    // Init rank state from server if not locally set
+    if (!voteRankState[cat.id]) {
+      if (cat.user_rankings && cat.user_rankings.length) {
+        voteRankState[cat.id] = cat.user_rankings.slice().sort((a,b) => a.rank - b.rank);
+      } else {
+        voteRankState[cat.id] = cat.films.map((f, i) => ({film_id: f.id, rank: i+1}));
+      }
+    }
+    if (voteBoostState[cat.id] === undefined) {
+      voteBoostState[cat.id] = cat.user_boost || 0;
+    }
+
+    const block = document.createElement('div');
+    block.className = 'mb-4 p-3 border rounded';
+    block.style.borderColor = 'var(--mg-claret)';
+
+    const title = document.createElement('h6');
+    title.className = 'mb-2 fw-bold';
+    title.textContent = cat.name;
+    block.appendChild(title);
+
+    // Social boost display
+    const maxBoost = cat.films.length * 50;
+    const boostPct = maxBoost > 0 ? Math.min(100, Math.round(cat.social_boost / maxBoost * 100)) : 0;
+    const socialDiv = document.createElement('div');
+    socialDiv.className = 'small mb-2';
+    socialDiv.style.color = 'var(--mg-rosewood)';
+    socialDiv.innerHTML = `💰 ${cat.social_boost} jetons misés par la salle`;
+    block.appendChild(socialDiv);
+
+    // Drag-and-drop list
+    const list = document.createElement('ul');
+    list.className = 'list-group mb-2';
+    list.dataset.catId = cat.id;
+
+    const filmMap = Object.fromEntries(cat.films.map(f => [f.id, f.title]));
+    const ranked  = voteRankState[cat.id];
+    ranked.forEach((rk, idx) => {
+      const li = document.createElement('li');
+      li.className = 'list-group-item d-flex align-items-center gap-2';
+      li.style.background = 'var(--mg-velvet)';
+      li.style.color = 'var(--mg-ivory)';
+      li.style.borderColor = 'var(--mg-claret)';
+      li.style.cursor = 'grab';
+      li.dataset.filmId = rk.film_id;
+
+      const rankBadge = document.createElement('span');
+      rankBadge.className = 'badge me-1';
+      rankBadge.style.background = 'var(--mg-flame)';
+      rankBadge.textContent = idx + 1;
+      li.appendChild(rankBadge);
+
+      const filmTitle = document.createElement('span');
+      filmTitle.className = 'flex-grow-1';
+      filmTitle.textContent = filmMap[rk.film_id] || `Film ${rk.film_id}`;
+      li.appendChild(filmTitle);
+
+      const ptsBadge = document.createElement('span');
+      ptsBadge.className = 'badge';
+      ptsBadge.style.background = 'var(--mg-noir-2)';
+      ptsBadge.style.color = 'var(--mg-blush)';
+      ptsBadge.textContent = estimatePoints(cat.films.length, idx + 1, voteBoostState[cat.id]) + ' pts';
+      li.appendChild(ptsBadge);
+
+      list.appendChild(li);
+    });
+    block.appendChild(list);
+
+    const sortable = Sortable.create(list, {
+      animation: 150,
+      onEnd: () => {
+        const items = list.querySelectorAll('li');
+        const newRanks = [];
+        items.forEach((li, idx) => {
+          const fid = parseInt(li.dataset.filmId);
+          newRanks.push({film_id: fid, rank: idx + 1});
+          li.querySelector('.badge:first-child').textContent = idx + 1;
+          const ptsEl = li.querySelector('.badge:last-child');
+          ptsEl.textContent = estimatePoints(cat.films.length, idx + 1, voteBoostState[cat.id]) + ' pts';
+        });
+        voteRankState[cat.id] = newRanks;
+      }
+    });
+    sortableInstances.push(sortable);
+
+    // Boost selector — quick buttons + free input
+    const boostWrap = document.createElement('div');
+    boostWrap.className = 'mt-2';
+
+    const boostRow1 = document.createElement('div');
+    boostRow1.className = 'd-flex align-items-center gap-2 flex-wrap';
+    const boostLabel = document.createElement('span');
+    boostLabel.className = 'small';
+    boostLabel.style.color = 'var(--mg-rosewood)';
+    boostLabel.textContent = 'Boost :';
+    boostRow1.appendChild(boostLabel);
+
+    const customInput = document.createElement('input');
+    customInput.type = 'number';
+    customInput.min = '0';
+    customInput.max = '300';
+    customInput.step = '1';
+    customInput.id = `boost-input-${cat.id}`;
+    customInput.className = 'form-control form-control-sm';
+    customInput.style.cssText = 'width:80px;background:var(--mg-velvet);color:var(--mg-ivory);border-color:var(--mg-claret)';
+    customInput.value = voteBoostState[cat.id] || 0;
+
+    const updateBoost = (val) => {
+      voteBoostState[cat.id] = val;
+      customInput.value = val;
+      customInput.style.borderColor = 'var(--mg-claret)';
+      list.querySelectorAll('li').forEach((li, idx) => {
+        const ptsEl = li.querySelector('.badge:last-child');
+        ptsEl.textContent = estimatePoints(cat.films.length, idx + 1, val) + ' pts';
+      });
+      boostRow1.querySelectorAll('button[data-boost-val]').forEach(b => {
+        const bv = parseInt(b.dataset.boostVal);
+        if (bv === val) {
+          b.style.background = 'var(--mg-flame)';
+          b.style.color = 'var(--mg-ivory)';
+        } else {
+          b.style.background = 'var(--mg-velvet)';
+          b.style.color = 'var(--mg-rosewood)';
+        }
+      });
+    };
+
+    [0, 25, 50, 100].forEach(val => {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'btn btn-sm';
+      btn.dataset.boostVal = val;
+      btn.style.borderColor = 'var(--mg-claret)';
+      btn.textContent = val === 0 ? 'Aucun' : `+${val}`;
+      const cur = voteBoostState[cat.id] || 0;
+      btn.style.background = (cur === val) ? 'var(--mg-flame)' : 'var(--mg-velvet)';
+      btn.style.color      = (cur === val) ? 'var(--mg-ivory)' : 'var(--mg-rosewood)';
+      btn.addEventListener('click', () => updateBoost(val));
+      boostRow1.appendChild(btn);
+    });
+
+    customInput.addEventListener('input', () => {
+      const raw = parseInt(customInput.value);
+      if (isNaN(raw) || raw < 0 || raw > 300) {
+        customInput.style.borderColor = 'var(--mg-ember)';
+        return;
+      }
+      updateBoost(raw);
+    });
+
+    boostRow1.appendChild(customInput);
+    boostWrap.appendChild(boostRow1);
+    block.appendChild(boostWrap);
+    container.appendChild(block);
+  });
+
+  // Strategy 2: restore saved boost values and re-focus if needed
+  Object.entries(savedBoosts).forEach(([id, val]) => {
+    const inp = document.getElementById(id);
+    if (inp) { inp.value = val; voteBoostState[parseInt(id.replace('boost-input-', ''))] = val; }
+  });
+  if (focusedId) document.getElementById(focusedId)?.focus();
+}
+
+// ── Vote submit ───────────────────────────────────────────────────────────────
+$('btn-vote-submit').addEventListener('click', async () => {
+  if (!voteStateData || !voteStateData.session) return;
+  const feedback = $('vote-feedback');
+  feedback.style.display = 'none';
+  feedback.className = 'mt-2';
+
+  const cats = voteStateData.categories;
+  let errors = [];
+
+  for (const cat of cats) {
+    const rankings = voteRankState[cat.id] || [];
+    if (rankings.length > 0) {
+      const resp = await fetch('/api/vote/rankings', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json', 'X-CSRFToken': CSRF},
+        body: JSON.stringify({category_id: cat.id, rankings})
+      });
+      if (!resp.ok) {
+        const d = await resp.json();
+        errors.push(`${cat.name}: ${d.error || 'Erreur rankings'}`);
+      }
+    }
+    const serverBoost = cat.user_boost || 0;
+    const newBoost    = voteBoostState[cat.id] !== undefined ? voteBoostState[cat.id] : 0;
+    if (newBoost !== serverBoost) {
+      const resp2 = await fetch('/api/vote/boost', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json', 'X-CSRFToken': CSRF},
+        body: JSON.stringify({category_id: cat.id, amount: newBoost})
+      });
+      if (!resp2.ok) {
+        const d2 = await resp2.json();
+        errors.push(`${cat.name} boost: ${d2.error || 'Erreur boost'}`);
+      } else {
+        const d2 = await resp2.json();
+        balanceEl.textContent = d2.tokens_remaining;
+      }
+    }
+  }
+
+  feedback.style.display = '';
+  if (errors.length) {
+    feedback.className = 'mt-2 alert alert-danger';
+    feedback.textContent = errors.join(' | ');
+  } else {
+    feedback.className = 'mt-2 alert alert-success';
+    feedback.textContent = 'Classement enregistré !';
+    await loadVoteState();
+  }
 });
 
-function updateVoteBalancePreview() {
-  const balance = parseInt(balanceEl.textContent) || 0;
-  // Preview assumes 0 was previously spent (first vote); will be adjusted server-side for re-votes
-  $('vote-balance-preview').textContent = balance - selectedBonus;
+showOnly(msgWaiting);
+if (window.INITIAL_APP_MODE === 'vote') {
+  lastKnownMode = 'vote';
+  showOnly(votePanel);
+  loadVoteState();
+} else if (window.INITIAL_APP_MODE === 'palmares') {
+  lastKnownMode = 'palmares';
+  showOnly(msgPalmares);
 }
-
-const btnVoteSubmit = $('btn-vote-submit');
-if (btnVoteSubmit) {
-  btnVoteSubmit.addEventListener('click', async () => {
-    const score = parseInt(scoreSlider.value);
-    const fb = $('vote-feedback');
-    fb.style.display = 'none';
-    $('vote-confirmed').style.display = 'none';
-    btnVoteSubmit.disabled = true;
-
-    const resp = await fetch('/api/vote/submit', {
-      method: 'POST',
-      headers: {'Content-Type': 'application/json', 'X-CSRFToken': CSRF},
-      body: JSON.stringify({score, bonus_amount: selectedBonus})
-    });
-    const data = await resp.json();
-    btnVoteSubmit.disabled = false;
-
-    if (!resp.ok) {
-      fb.textContent = data.error || 'Erreur lors du vote.';
-      fb.className = 'alert alert-danger mt-2';
-      fb.style.display = '';
-    } else {
-      balanceEl.textContent = data.tokens_remaining;
-      updateVoteBalancePreview();
-      $('vote-confirmed').style.display = '';
-    }
-  });
-}
-
-// ── Start — affichage immédiat depuis l'état serveur injecté par Jinja2 ──────
-(function applyInitialMode() {
-  const mode = window.INITIAL_APP_MODE || 'roulette';
-  const vs   = window.INITIAL_VOTE_SESSION;
-  if (mode === 'vote') {
-    showOnly(votePanel);
-    if (vs && vs.film_title) $('vote-film-name').textContent = vs.film_title;
-    updateVoteBalancePreview();
-  } else if (mode === 'palmares') {
-    showOnly(msgPalmares);
-  } else {
-    showOnly(msgWaiting);
-  }
-})();
-
 pollStatus();
 pollPlayBets();

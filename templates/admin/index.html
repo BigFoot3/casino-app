@@ -203,219 +203,86 @@
   </div>
 </div>
 
-<!-- Rewards -->
+<!-- Catalogue vote -->
 <div class="card p-4 mb-4">
-  <div class="d-flex justify-content-between align-items-center mb-3">
-    <h5 class="mb-0">Récompenses</h5>
-    <button class="btn btn-sm btn-primary" data-bs-toggle="collapse" data-bs-target="#create-reward-form">
-      + Ajouter
-    </button>
-  </div>
+  <h5 class="mb-3">Catalogue vote</h5>
 
-  <div class="collapse mb-3" id="create-reward-form">
-    <div class="card card-body">
-      <div class="row g-2">
-        <div class="col"><input type="text" id="rw-name" class="form-control form-control-sm" placeholder="Nom"></div>
-        <div class="col"><input type="text" id="rw-desc" class="form-control form-control-sm" placeholder="Description"></div>
-        <div class="col-auto"><input type="number" id="rw-cost" class="form-control form-control-sm" style="width:90px" placeholder="Coût" min="1"></div>
-        <div class="col-auto"><input type="number" id="rw-stock" class="form-control form-control-sm" style="width:80px" placeholder="Stock" min="0" value="0"></div>
-        <div class="col-auto"><button id="btn-add-reward" class="btn btn-sm btn-success">Ajouter</button></div>
-      </div>
-    </div>
+  <!-- Add category form -->
+  <div class="d-flex gap-2 mb-3">
+    <input type="text" id="new-cat-name" class="form-control form-control-sm" placeholder="Nom de la catégorie">
+    <button id="btn-add-cat" class="btn btn-sm btn-primary text-nowrap">+ Catégorie</button>
   </div>
+  <div id="catalogue-feedback" class="small mb-2" style="display:none"></div>
 
-  <div class="table-responsive">
-    <table class="table table-sm align-middle">
-      <thead>
-        <tr><th>Nom</th><th>Description</th><th>Coût</th><th>Stock</th><th>Statut</th><th>Actions</th></tr>
-      </thead>
-      <tbody id="rewards-body">
-        {% for r in rewards %}
-        <tr id="reward-row-{{ r['id'] }}">
-          <td>{{ r['name'] }}</td>
-          <td class="text-muted small">{{ r['description'] or '–' }}</td>
-          <td>{{ r['token_cost'] }}</td>
-          <td>
-            <input type="number" class="form-control form-control-sm rw-stock-input" style="width:80px"
-                   value="{{ r['stock'] }}" min="0" data-id="{{ r['id'] }}">
-          </td>
-          <td>
-            <span class="badge {% if r['active'] %}bg-success{% else %}bg-secondary{% endif %}">
-              {% if r['active'] %}Actif{% else %}Inactif{% endif %}
-            </span>
-          </td>
-          <td class="d-flex gap-1">
-            <button class="btn btn-xs btn-sm btn-outline-light rw-save-btn" data-id="{{ r['id'] }}">💾</button>
-            <button class="btn btn-xs btn-sm {% if r['active'] %}btn-danger{% else %}btn-success{% endif %} rw-toggle-btn"
-                    data-id="{{ r['id'] }}" data-active="{{ r['active'] }}">
-              {% if r['active'] %}Désactiver{% else %}Activer{% endif %}
-            </button>
-            <button class="btn btn-xs btn-sm btn-outline-danger rw-delete-btn"
-                    data-id="{{ r['id'] }}" data-name="{{ r['name'] }}">
-              🗑
-            </button>
-          </td>
-        </tr>
-        {% endfor %}
-      </tbody>
-    </table>
-  </div>
-
-  <!-- Give reward to player -->
-  <hr class="mt-4">
-  <h6>Attribuer une récompense</h6>
-  <div class="row g-2 align-items-end mt-1">
-    <div class="col-auto">
-      <select id="give-reward-select" class="form-select form-select-sm" style="min-width:200px">
-        {% for r in rewards if r['active'] and r['stock'] > 0 %}
-        <option value="{{ r['id'] }}">{{ r['name'] }} (stock: {{ r['stock'] }})</option>
-        {% else %}
-        <option disabled>Aucune récompense disponible</option>
-        {% endfor %}
-      </select>
-    </div>
-    <div class="col-auto">
-      <input type="text" id="give-reward-username" class="form-control form-control-sm"
-             placeholder="Nom du joueur" style="min-width:160px">
-    </div>
-    <div class="col-auto">
-      <button id="btn-give-reward" class="btn btn-sm btn-success">Attribuer</button>
-    </div>
-    <div class="col-auto">
-      <span id="give-reward-status" class="small"></span>
-    </div>
-  </div>
+  <!-- Categories list populated by JS -->
+  <div id="catalogue-container"></div>
 </div>
+
 <!-- Vote festival -->
 <div class="card p-4 mb-4">
-  <h5>Vote festival</h5>
+  <h5 class="mb-3">Vote festival</h5>
 
-  {% if app_mode == 'vote' and current_vote %}
-  <!-- Vote en cours -->
-  <div class="mb-3">
-    <span class="badge bg-info fs-6">EN COURS</span>
-    <strong class="ms-2">{{ current_vote['film_title'] }}</strong>
-  </div>
-  <div class="row g-2 align-items-center mb-3">
-    <div class="col-auto">
-      <button id="btn-vote-close" class="btn btn-danger">Fermer le vote</button>
-    </div>
-  </div>
-  <!-- Résultats en temps réel -->
-  <div id="vote-results-panel">
-    <div id="vote-results-loading" class="text-muted small">Chargement des résultats…</div>
-    <div id="vote-results-content" style="display:none">
-      <div class="row align-items-center mb-3">
-        <div class="col-auto">
-          <span class="fw-bold" style="font-size:2.5rem;color:#E9C349" id="vr-avg">—</span>
-          <span class="text-muted">/10 pondérée</span>
-        </div>
-        <div class="col-auto ms-4">
-          <span id="vr-count" class="fs-5 fw-bold">0</span> <span class="text-muted">votant(s)</span>
-        </div>
-      </div>
-      <div class="mb-2 small text-muted">Répartition bonus :
-        <span class="badge bg-secondary ms-1">0 tok : <span id="vr-b0">0</span></span>
-        <span class="badge bg-primary ms-1">25 tok : <span id="vr-b25">0</span></span>
-        <span class="badge bg-warning text-dark ms-1">50 tok : <span id="vr-b50">0</span></span>
-      </div>
-      <div class="table-responsive mt-2">
-        <table class="table table-sm align-middle">
-          <thead><tr><th>Joueur</th><th>Note</th><th>Bonus</th><th>Score pondéré</th></tr></thead>
-          <tbody id="vr-table-body"></tbody>
-        </table>
-      </div>
+  <!-- Pastille statut -->
+  <div id="vote-status-badge" class="mb-3 px-3 py-2 rounded small fw-bold" style="display:none"></div>
+
+  <!-- Groupe : mode roulette -->
+  <div id="vote-group-roulette" class="mb-3" style="display:none">
+    <div class="d-flex gap-2 flex-wrap">
+      <button id="btn-vote-open" class="btn btn-sm btn-success">Ouvrir le vote</button>
     </div>
   </div>
 
-  {% else %}
-  <!-- Pas de vote en cours -->
-  <div class="row g-2 align-items-end mb-3">
-    <div class="col">
-      <input type="text" id="vote-film-title" class="form-control form-control-sm" placeholder="Titre du film">
+  <!-- Groupe : mode vote ouvert -->
+  <div id="vote-group-vote" style="display:none">
+    <div class="d-flex gap-2 flex-wrap mb-2">
+      <button id="btn-vote-close" class="btn btn-sm btn-warning text-dark">Fermer le vote</button>
     </div>
-    <div class="col-auto">
-      <button id="btn-vote-open" class="btn btn-success">Ouvrir vote</button>
+    <div class="mt-2">
+      <div id="vote-pending-notice" class="small mb-2" style="color:var(--mg-blush);display:none">
+        Sélectionnez une catégorie pour activer le vote pour les joueurs
+      </div>
+      <div class="small mb-1" style="color:var(--mg-rosewood)">Projeter :</div>
+      <div id="vote-display-category-btns" class="d-flex gap-2 flex-wrap mb-2"></div>
+      <button id="btn-vote-display-hide" class="btn btn-sm btn-outline-secondary">⏸ Masquer l'affichage</button>
     </div>
-    <div class="col-auto">
-      <button id="btn-vote-palmares" class="btn btn-outline-light"
-              {% if app_mode == 'palmares' %}disabled{% endif %}>
-        {% if app_mode == 'palmares' %}Palmarès affiché{% else %}Afficher palmarès{% endif %}
-      </button>
-    </div>
-    {% if app_mode == 'palmares' %}
-    <div class="col-auto">
-      <button id="btn-vote-roulette" class="btn btn-outline-secondary btn-sm">Repasser en roulette</button>
-    </div>
-    {% endif %}
   </div>
-  {% endif %}
+
+  <!-- Groupe : mode closed (vote fermé, avant palmarès) -->
+  <div id="vote-group-closed" class="mb-3" style="display:none">
+    <div class="d-flex gap-2 flex-wrap">
+      <button id="btn-vote-palmares" class="btn btn-sm btn-primary">Passer au palmarès</button>
+      <button id="btn-vote-reset-from-closed" class="btn btn-sm btn-outline-secondary">Retour roulette</button>
+    </div>
+  </div>
+
+  <!-- Groupe : mode palmares -->
+  <div id="vote-group-palmares" style="display:none">
+    <div class="small mb-1" style="color:var(--mg-rosewood)">Révéler et projeter :</div>
+    <div id="vote-palmares-category-btns" class="d-flex gap-2 flex-wrap mb-2"></div>
+    <div class="d-flex gap-2 flex-wrap align-items-center">
+      <span id="vote-reveal-counter" class="small" style="color:var(--mg-rosewood)"></span>
+      <button id="btn-vote-reset-from-palmares" class="btn btn-sm btn-outline-secondary">Retour roulette</button>
+    </div>
+  </div>
+
+  <!-- Zone erreur -->
+  <div id="vote-error-msg" class="small mt-2" style="display:none;color:var(--mg-ember)"></div>
 </div>
-<!-- Film management -->
-<div class="card p-4 mb-4">
-  <div class="d-flex justify-content-between align-items-center mb-3">
-    <button class="btn btn-link text-decoration-none p-0 h5 mb-0 text-white"
-            data-bs-toggle="collapse" data-bs-target="#films-list"
-            aria-expanded="true" aria-controls="films-list">
-      Films
-      <span id="films-list-chevron" class="ms-1 small">▲</span>
-    </button>
-    <span class="text-muted small">{{ vote_sessions | length }} session(s)</span>
+
+<!-- Vote tracking -->
+<div id="vote-tracking-section" class="card p-4 mb-4" style="display:none">
+  <h5 class="mb-3">Suivi des votes</h5>
+  <div class="mb-2 d-flex align-items-center gap-2">
+    <label class="small" style="color:var(--mg-rosewood)">Session :</label>
+    <select id="vote-tracking-session-select" class="form-select form-select-sm" style="max-width:260px">
+      <option value="">Session en cours</option>
+    </select>
   </div>
-
-  <div class="collapse show" id="films-list">
-    <div class="mb-3">
-      <input type="search" id="film-search" class="form-control form-control-sm"
-             placeholder="🔍 Rechercher un film…" autocomplete="off">
-    </div>
-
-    <div class="table-responsive" style="max-height:280px;overflow-y:auto">
-      <table class="table table-sm align-middle" id="films-table">
-        <thead>
-          <tr>
-            <th>Film</th><th>Statut</th><th>Votants</th><th>Note moy.</th><th>Date</th><th>Actions</th>
-          </tr>
-        </thead>
-        <tbody>
-          {% for vs in vote_sessions %}
-          <tr id="film-row-{{ vs['id'] }}">
-            <td id="film-title-{{ vs['id'] }}">{{ vs['film_title'] }}</td>
-            <td>
-              <span class="badge {% if vs['status'] == 'open' %}bg-success
-                                 {% elif vs['status'] == 'closed' %}bg-secondary
-                                 {% else %}bg-warning text-dark{% endif %}">
-                {{ vs['status'] | upper }}
-              </span>
-            </td>
-            <td>{{ vs['voter_count'] }}</td>
-            <td>{% if vs['avg_score'] %}{{ vs['avg_score'] }}{% else %}—{% endif %}</td>
-            <td class="text-muted small">
-              {% if vs['opened_at'] %}{{ vs['opened_at'][:10] }}{% else %}—{% endif %}
-            </td>
-            <td class="d-flex gap-1">
-              <button class="btn btn-sm btn-secondary film-rename-btn"
-                      data-id="{{ vs['id'] }}" data-title="{{ vs['film_title'] }}"
-                      {% if vs['status'] == 'open' %}disabled{% endif %}>
-                ✏️
-              </button>
-              <button class="btn btn-sm btn-outline-danger film-delete-btn"
-                      data-id="{{ vs['id'] }}" data-title="{{ vs['film_title'] }}"
-                      {% if vs['status'] == 'open' %}disabled{% endif %}>
-                🗑
-              </button>
-            </td>
-          </tr>
-          {% else %}
-          <tr><td colspan="6" class="text-muted text-center">Aucun film enregistré.</td></tr>
-          {% endfor %}
-        </tbody>
-      </table>
-    </div>
-    <div id="films-no-result" class="text-muted small text-center py-2" style="display:none">
-      Aucun film trouvé.
-    </div>
+  <div id="vote-tracking-content">
+    <span style="color:var(--mg-rosewood)">En attente d'un vote ouvert…</span>
   </div>
 </div>
+
 {% endblock %}
 {% block scripts %}
 <script src="/static/js/admin.js"></script>

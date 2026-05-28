@@ -403,245 +403,382 @@ document.querySelectorAll('.reset-pw-btn').forEach(btn => {
   });
 });
 
-// ── Add reward ────────────────────────────────────────────────────────────────
-$('btn-add-reward').addEventListener('click', async () => {
-  const name  = $('rw-name').value.trim();
-  const desc  = $('rw-desc').value.trim();
-  const cost  = parseInt($('rw-cost').value);
-  const stock = parseInt($('rw-stock').value) || 0;
-  if (!name || !cost || cost <= 0) return alert('Nom et coût requis.');
-  const [s, d] = await post('/api/admin/rewards', {name, description: desc, token_cost: cost, stock});
-  if (s === 200) {
-    location.reload();
-  } else {
-    alert(d.error || 'Erreur');
+// ── Vote catalogue ────────────────────────────────────────────────────────────
+let catalogueData = [];   // [{id, name, display_order, films:[{id,title}]}]
+
+async function loadCatalogue() {
+  try {
+    const r = await fetch('/api/admin/vote/catalogue');
+    if (!r.ok) return;
+    const d = await r.json();
+    catalogueData = d.categories || [];
+    renderCatalogue();
+  } catch(e) {}
+}
+
+function renderCatalogue() {
+  const container = $('catalogue-container');
+  if (!container) return;
+  container.innerHTML = '';
+  if (!catalogueData.length) {
+    container.innerHTML = '<p class="text-muted small">Aucune catégorie.</p>';
+    return;
   }
-});
+  catalogueData.forEach(cat => {
+    const catDiv = document.createElement('div');
+    catDiv.className = 'mb-3 p-3 border rounded';
+    catDiv.style.borderColor = 'var(--mg-claret)';
 
-// ── Save reward stock ─────────────────────────────────────────────────────────
-document.querySelectorAll('.rw-save-btn').forEach(btn => {
-  btn.addEventListener('click', async () => {
-    const rid   = parseInt(btn.dataset.id);
-    const stock = parseInt(document.querySelector(`.rw-stock-input[data-id="${rid}"]`).value);
-    const [s]   = await post(`/api/admin/rewards/${rid}`, {stock});
-    if (s !== 200) alert('Erreur lors de la sauvegarde.');
-  });
-});
+    const header = document.createElement('div');
+    header.className = 'd-flex align-items-center gap-2 mb-2';
+    header.innerHTML = `
+      <strong class="flex-grow-1">${cat.name}</strong>
+      <button class="btn btn-sm btn-outline-danger del-cat-btn" data-id="${cat.id}">🗑</button>
+    `;
+    catDiv.appendChild(header);
 
-// ── Delete reward ─────────────────────────────────────────────────────────────
-document.querySelectorAll('.rw-delete-btn').forEach(btn => {
-  btn.addEventListener('click', () => {
-    const rid  = parseInt(btn.dataset.id);
-    const name = btn.dataset.name;
-    showConfirm(
-      'Supprimer la récompense',
-      `Supprimer « ${name} » ? L'historique des attributions sera également supprimé.`,
-      async () => {
-        const [s, d] = await post(`/api/admin/rewards/${rid}/delete`);
-        if (s === 200) {
-          const row = document.getElementById(`reward-row-${rid}`);
-          if (row) row.remove();
-        } else {
-          alert(d.error || 'Erreur');
-        }
-      }
-    );
-  });
-});
-
-// ── Toggle reward ─────────────────────────────────────────────────────────────
-document.querySelectorAll('.rw-toggle-btn').forEach(btn => {
-  btn.addEventListener('click', async () => {
-    const rid    = parseInt(btn.dataset.id);
-    const active = btn.dataset.active === '1' ? 0 : 1;
-    const [s]    = await post(`/api/admin/rewards/${rid}`, {active});
-    if (s === 200) location.reload();
-    else alert('Erreur');
-  });
-});
-
-// ── Give reward ───────────────────────────────────────────────────────────────
-const btnGiveReward = $('btn-give-reward');
-if (btnGiveReward) {
-  btnGiveReward.addEventListener('click', () => {
-    const username  = $('give-reward-username').value.trim();
-    const reward_id = parseInt($('give-reward-select').value);
-    if (!username) return alert('Saisissez le nom du joueur.');
-    if (!reward_id) return;
-    showConfirm(
-      'Attribuer une récompense',
-      `Attribuer la récompense à « ${username} » ?`,
-      async () => {
-        const [s, d] = await post('/api/admin/reward/give', {username, reward_id});
-        const statusEl = $('give-reward-status');
-        if (s === 200) {
-          statusEl.textContent = `✅ Attribuée à ${username}`;
-          statusEl.className = 'small text-success';
-          $('give-reward-username').value = '';
-          // Refresh page so stock counts update
-          setTimeout(() => location.reload(), 1200);
-        } else {
-          statusEl.textContent = d.error || 'Erreur';
-          statusEl.className = 'small text-danger';
-        }
-      }
-    );
-  });
-}
-
-// ── Vote ──────────────────────────────────────────────────────────────────────
-const btnVoteOpen     = $('btn-vote-open');
-const btnVoteClose    = $('btn-vote-close');
-const btnVotePalmares = $('btn-vote-palmares');
-const btnVoteRoulette = $('btn-vote-roulette');
-
-if (btnVoteOpen) {
-  btnVoteOpen.addEventListener('click', async () => {
-    const film_title = $('vote-film-title').value.trim();
-    if (!film_title) return alert('Saisissez le titre du film.');
-    const [s, d] = await post('/api/vote/open', {film_title});
-    if (s === 200) location.reload();
-    else alert(d.error || 'Erreur');
-  });
-}
-
-if (btnVoteClose) {
-  btnVoteClose.addEventListener('click', async () => {
-    if (!confirm('Fermer le vote en cours ?')) return;
-    const [s, d] = await post('/api/vote/close');
-    if (s === 200) location.reload();
-    else alert(d.error || 'Erreur');
-  });
-}
-
-if (btnVotePalmares) {
-  btnVotePalmares.addEventListener('click', async () => {
-    const [s, d] = await post('/api/vote/palmares');
-    if (s === 200) location.reload();
-    else alert(d.error || 'Erreur');
-  });
-}
-
-if (btnVoteRoulette) {
-  btnVoteRoulette.addEventListener('click', async () => {
-    const [s, d] = await post('/api/vote/reset-mode');
-    if (s === 200) location.reload();
-    else alert(d.error || 'Erreur');
-  });
-}
-
-// ── Films list collapse — chevron toggle ─────────────────────────────────────
-const filmsListEl  = document.getElementById('films-list');
-const filmsChevron = $('films-list-chevron');
-if (filmsListEl && filmsChevron) {
-  filmsListEl.addEventListener('show.bs.collapse', () => { filmsChevron.textContent = '▲'; });
-  filmsListEl.addEventListener('hide.bs.collapse', () => { filmsChevron.textContent = '▼'; });
-}
-
-// ── Film search filter ────────────────────────────────────────────────────────
-const filmSearch = $('film-search');
-if (filmSearch) {
-  filmSearch.addEventListener('input', () => {
-    const q = filmSearch.value.toLowerCase().trim();
-    const rows = document.querySelectorAll('#films-table tbody tr');
-    let visible = 0;
-    rows.forEach(row => {
-      const title = row.querySelector('td')?.textContent.toLowerCase() || '';
-      const show  = !q || title.includes(q);
-      row.style.display = show ? '' : 'none';
-      if (show) visible++;
+    // Films list
+    const filmList = document.createElement('ul');
+    filmList.className = 'list-group mb-2';
+    (cat.films || []).forEach(f => {
+      const li = document.createElement('li');
+      li.className = 'list-group-item d-flex justify-content-between align-items-center';
+      li.style.background = 'var(--mg-velvet)';
+      li.style.color = 'var(--mg-ivory)';
+      li.style.borderColor = 'var(--mg-oxblood)';
+      li.innerHTML = `
+        <span>${f.title}</span>
+        <button class="btn btn-sm btn-outline-danger del-film-btn" data-id="${f.id}">🗑</button>
+      `;
+      filmList.appendChild(li);
     });
-    const noResult = $('films-no-result');
-    if (noResult) noResult.style.display = (visible === 0 && rows.length > 0) ? '' : 'none';
+    catDiv.appendChild(filmList);
+
+    // Add film form
+    const addFilmRow = document.createElement('div');
+    addFilmRow.className = 'd-flex gap-2';
+    addFilmRow.innerHTML = `
+      <input type="text" class="form-control form-control-sm film-title-input" placeholder="Titre du film">
+      <button class="btn btn-sm btn-success add-film-btn text-nowrap" data-cat-id="${cat.id}">+ Film</button>
+    `;
+    catDiv.appendChild(addFilmRow);
+    container.appendChild(catDiv);
+  });
+
+  // Bind delete category
+  container.querySelectorAll('.del-cat-btn').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const cid = parseInt(btn.dataset.id);
+      if (!confirm('Supprimer cette catégorie et tous ses films ?')) return;
+      const [s, d] = await post(`/api/admin/vote/categories/${cid}/delete`);
+      if (s === 200) { await loadCatalogue(); }
+      else alert(d.error || 'Erreur');
+    });
+  });
+
+  // Bind add film
+  container.querySelectorAll('.add-film-btn').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const catId = parseInt(btn.dataset.catId);
+      const input = btn.previousElementSibling;
+      const title = input.value.trim();
+      if (!title) return;
+      const [s, d] = await post('/api/admin/vote/films', {title, category_id: catId});
+      if (s === 200) { input.value = ''; await loadCatalogue(); }
+      else alert(d.error || 'Erreur');
+    });
+  });
+
+  // Bind delete film
+  container.querySelectorAll('.del-film-btn').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const fid = parseInt(btn.dataset.id);
+      if (!confirm('Supprimer ce film ?')) return;
+      const [s, d] = await post(`/api/admin/vote/films/${fid}/delete`);
+      if (s === 200) { await loadCatalogue(); }
+      else alert(d.error || 'Erreur');
+    });
   });
 }
 
-// ── Film delete ───────────────────────────────────────────────────────────────
-document.querySelectorAll('.film-delete-btn').forEach(btn => {
-  btn.addEventListener('click', () => {
-    const vid   = parseInt(btn.dataset.id);
-    const title = btn.dataset.title;
-    showConfirm(
-      'Supprimer le film',
-      `Supprimer « ${title} » et tous ses votes ? Cette action est irréversible.`,
-      async () => {
-        const [s, d] = await post(`/api/admin/vote/${vid}/delete`);
-        if (s === 200) {
-          const row = document.getElementById(`film-row-${vid}`);
-          if (row) row.remove();
-        } else {
-          alert(d.error || 'Erreur');
-        }
-      }
-    );
-  });
-});
-
-// ── Film rename ───────────────────────────────────────────────────────────────
-document.querySelectorAll('.film-rename-btn').forEach(btn => {
-  btn.addEventListener('click', async () => {
-    const vid      = parseInt(btn.dataset.id);
-    const current  = btn.dataset.title;
-    const newTitle = prompt(`Nouveau titre pour « ${current} » :`, current);
-    if (!newTitle || newTitle.trim() === current) return;
-    const [s, d] = await post(`/api/admin/vote/${vid}/rename`, {film_title: newTitle.trim()});
+const addCatBtn = $('btn-add-cat');
+if (addCatBtn) {
+  addCatBtn.addEventListener('click', async () => {
+    const input = $('new-cat-name');
+    const name  = input.value.trim();
+    if (!name) return;
+    const [s, d] = await post('/api/admin/vote/categories', {name});
+    const fb = $('catalogue-feedback');
     if (s === 200) {
-      const cell = document.getElementById(`film-title-${vid}`);
-      if (cell) cell.textContent = d.film_title;
-      btn.dataset.title = d.film_title;
-      const delBtn = document.querySelector(`.film-delete-btn[data-id="${vid}"]`);
-      if (delBtn) delBtn.dataset.title = d.film_title;
+      input.value = '';
+      fb.style.display = 'none';
+      await loadCatalogue();
     } else {
-      alert(d.error || 'Erreur');
+      fb.textContent = d.error || 'Erreur';
+      fb.style.display = '';
+      fb.style.color = 'var(--mg-ember)';
     }
   });
+}
+
+// ── Vote festival controls ────────────────────────────────────────────────────
+
+const btnVoteOpen              = document.getElementById('btn-vote-open');
+const btnVoteClose             = document.getElementById('btn-vote-close');
+const btnVotePalmares          = document.getElementById('btn-vote-palmares');
+const btnVoteResetFromClosed   = document.getElementById('btn-vote-reset-from-closed');
+const btnVoteResetFromPalmares = document.getElementById('btn-vote-reset-from-palmares');
+const btnVoteDisplayHide       = document.getElementById('btn-vote-display-hide');
+const voteRevealCounter        = document.getElementById('vote-reveal-counter');
+const voteBadge                = document.getElementById('vote-status-badge');
+const voteErrorMsg             = document.getElementById('vote-error-msg');
+const catBtnsWrap              = document.getElementById('vote-display-category-btns');
+const palmaresGatsBtnsWrap     = document.getElementById('vote-palmares-category-btns');
+
+let trackingInterval = null;
+
+const VOTE_GROUPS = ['roulette', 'vote', 'closed', 'palmares'];
+
+function showVoteGroup(mode) {
+  VOTE_GROUPS.forEach(m => {
+    const el = document.getElementById('vote-group-' + m);
+    if (el) el.style.display = (m === mode) ? '' : 'none';
+  });
+}
+
+function hideVoteError() {
+  if (voteErrorMsg) voteErrorMsg.style.display = 'none';
+}
+
+function showVoteError(msg) {
+  if (!voteErrorMsg) return;
+  voteErrorMsg.textContent = msg;
+  voteErrorMsg.style.display = '';
+}
+
+async function loadVoteTracking(sessionId = null) {
+  try {
+    const url = sessionId
+      ? `/api/admin/vote/tracking?session_id=${sessionId}`
+      : '/api/admin/vote/tracking';
+    const r = await fetch(url);
+    if (!r.ok) return;
+    const data = await r.json();
+    renderVoteTracking(data);
+  } catch(e) {}
+}
+
+async function loadVoteSessions() {
+  try {
+    const r = await fetch('/api/admin/vote/sessions');
+    if (!r.ok) return;
+    const data = await r.json();
+    const sel = document.getElementById('vote-tracking-session-select');
+    if (!sel) return;
+    const cur = sel.value;
+    sel.innerHTML = '<option value="">Session en cours</option>' +
+      data.sessions.map(s =>
+        `<option value="${s.id}">#${s.id} — ${s.status}${s.closed_at ? ' (' + s.closed_at.slice(0, 10) + ')' : ''}</option>`
+      ).join('');
+    sel.value = cur;
+  } catch(e) {}
+}
+
+document.getElementById('vote-tracking-session-select')
+  ?.addEventListener('change', function() {
+    const sid = this.value ? parseInt(this.value) : null;
+    clearInterval(trackingInterval);
+    trackingInterval = null;
+    if (!sid) trackingInterval = setInterval(loadVoteTracking, 3000);
+    loadVoteTracking(sid);
+  });
+
+function renderVoteTracking(data) {
+  const cont = document.getElementById('vote-tracking-content');
+  if (!cont) return;
+  if (!data.session_id || data.categories.length === 0) {
+    cont.innerHTML = '<span style="color:var(--mg-rosewood)">Aucune catégorie.</span>';
+    return;
+  }
+  cont.innerHTML = data.categories.map(cat => {
+    const filmMap = {};
+    cat.films.forEach(f => { filmMap[f.id] = f.title; });
+
+    const header = `<th>Joueur</th>` +
+      cat.films.map(f =>
+        `<th style="font-size:0.75rem">${f.title}</th>`
+      ).join('') +
+      `<th>Boost</th>`;
+
+    const rows = cat.voters.length === 0
+      ? `<tr><td colspan="${cat.films.length + 2}"
+             style="color:var(--mg-rosewood)">Aucun vote</td></tr>`
+      : cat.voters.map(v => {
+          const rankMap = {};
+          v.rankings.forEach(r => { rankMap[r.film_id] = r.rank; });
+          return `<tr>
+            <td>${v.username}</td>
+            ${cat.films.map(f =>
+              `<td>${rankMap[f.id] ?? '—'}</td>`
+            ).join('')}
+            <td>${v.boost > 0 ? v.boost + '🔥' : '—'}</td>
+          </tr>`;
+        }).join('');
+
+    return `
+      <div class="mb-4">
+        <div class="small fw-bold mb-1" style="color:var(--mg-blush)">
+          ${cat.name} — ${cat.voter_count} votant(s) — ${cat.total_boost} jetons misés
+        </div>
+        <div style="overflow-x:auto">
+          <table class="table table-sm mb-0" style="font-size:0.8rem">
+            <thead><tr>${header}</tr></thead>
+            <tbody>${rows}</tbody>
+          </table>
+        </div>
+      </div>`;
+  }).join('');
+}
+
+async function voteAction(btn, url, body = {}) {
+  const orig = btn.textContent;
+  btn.disabled = true;
+  btn.style.opacity = '0.5';
+  btn.textContent = '…';
+  hideVoteError();
+  try {
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json', 'X-CSRFToken': CSRF},
+      body: JSON.stringify(body)
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Erreur serveur');
+    await updateVoteStatus();
+  } catch(e) {
+    showVoteError(e.message);
+  } finally {
+    btn.disabled = false;
+    btn.style.opacity = '1';
+    btn.textContent = orig;
+  }
+}
+
+async function updateVoteStatus() {
+  try {
+    const r = await fetch('/api/session/status');
+    if (!r.ok) return;
+    const d = await r.json();
+
+    const mode     = d.app_mode || 'roulette';
+    const vs       = d.vote_session;
+    const revealed = Array.isArray(d.revealed_categories) ? d.revealed_categories : [];
+    const total    = d.total_vote_categories || 0;
+    const dispCat  = d.vote_display_category_id || null;
+    const cats     = Array.isArray(d.vote_categories) ? d.vote_categories : [];
+
+    if (voteBadge) {
+      voteBadge.style.display = '';
+      const labels = {
+        roulette: 'Roulette en cours',
+        vote:     `Vote ouvert — session #${vs ? vs.id : '?'}`,
+        closed:   vs ? `Vote fermé — session #${vs.id}` : 'Vote fermé',
+        palmares: 'Palmarès',
+      };
+      voteBadge.textContent = labels[mode] || mode;
+      const styles = {
+        roulette: { bg: 'var(--mg-velvet)', color: 'var(--mg-rosewood)' },
+        vote:     { bg: 'var(--mg-velvet)', color: 'var(--mg-blush)' },
+        closed:   { bg: 'var(--mg-oxblood)', color: 'var(--mg-ember)' },
+        palmares: { bg: 'var(--mg-velvet)', color: 'var(--mg-flame)' },
+      };
+      const s = styles[mode] || styles.roulette;
+      voteBadge.style.background = s.bg;
+      voteBadge.style.color = s.color;
+    }
+
+    showVoteGroup(mode);
+
+    if (mode === 'vote' && catBtnsWrap) {
+      catBtnsWrap.innerHTML = cats.map(c =>
+        `<button class="btn btn-sm ${dispCat === c.id ? 'btn-primary' : 'btn-outline-light'}"
+                 data-cat-id="${c.id}">▶ ${c.name}</button>`
+      ).join('');
+    }
+
+    // A3 — pending notice when vote is open but no category is projected yet
+    const pendingNotice = document.getElementById('vote-pending-notice');
+    if (pendingNotice) {
+      pendingNotice.style.display = (mode === 'vote' && !dispCat) ? '' : 'none';
+    }
+
+    // A5 — palmares category buttons (all cats, revealed highlighted)
+    if (mode === 'palmares' && palmaresGatsBtnsWrap) {
+      const allRevealed = revealed.length >= cats.length && cats.length > 0;
+      palmaresGatsBtnsWrap.innerHTML = cats.map(c => {
+        const isRevealed = revealed.includes(c.id);
+        return `<button class="btn btn-sm ${isRevealed ? 'btn-primary' : 'btn-outline-secondary'}"
+                        data-palmares-cat-id="${c.id}">▶ ${c.name}${isRevealed ? ' ✓' : ''}</button>`;
+      }).join('');
+      if (voteRevealCounter) {
+        voteRevealCounter.textContent = allRevealed
+          ? `${revealed.length}/${cats.length} révélées — cliquez pour reprojeter`
+          : `${revealed.length}/${cats.length} révélées`;
+      }
+    }
+
+    // A4 — tracking visible en mode vote, closed et palmares
+    const trackingSection = document.getElementById('vote-tracking-section');
+    if (mode === 'vote' || mode === 'closed' || mode === 'palmares') {
+      if (trackingSection) trackingSection.style.display = '';
+      loadVoteSessions();
+      const sel = document.getElementById('vote-tracking-session-select');
+      if (!sel?.value) {
+        if (!trackingInterval) trackingInterval = setInterval(loadVoteTracking, 3000);
+        loadVoteTracking();
+      }
+    } else {
+      if (trackingSection) trackingSection.style.display = 'none';
+      clearInterval(trackingInterval);
+      trackingInterval = null;
+    }
+  } catch(e) {}
+}
+
+btnVoteOpen?.addEventListener('click', () =>
+  voteAction(btnVoteOpen, '/api/admin/vote/open'));
+
+btnVoteClose?.addEventListener('click', () =>
+  voteAction(btnVoteClose, '/api/admin/vote/close'));
+
+btnVotePalmares?.addEventListener('click', () =>
+  voteAction(btnVotePalmares, '/api/admin/vote/palmares'));
+
+[btnVoteResetFromClosed, btnVoteResetFromPalmares]
+  .forEach(btn => btn?.addEventListener('click', () =>
+    voteAction(btn, '/api/admin/vote/reset-mode')));
+
+btnVoteDisplayHide?.addEventListener('click', () =>
+  voteAction(btnVoteDisplayHide, '/api/admin/vote/display-category', {category_id: null}));
+
+catBtnsWrap?.addEventListener('click', e => {
+  const btn = e.target.closest('[data-cat-id]');
+  if (!btn) return;
+  voteAction(btn, '/api/admin/vote/display-category',
+             {category_id: parseInt(btn.dataset.catId)});
 });
 
-// ── Vote results polling (when vote is open) ──────────────────────────────────
-const vrPanel = $('vote-results-panel');
-if (vrPanel) {
-  let vrSessionId = null;
-  // Read session id from the close button's data or from page context
-  const closeBtn = $('btn-vote-close');
-  // The session_id comes from the current_vote embedded in the page — read via API
-  async function loadVoteResults() {
-    try {
-      const r = await fetch('/api/session/status');
-      const d = await r.json();
-      if (d.vote_session && d.vote_session.id) {
-        vrSessionId = d.vote_session.id;
-        const r2 = await fetch(`/api/vote/results?session_id=${vrSessionId}`);
-        if (r2.ok) {
-          const data = await r2.json();
-          $('vr-avg').textContent   = data.avg_weighted_score || '—';
-          $('vr-count').textContent = data.voter_count;
-          $('vr-b0').textContent    = data.bonus_breakdown[0];
-          $('vr-b25').textContent   = data.bonus_breakdown[25];
-          $('vr-b50').textContent   = data.bonus_breakdown[50];
-          const tbody = $('vr-table-body');
-          tbody.innerHTML = '';
-          (data.votes || []).forEach(v => {
-            const tr = document.createElement('tr');
-            const td1 = document.createElement('td');
-            td1.textContent = v.username;
-            const td2 = document.createElement('td');
-            td2.textContent = `${v.score}/10`;
-            const td3 = document.createElement('td');
-            td3.textContent = `${v.bonus_amount} tok`;
-            const td4 = document.createElement('td');
-            td4.textContent = String(v.weighted_score);
-            tr.appendChild(td1);
-            tr.appendChild(td2);
-            tr.appendChild(td3);
-            tr.appendChild(td4);
-            tbody.appendChild(tr);
-          });
-          $('vote-results-loading').style.display = 'none';
-          $('vote-results-content').style.display = '';
-        }
-      }
-    } catch(e) {}
-    setTimeout(loadVoteResults, 5000);
-  }
-  loadVoteResults();
-}
+palmaresGatsBtnsWrap?.addEventListener('click', e => {
+  const btn = e.target.closest('[data-palmares-cat-id]');
+  if (!btn) return;
+  voteAction(btn, '/api/admin/vote/reveal-next',
+             {category_id: parseInt(btn.dataset.palmaresCatId)});
+});
+
+
+// Boot: load catalogue + poll vote status every 2s
+loadCatalogue();
+loadVoteSessions();
+updateVoteStatus();
+setInterval(updateVoteStatus, 2000);
+

@@ -47,14 +47,6 @@ def _force_spin(admin_client, winning_number: int):
     assert r.status_code == 200, f"_force_spin failed ({r.status_code}): {r.data}"
 
 
-def _create_reward(admin_client, name='Cadeau', cost=100, stock=5) -> int:
-    r = admin_client.post('/api/admin/rewards',
-                          json={'name': name, 'token_cost': cost, 'stock': stock},
-                          headers={'X-CSRFToken': 'test'})
-    assert r.status_code == 200, f"_create_reward failed: {r.data}"
-    return r.get_json()['id']
-
-
 def _place_bet(client, bet_type='color', bet_value='red', amount=50):
     return client.post('/api/bet',
                        json={'bet_type': bet_type, 'bet_value': bet_value, 'amount': amount},
@@ -86,12 +78,6 @@ def _insert_closed_session_with_bet(username: str, bet_type: str, bet_value: str
         )
         conn.execute('COMMIT')
     return sid
-
-
-def _vote(client, score: int, bonus: int):
-    return client.post('/api/vote/submit',
-                       json={'score': score, 'bonus_amount': bonus},
-                       headers={'X-CSRFToken': 'test'})
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -332,56 +318,6 @@ class TestBets:
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# TestRewards
-# ═══════════════════════════════════════════════════════════════════════════════
-
-class TestRewards:
-
-    def test_admin_give_reward(self, app, admin_client, player_client):
-        """Admin give endpoint → stock -1, claim created, tokens untouched."""
-        rid = _create_reward(admin_client, cost=100, stock=5)
-        _set_tokens('player1', 200)
-        r = admin_client.post('/api/admin/reward/give',
-                              json={'username': 'player1', 'reward_id': rid},
-                              headers={'X-CSRFToken': 'test'})
-        assert r.status_code == 200
-        assert r.get_json().get('ok') is True
-        with db_conn() as conn:
-            rw  = conn.execute('SELECT stock FROM rewards WHERE id=?', (rid,)).fetchone()
-            uid = conn.execute('SELECT id FROM users WHERE username=?', ('player1',)).fetchone()['id']
-            clm = conn.execute(
-                'SELECT id FROM reward_claims WHERE user_id=? AND reward_id=?', (uid, rid)
-            ).fetchone()
-            tokens = conn.execute('SELECT tokens FROM users WHERE id=?', (uid,)).fetchone()['tokens']
-        assert rw['stock'] == 4
-        assert clm is not None
-        assert tokens == 200
-
-    def test_admin_give_reward_unknown_user(self, app, admin_client):
-        """Unknown username → 404."""
-        rid = _create_reward(admin_client, cost=10, stock=5)
-        r = admin_client.post('/api/admin/reward/give',
-                              json={'username': 'nobody', 'reward_id': rid},
-                              headers={'X-CSRFToken': 'test'})
-        assert r.status_code == 404
-
-    def test_admin_give_reward_out_of_stock(self, app, admin_client, player_client):
-        """stock=0 → 400."""
-        rid = _create_reward(admin_client, cost=10, stock=0)
-        r = admin_client.post('/api/admin/reward/give',
-                              json={'username': 'player1', 'reward_id': rid},
-                              headers={'X-CSRFToken': 'test'})
-        assert r.status_code == 400
-
-    def test_admin_give_reward_forbidden_player(self, app, player_client):
-        """Player cannot call admin give endpoint."""
-        r = player_client.post('/api/admin/reward/give',
-                               json={'username': 'player1', 'reward_id': 1},
-                               headers={'X-CSRFToken': 'test'})
-        assert r.status_code == 403
-
-
-# ═══════════════════════════════════════════════════════════════════════════════
 # TestLeaderboard
 # ═══════════════════════════════════════════════════════════════════════════════
 
@@ -449,344 +385,6 @@ class TestLeaderboard:
         assert len(d['winners']) >= 1
         assert d['winners'][0]['net'] > 0
 
-    def test_leaderboard_boost_deducted_from_net(self, app, player_client):
-        """Vote boost spend est déduit du net P&L dans le leaderboard."""
-        # player1 gagne 50 au roulette (bet 50 → payout 100, net = +50)
-        _insert_closed_session_with_bet('player1', 'color', 'red', 50, 100, 3)
-        # player1 a dépensé 25 en boost vote
-        with db_conn() as conn:
-            uid = conn.execute('SELECT id FROM users WHERE username=?', ('player1',)).fetchone()['id']
-            conn.execute('INSERT INTO vote_boosts(user_id, amount) VALUES (?,?)', (uid, 25))
-            conn.commit()
-        r = player_client.get('/api/leaderboard')
-        d = r.get_json()
-        # net = 50 (roulette) - 25 (boost) = 25 > 0 → doit apparaître dans top_winners
-        assert any(w['username'] == 'player1' and w['net'] == 25 for w in d['top_winners'])
-
-
-# ═══════════════════════════════════════════════════════════════════════════════
-# TestVoteOpen
-# ═══════════════════════════════════════════════════════════════════════════════
-
-class TestVoteOpen:
-
-    def test_open_vote_session_admin(self, app, admin_client):
-        """Admin ouvre vote → vote_session créée, app_mode='vote'."""
-        r = admin_client.post('/api/vote/open',
-                              json={'film_title': 'Dune'},
-                              headers={'X-CSRFToken': 'test'})
-        assert r.status_code == 200
-        assert r.get_json()['ok'] is True
-        assert _get_config('app_mode') == 'vote'
-        with db_conn() as conn:
-            vs = conn.execute("SELECT * FROM vote_sessions WHERE status='open'").fetchone()
-        assert vs is not None
-        assert vs['film_title'] == 'Dune'
-
-    def test_open_vote_forbidden_player(self, app, player_client):
-        """Player → 403."""
-        r = player_client.post('/api/vote/open',
-                               json={'film_title': 'Dune'},
-                               headers={'X-CSRFToken': 'test'})
-        assert r.status_code == 403
-
-    def test_cannot_open_vote_if_already_open(self, app, admin_client, open_vote_session):
-        """Deuxième ouverture → 400."""
-        r = admin_client.post('/api/vote/open',
-                              json={'film_title': 'Dune 2'},
-                              headers={'X-CSRFToken': 'test'})
-        assert r.status_code == 400
-
-    def test_session_status_returns_app_mode_vote(self, app, client, open_vote_session):
-        """Status retourne app_mode='vote' + film_title correct."""
-        r = client.get('/api/session/status')
-        d = r.get_json()
-        assert d['app_mode'] == 'vote'
-        assert d['vote_session'] is not None
-        assert d['vote_session']['film_title'] == 'Film Test'
-
-
-# ═══════════════════════════════════════════════════════════════════════════════
-# TestVoteSubmit
-# ═══════════════════════════════════════════════════════════════════════════════
-
-class TestVoteSubmit:
-
-    def test_vote_submit_no_bonus(self, app, player_client, open_vote_session):
-        """score=7, bonus=0 → tokens inchangés, weighted_score=7.0."""
-        tokens_before = _get_tokens('player1')
-        r = _vote(player_client, 7, 0)
-        assert r.status_code == 200, r.get_json()
-        d = r.get_json()
-        assert d['tokens_remaining'] == tokens_before
-        assert d['weighted_score'] == 7.0
-
-    def test_vote_submit_bonus_25(self, app, player_client, open_vote_session):
-        """score=8, bonus=25 → tokens -25, weighted_score=12.0."""
-        tokens_before = _get_tokens('player1')
-        r = _vote(player_client, 8, 25)
-        assert r.status_code == 200, r.get_json()
-        d = r.get_json()
-        assert d['tokens_remaining'] == tokens_before - 25
-        assert d['weighted_score'] == 12.0
-
-    def test_vote_submit_bonus_50(self, app, player_client, open_vote_session):
-        """score=6, bonus=50 → tokens -50, weighted_score=12.0."""
-        tokens_before = _get_tokens('player1')
-        r = _vote(player_client, 6, 50)
-        assert r.status_code == 200, r.get_json()
-        d = r.get_json()
-        assert d['tokens_remaining'] == tokens_before - 50
-        assert d['weighted_score'] == 12.0
-
-    def test_vote_modify_bonus_up(self, app, player_client, open_vote_session):
-        """Modifier bonus 0→25 → delta -25 tokens."""
-        _vote(player_client, 5, 0)
-        tokens_mid = _get_tokens('player1')
-        r = _vote(player_client, 5, 25)
-        assert r.status_code == 200, r.get_json()
-        assert _get_tokens('player1') == tokens_mid - 25
-
-    def test_vote_modify_bonus_down(self, app, player_client, open_vote_session):
-        """Modifier bonus 50→25 → remboursement +25."""
-        _vote(player_client, 5, 50)
-        tokens_mid = _get_tokens('player1')
-        r = _vote(player_client, 5, 25)
-        assert r.status_code == 200, r.get_json()
-        assert _get_tokens('player1') == tokens_mid + 25
-
-    def test_vote_modify_bonus_remove(self, app, player_client, open_vote_session):
-        """Modifier bonus 50→0 → remboursement +50."""
-        _vote(player_client, 5, 50)
-        tokens_mid = _get_tokens('player1')
-        r = _vote(player_client, 5, 0)
-        assert r.status_code == 200, r.get_json()
-        assert _get_tokens('player1') == tokens_mid + 50
-
-    def test_vote_modify_score_only(self, app, player_client, open_vote_session):
-        """Changer score sans changer bonus → tokens inchangés, weighted recalculé."""
-        _vote(player_client, 5, 25)
-        tokens_mid = _get_tokens('player1')
-        r = _vote(player_client, 8, 25)
-        assert r.status_code == 200, r.get_json()
-        assert _get_tokens('player1') == tokens_mid
-        assert r.get_json()['weighted_score'] == 12.0
-
-    def test_vote_insufficient_tokens_for_bonus(self, app, player_client, open_vote_session):
-        """Solde < 25 → 400 sur bonus=25, tokens inchangés."""
-        _set_tokens('player1', 10)
-        tokens_before = _get_tokens('player1')
-        r = _vote(player_client, 7, 25)
-        assert r.status_code == 400
-        assert _get_tokens('player1') == tokens_before
-
-    def test_vote_outside_open_session(self, app, player_client):
-        """Soumettre sans vote_session ouverte → 400."""
-        r = _vote(player_client, 7, 0)
-        assert r.status_code == 400
-
-    def test_vote_score_out_of_range(self, app, player_client, open_vote_session):
-        """score=0 ou score=11 → 400."""
-        assert _vote(player_client, 0, 0).status_code == 400
-        assert _vote(player_client, 11, 0).status_code == 400
-
-    def test_vote_invalid_bonus(self, app, player_client, open_vote_session):
-        """bonus=30 → 400."""
-        r = _vote(player_client, 7, 30)
-        assert r.status_code == 400
-
-    def test_vote_upsert_single_row(self, app, player_client, open_vote_session):
-        """Voter deux fois → une seule ligne en DB (UPSERT)."""
-        _vote(player_client, 5, 0)
-        _vote(player_client, 8, 0)
-        with db_conn() as conn:
-            count = conn.execute(
-                'SELECT COUNT(*) FROM votes WHERE vote_session_id=?', (open_vote_session,)
-            ).fetchone()[0]
-        assert count == 1
-
-    def test_vote_delta_atomic_no_double_spend(self, app, player_client, open_vote_session):
-        """Deux soumissions simultanées bonus=25 depuis un premier vote bonus=0
-        → tokens débités au maximum -25 (pas -50).
-        """
-        _vote(player_client, 5, 0)
-        tokens_after_first = _get_tokens('player1')
-
-        results = []
-
-        def do_vote():
-            with app.test_client() as c:
-                _login(c, 'player1', 'playerpass')
-                r = _vote(c, 7, 25)
-                results.append(r.status_code)
-
-        t1 = threading.Thread(target=do_vote)
-        t2 = threading.Thread(target=do_vote)
-        t1.start(); t2.start()
-        t1.join(); t2.join()
-
-        assert 200 in results, f"Au moins une doit réussir, résultats={results}"
-        final_tokens = _get_tokens('player1')
-        # Delta max autorisé = -25 (une seule transition 0→25)
-        assert final_tokens >= tokens_after_first - 25, \
-            f"Double débit détecté : {tokens_after_first} → {final_tokens}"
-
-
-# ═══════════════════════════════════════════════════════════════════════════════
-# TestVoteClose
-# ═══════════════════════════════════════════════════════════════════════════════
-
-class TestVoteClose:
-
-    def test_close_vote_session_admin(self, app, admin_client, open_vote_session):
-        """Admin ferme vote → status='closed', app_mode='roulette'."""
-        r = admin_client.post('/api/vote/close',
-                              json={}, headers={'X-CSRFToken': 'test'})
-        assert r.status_code == 200
-        assert _get_config('app_mode') == 'roulette'
-        assert _get_config('current_vote_session_id') == ''
-        with db_conn() as conn:
-            vs = conn.execute(
-                'SELECT status FROM vote_sessions WHERE id=?', (open_vote_session,)
-            ).fetchone()
-        assert vs['status'] == 'closed'
-
-    def test_close_vote_forbidden_player(self, app, player_client, open_vote_session):
-        """Player → 403."""
-        r = player_client.post('/api/vote/close',
-                               json={}, headers={'X-CSRFToken': 'test'})
-        assert r.status_code == 403
-
-    def test_close_vote_when_none_open(self, app, admin_client):
-        """Fermer sans session ouverte → 400."""
-        r = admin_client.post('/api/vote/close',
-                              json={}, headers={'X-CSRFToken': 'test'})
-        assert r.status_code == 400
-
-    def test_vote_submit_rejected_after_close(self, app, admin_client, player_client, open_vote_session):
-        """Soumettre après fermeture → 400."""
-        admin_client.post('/api/vote/close', json={}, headers={'X-CSRFToken': 'test'})
-        r = _vote(player_client, 7, 0)
-        assert r.status_code == 400
-
-
-# ═══════════════════════════════════════════════════════════════════════════════
-# TestVoteResults
-# ═══════════════════════════════════════════════════════════════════════════════
-
-class TestVoteResults:
-
-    def test_results_admin_only(self, app, player_client, open_vote_session):
-        """Player → 403."""
-        r = player_client.get(f'/api/vote/results?session_id={open_vote_session}')
-        assert r.status_code == 403
-
-    def test_results_correct_avg_weighted_score(self, app, admin_client, player_client,
-                                                player2_client, open_vote_session):
-        """3 votes variés → avg_weighted_score correct."""
-        # player1 : score=7, bonus=0 → weighted=7.0
-        _vote(player_client, 7, 0)
-        # player2 : score=8, bonus=25 → weighted=12.0
-        _vote(player2_client, 8, 25)
-        # player3 : score=6, bonus=50 → weighted=12.0
-        _create_user(db_module.DATABASE, 'player3', 'p3pass', 'player', tokens=1000)
-        with app.test_client() as c3:
-            _login(c3, 'player3', 'p3pass')
-            _vote(c3, 6, 50)
-
-        expected_avg = round((7.0 + 12.0 + 12.0) / 3, 2)
-        r = admin_client.get(f'/api/vote/results?session_id={open_vote_session}')
-        assert r.status_code == 200
-        d = r.get_json()
-        assert d['avg_weighted_score'] == expected_avg
-
-    def test_results_voter_count(self, app, admin_client, player_client,
-                                 player2_client, open_vote_session):
-        """N votes → voter_count=N."""
-        _vote(player_client, 7, 0)
-        _vote(player2_client, 5, 0)
-        r = admin_client.get(f'/api/vote/results?session_id={open_vote_session}')
-        assert r.get_json()['voter_count'] == 2
-
-    def test_results_bonus_breakdown(self, app, admin_client, player_client,
-                                     player2_client, open_vote_session):
-        """Répartition 0/25/50 comptée correctement."""
-        _vote(player_client, 7, 0)
-        _vote(player2_client, 8, 25)
-        r = admin_client.get(f'/api/vote/results?session_id={open_vote_session}')
-        bd = r.get_json()['bonus_breakdown']
-        assert bd['0'] == 1
-        assert bd['25'] == 1
-        assert bd['50'] == 0
-
-    def test_results_unknown_session(self, app, admin_client):
-        """session_id inexistant → 404."""
-        r = admin_client.get('/api/vote/results?session_id=99999')
-        assert r.status_code == 404
-
-
-# ═══════════════════════════════════════════════════════════════════════════════
-# TestPalmares
-# ═══════════════════════════════════════════════════════════════════════════════
-
-class TestPalmares:
-
-    def _run_vote_session(self, admin_client, film_title: str, votes: list) -> int:
-        """Ouvre un vote, fait voter, ferme. votes = [(client, score, bonus), ...]"""
-        r = admin_client.post('/api/vote/open',
-                              json={'film_title': film_title},
-                              headers={'X-CSRFToken': 'test'})
-        assert r.status_code == 200, f"open failed: {r.data}"
-        vsid = r.get_json()['vote_session_id']
-        for c, score, bonus in votes:
-            _vote(c, score, bonus)
-        admin_client.post('/api/vote/close', json={}, headers={'X-CSRFToken': 'test'})
-        return vsid
-
-    def test_palmares_admin_only(self, app, player_client):
-        """Player → 403."""
-        r = player_client.post('/api/vote/palmares',
-                               json={}, headers={'X-CSRFToken': 'test'})
-        assert r.status_code == 403
-
-    def test_palmares_sets_app_mode(self, app, admin_client):
-        """POST /api/vote/palmares → app_mode='palmares'."""
-        r = admin_client.post('/api/vote/palmares',
-                              json={}, headers={'X-CSRFToken': 'test'})
-        assert r.status_code == 200
-        assert _get_config('app_mode') == 'palmares'
-
-    def test_palmares_blocked_if_vote_open(self, app, admin_client, open_vote_session):
-        """Session vote ouverte → 400."""
-        r = admin_client.post('/api/vote/palmares',
-                              json={}, headers={'X-CSRFToken': 'test'})
-        assert r.status_code == 400
-
-    def test_summary_sorted_by_score_desc(self, app, admin_client, player_client):
-        """3 films → retournés dans l'ordre décroissant de avg_weighted_score."""
-        self._run_vote_session(admin_client, 'Film A', [(player_client, 9, 0)])  # avg=9.0
-        self._run_vote_session(admin_client, 'Film B', [(player_client, 5, 0)])  # avg=5.0
-        self._run_vote_session(admin_client, 'Film C', [(player_client, 7, 0)])  # avg=7.0
-        r = admin_client.get('/api/vote/summary')
-        assert r.status_code == 200
-        titles = [f['film_title'] for f in r.get_json()]
-        assert titles == ['Film A', 'Film C', 'Film B']
-
-    def test_summary_admin_only(self, app, player_client):
-        """Player → 403."""
-        r = player_client.get('/api/vote/summary')
-        assert r.status_code == 403
-
-    def test_reset_mode_returns_to_roulette(self, app, admin_client):
-        """POST /api/vote/reset-mode depuis palmares → app_mode='roulette'."""
-        admin_client.post('/api/vote/palmares', json={}, headers={'X-CSRFToken': 'test'})
-        assert _get_config('app_mode') == 'palmares'
-        r = admin_client.post('/api/vote/reset-mode',
-                              json={}, headers={'X-CSRFToken': 'test'})
-        assert r.status_code == 200
-        assert _get_config('app_mode') == 'roulette'
-
-
 # ═══════════════════════════════════════════════════════════════════════════════
 # TestAdminActions
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -841,35 +439,412 @@ class TestAdminActions:
                            follow_redirects=False)
             assert r_new.status_code == 302
 
-    def test_create_reward_admin(self, app, admin_client):
-        """Admin crée récompense → stock et token_cost corrects."""
-        r = admin_client.post('/api/admin/rewards',
-                              json={'name': 'Bière', 'token_cost': 75, 'stock': 10},
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Vote — helpers
+# ═══════════════════════════════════════════════════════════════════════════════
+
+def _create_category(admin_client, name):
+    r = admin_client.post('/api/admin/vote/categories',
+                          json={'name': name}, headers={'X-CSRFToken': 'test'})
+    assert r.status_code == 200, r.get_json()
+    return r.get_json()['id']
+
+
+def _add_film(admin_client, title, cat_id):
+    r = admin_client.post('/api/admin/vote/films',
+                          json={'title': title, 'category_id': cat_id},
+                          headers={'X-CSRFToken': 'test'})
+    assert r.status_code == 200, r.get_json()
+    return r.get_json()['id']
+
+
+def _open_vote(admin_client):
+    r = admin_client.post('/api/admin/vote/open',
+                          json={}, headers={'X-CSRFToken': 'test'})
+    assert r.status_code == 200, r.get_json()
+    return r.get_json()['session_id']
+
+
+def _close_vote(admin_client):
+    r = admin_client.post('/api/admin/vote/close',
+                          json={}, headers={'X-CSRFToken': 'test'})
+    assert r.status_code == 200, r.get_json()
+
+
+def _submit_rankings(player_client, cat_id, film_ids):
+    rankings = [{'film_id': fid, 'rank': i + 1} for i, fid in enumerate(film_ids)]
+    r = player_client.post('/api/vote/rankings',
+                           json={'category_id': cat_id, 'rankings': rankings},
+                           headers={'X-CSRFToken': 'test'})
+    return r
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# TestVoteCategories
+# ═══════════════════════════════════════════════════════════════════════════════
+
+class TestVoteCategories:
+    def test_create_category_admin(self, app, admin_client):
+        r = admin_client.post('/api/admin/vote/categories',
+                              json={'name': 'Drame'}, headers={'X-CSRFToken': 'test'})
+        assert r.status_code == 200
+        d = r.get_json()
+        assert d['name'] == 'Drame'
+        assert 'id' in d
+
+    def test_create_category_duplicate(self, app, admin_client):
+        _create_category(admin_client, 'Action')
+        r = admin_client.post('/api/admin/vote/categories',
+                              json={'name': 'Action'}, headers={'X-CSRFToken': 'test'})
+        assert r.status_code == 409
+
+    def test_create_category_forbidden_player(self, app, player_client):
+        r = player_client.post('/api/admin/vote/categories',
+                               json={'name': 'Comédie'}, headers={'X-CSRFToken': 'test'})
+        assert r.status_code == 403
+
+    def test_delete_category_admin(self, app, admin_client):
+        cid = _create_category(admin_client, 'Horreur')
+        r = admin_client.post(f'/api/admin/vote/categories/{cid}/delete',
+                              json={}, headers={'X-CSRFToken': 'test'})
+        assert r.status_code == 200
+        with db_conn() as conn:
+            row = conn.execute('SELECT id FROM vote_categories WHERE id=?', (cid,)).fetchone()
+        assert row is None
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# TestVoteFilms
+# ═══════════════════════════════════════════════════════════════════════════════
+
+class TestVoteFilms:
+    def test_add_film_admin(self, app, admin_client):
+        cid = _create_category(admin_client, 'SF')
+        r = admin_client.post('/api/admin/vote/films',
+                              json={'title': 'Interstellar', 'category_id': cid},
                               headers={'X-CSRFToken': 'test'})
         assert r.status_code == 200
-        rid = r.get_json()['id']
-        with db_conn() as conn:
-            rw = conn.execute('SELECT * FROM rewards WHERE id=?', (rid,)).fetchone()
-        assert rw['token_cost'] == 75
-        assert rw['stock'] == 10
-        assert rw['active'] == 1
+        assert r.get_json()['title'] == 'Interstellar'
 
-    def test_toggle_reward_active(self, app, admin_client):
-        """Reward active → inactive → active."""
-        rid = _create_reward(admin_client, cost=50, stock=5)
-
-        # Désactiver
-        r = admin_client.post(f'/api/admin/rewards/{rid}',
-                              json={'active': 0},
+    def test_add_film_duplicate(self, app, admin_client):
+        cid = _create_category(admin_client, 'Aventure')
+        _add_film(admin_client, 'Avatar', cid)
+        r = admin_client.post('/api/admin/vote/films',
+                              json={'title': 'Avatar', 'category_id': cid},
                               headers={'X-CSRFToken': 'test'})
+        assert r.status_code == 409
+
+    def test_delete_film_admin(self, app, admin_client):
+        cid = _create_category(admin_client, 'Western')
+        fid = _add_film(admin_client, 'Django', cid)
+        r = admin_client.post(f'/api/admin/vote/films/{fid}/delete',
+                              json={}, headers={'X-CSRFToken': 'test'})
         assert r.status_code == 200
         with db_conn() as conn:
-            assert conn.execute('SELECT active FROM rewards WHERE id=?', (rid,)).fetchone()['active'] == 0
+            row = conn.execute('SELECT id FROM vote_films WHERE id=?', (fid,)).fetchone()
+        assert row is None
 
-        # Réactiver
-        r = admin_client.post(f'/api/admin/rewards/{rid}',
-                              json={'active': 1},
-                              headers={'X-CSRFToken': 'test'})
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# TestVoteSession
+# ═══════════════════════════════════════════════════════════════════════════════
+
+class TestVoteSession:
+    def test_open_session_admin(self, app, admin_client):
+        r = admin_client.post('/api/admin/vote/open',
+                              json={}, headers={'X-CSRFToken': 'test'})
+        assert r.status_code == 200
+        assert 'session_id' in r.get_json()
+        with db_conn() as conn:
+            cfg = conn.execute("SELECT value FROM app_config WHERE key='app_mode'").fetchone()
+        assert cfg['value'] == 'vote'
+
+    def test_open_session_twice(self, app, admin_client):
+        _open_vote(admin_client)
+        r = admin_client.post('/api/admin/vote/open',
+                              json={}, headers={'X-CSRFToken': 'test'})
+        assert r.status_code == 400
+
+    def test_close_session_computes_points(self, app, admin_client, player_client):
+        cid = _create_category(admin_client, 'Comédie')
+        fid1 = _add_film(admin_client, 'Film A', cid)
+        fid2 = _add_film(admin_client, 'Film B', cid)
+        _open_vote(admin_client)
+        _submit_rankings(player_client, cid, [fid1, fid2])
+        _close_vote(admin_client)
+        with db_conn() as conn:
+            ranks = conn.execute(
+                'SELECT points FROM vote_rankings ORDER BY rank'
+            ).fetchall()
+        assert len(ranks) == 2
+        assert ranks[0]['points'] > ranks[1]['points']
+
+    def test_palmares_after_close(self, app, admin_client):
+        _open_vote(admin_client)
+        _close_vote(admin_client)
+        r = admin_client.post('/api/admin/vote/palmares',
+                              json={}, headers={'X-CSRFToken': 'test'})
         assert r.status_code == 200
         with db_conn() as conn:
-            assert conn.execute('SELECT active FROM rewards WHERE id=?', (rid,)).fetchone()['active'] == 1
+            cfg = conn.execute("SELECT value FROM app_config WHERE key='app_mode'").fetchone()
+        assert cfg['value'] == 'palmares'
+
+    def test_reset_mode(self, app, admin_client):
+        _open_vote(admin_client)
+        _close_vote(admin_client)
+        admin_client.post('/api/admin/vote/palmares', json={}, headers={'X-CSRFToken': 'test'})
+        r = admin_client.post('/api/admin/vote/reset-mode',
+                              json={}, headers={'X-CSRFToken': 'test'})
+        assert r.status_code == 200
+        with db_conn() as conn:
+            cfg = conn.execute("SELECT value FROM app_config WHERE key='app_mode'").fetchone()
+        assert cfg['value'] == 'roulette'
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# TestVoteRankings
+# ═══════════════════════════════════════════════════════════════════════════════
+
+class TestVoteRankings:
+    def _setup(self, admin_client):
+        cid  = _create_category(admin_client, 'Thriller')
+        fid1 = _add_film(admin_client, 'Film X', cid)
+        fid2 = _add_film(admin_client, 'Film Y', cid)
+        fid3 = _add_film(admin_client, 'Film Z', cid)
+        _open_vote(admin_client)
+        return cid, fid1, fid2, fid3
+
+    def test_submit_rankings_valid(self, app, admin_client, player_client):
+        cid, fid1, fid2, fid3 = self._setup(admin_client)
+        r = _submit_rankings(player_client, cid, [fid1, fid2, fid3])
+        assert r.status_code == 200
+
+    def test_submit_rankings_invalid_sequence(self, app, admin_client, player_client):
+        cid, fid1, fid2, fid3 = self._setup(admin_client)
+        r = player_client.post('/api/vote/rankings',
+                               json={'category_id': cid,
+                                     'rankings': [{'film_id': fid1, 'rank': 1},
+                                                  {'film_id': fid2, 'rank': 3}]},
+                               headers={'X-CSRFToken': 'test'})
+        assert r.status_code == 400
+
+    def test_submit_rankings_wrong_category(self, app, admin_client, player_client):
+        cid, fid1, fid2, fid3 = self._setup(admin_client)
+        cid2 = _create_category(admin_client, 'Action2')
+        fid_wrong = _add_film(admin_client, 'Wrong Film', cid2)
+        r = player_client.post('/api/vote/rankings',
+                               json={'category_id': cid,
+                                     'rankings': [{'film_id': fid_wrong, 'rank': 1}]},
+                               headers={'X-CSRFToken': 'test'})
+        assert r.status_code == 400
+
+    def test_submit_outside_session(self, app, admin_client, player_client):
+        cid  = _create_category(admin_client, 'Romance')
+        fid1 = _add_film(admin_client, 'Film R', cid)
+        # No open vote session
+        r = player_client.post('/api/vote/rankings',
+                               json={'category_id': cid,
+                                     'rankings': [{'film_id': fid1, 'rank': 1}]},
+                               headers={'X-CSRFToken': 'test'})
+        assert r.status_code == 400
+
+    def test_upsert_rankings(self, app, admin_client, player_client):
+        cid, fid1, fid2, fid3 = self._setup(admin_client)
+        _submit_rankings(player_client, cid, [fid1, fid2, fid3])
+        # Resubmit with different order
+        r = _submit_rankings(player_client, cid, [fid3, fid1, fid2])
+        assert r.status_code == 200
+        with db_conn() as conn:
+            rk = conn.execute(
+                'SELECT rank FROM vote_rankings WHERE film_id=? ORDER BY rank',
+                (fid3,)
+            ).fetchone()
+        assert rk['rank'] == 1
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# TestVoteBoosts
+# ═══════════════════════════════════════════════════════════════════════════════
+
+class TestVoteBoosts:
+    def _setup(self, admin_client, player_client):
+        cid = _create_category(admin_client, 'Animation')
+        _add_film(admin_client, 'Film A1', cid)
+        _open_vote(admin_client)
+        return cid
+
+    def test_boost_25_deducts_tokens(self, app, admin_client, player_client):
+        cid = self._setup(admin_client, player_client)
+        before = _get_tokens('player1')
+        r = player_client.post('/api/vote/boost',
+                               json={'category_id': cid, 'amount': 25},
+                               headers={'X-CSRFToken': 'test'})
+        assert r.status_code == 200
+        d = r.get_json()
+        assert d['tokens_remaining'] == before - 25
+
+    def test_boost_insufficient_tokens(self, app, admin_client, player_client):
+        cid = self._setup(admin_client, player_client)
+        _set_tokens('player1', 10)
+        r = player_client.post('/api/vote/boost',
+                               json={'category_id': cid, 'amount': 25},
+                               headers={'X-CSRFToken': 'test'})
+        assert r.status_code == 400
+
+    def test_boost_change_refunds_delta(self, app, admin_client, player_client):
+        cid = self._setup(admin_client, player_client)
+        player_client.post('/api/vote/boost',
+                           json={'category_id': cid, 'amount': 50},
+                           headers={'X-CSRFToken': 'test'})
+        before_change = _get_tokens('player1')
+        r = player_client.post('/api/vote/boost',
+                               json={'category_id': cid, 'amount': 25},
+                               headers={'X-CSRFToken': 'test'})
+        assert r.status_code == 200
+        d = r.get_json()
+        # Going 50→25: refund 25
+        assert d['tokens_remaining'] == before_change + 25
+
+    def test_boost_reset_to_zero_refunds(self, app, admin_client, player_client):
+        cid = self._setup(admin_client, player_client)
+        player_client.post('/api/vote/boost',
+                           json={'category_id': cid, 'amount': 25},
+                           headers={'X-CSRFToken': 'test'})
+        before = _get_tokens('player1')
+        r = player_client.post('/api/vote/boost',
+                               json={'category_id': cid, 'amount': 0},
+                               headers={'X-CSRFToken': 'test'})
+        assert r.status_code == 200
+        assert r.get_json()['tokens_remaining'] == before + 25
+
+    def test_boost_custom_amount(self, app, admin_client, player_client):
+        cid = self._setup(admin_client, player_client)
+        before = _get_tokens('player1')
+        r = player_client.post('/api/vote/boost',
+                               json={'category_id': cid, 'amount': 75},
+                               headers={'X-CSRFToken': 'test'})
+        assert r.status_code == 200
+        assert r.get_json()['tokens_remaining'] == before - 75
+
+    def test_boost_exceeds_max(self, app, admin_client, player_client):
+        cid = self._setup(admin_client, player_client)
+        r = player_client.post('/api/vote/boost',
+                               json={'category_id': cid, 'amount': 301},
+                               headers={'X-CSRFToken': 'test'})
+        assert r.status_code == 400
+        r2 = player_client.post('/api/vote/boost',
+                                json={'category_id': cid, 'amount': 300},
+                                headers={'X-CSRFToken': 'test'})
+        assert r2.status_code == 200
+
+    def test_boost_negative(self, app, admin_client, player_client):
+        cid = self._setup(admin_client, player_client)
+        r = player_client.post('/api/vote/boost',
+                               json={'category_id': cid, 'amount': -10},
+                               headers={'X-CSRFToken': 'test'})
+        assert r.status_code == 400
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# TestVoteState
+# ═══════════════════════════════════════════════════════════════════════════════
+
+class TestVoteState:
+    def test_state_no_session(self, app, player_client):
+        r = player_client.get('/api/vote/state')
+        assert r.status_code == 200
+        d = r.get_json()
+        assert d['session'] is None
+
+    def test_state_with_session_and_rankings(self, app, admin_client, player_client):
+        cid  = _create_category(admin_client, 'Doc')
+        fid1 = _add_film(admin_client, 'Doc A', cid)
+        fid2 = _add_film(admin_client, 'Doc B', cid)
+        _open_vote(admin_client)
+        # Project the category so players can see it (U1 fix — only displayed cat returned)
+        admin_client.post('/api/admin/vote/display-category',
+                          json={'category_id': cid}, headers={'X-CSRFToken': 'test'})
+        _submit_rankings(player_client, cid, [fid1, fid2])
+
+        r = player_client.get('/api/vote/state')
+        assert r.status_code == 200
+        d = r.get_json()
+        assert d['session']['status'] == 'open'
+        cat = d['categories'][0]
+        assert len(cat['user_rankings']) == 2
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# TestVoteResults
+# ═══════════════════════════════════════════════════════════════════════════════
+
+class TestVoteResults:
+    def test_results_empty_revealed(self, app, admin_client):
+        cid  = _create_category(admin_client, 'Musical')
+        _add_film(admin_client, 'Musical A', cid)
+        _open_vote(admin_client)
+        _close_vote(admin_client)
+        admin_client.post('/api/admin/vote/palmares', json={}, headers={'X-CSRFToken': 'test'})
+        r = admin_client.get('/api/vote/results')
+        assert r.status_code == 200
+        d = r.get_json()
+        assert d['categories'][0]['revealed'] is False
+        assert d['categories'][0]['films'][0]['score'] is None
+
+    def test_results_partial_reveal(self, app, admin_client, player_client):
+        cid1 = _create_category(admin_client, 'CatA')
+        cid2 = _create_category(admin_client, 'CatB')
+        _add_film(admin_client, 'Film1', cid1)
+        _add_film(admin_client, 'Film2', cid2)
+        _open_vote(admin_client)
+        _close_vote(admin_client)
+        admin_client.post('/api/admin/vote/palmares', json={}, headers={'X-CSRFToken': 'test'})
+        admin_client.post('/api/admin/vote/reveal-next', json={}, headers={'X-CSRFToken': 'test'})
+        r = admin_client.get('/api/vote/results')
+        d = r.get_json()
+        revealed_cats = [c for c in d['categories'] if c['revealed']]
+        hidden_cats   = [c for c in d['categories'] if not c['revealed']]
+        assert len(revealed_cats) == 1
+        assert len(hidden_cats) == 1
+
+    def test_results_score_calculation(self, app, admin_client, player_client):
+        cid  = _create_category(admin_client, 'ScoreTest')
+        fid1 = _add_film(admin_client, 'Top Film', cid)
+        fid2 = _add_film(admin_client, 'Second Film', cid)
+        _open_vote(admin_client)
+        _submit_rankings(player_client, cid, [fid1, fid2])
+        _close_vote(admin_client)
+        admin_client.post('/api/admin/vote/palmares', json={}, headers={'X-CSRFToken': 'test'})
+        admin_client.post('/api/admin/vote/reveal-next', json={}, headers={'X-CSRFToken': 'test'})
+        r = admin_client.get('/api/vote/results')
+        d = r.get_json()
+        cat = d['categories'][0]
+        assert cat['revealed'] is True
+        # Top film should be rank 1
+        top = [f for f in cat['films'] if f['rank'] == 1][0]
+        assert top['title'] == 'Top Film'
+        assert top['score'] > 0
+
+    def test_reveal_next_admin(self, app, admin_client):
+        _create_category(admin_client, 'RevealMe')
+        _open_vote(admin_client)
+        _close_vote(admin_client)
+        admin_client.post('/api/admin/vote/palmares', json={}, headers={'X-CSRFToken': 'test'})
+        r = admin_client.post('/api/admin/vote/reveal-next',
+                              json={}, headers={'X-CSRFToken': 'test'})
+        assert r.status_code == 200
+        d = r.get_json()
+        assert d['category_name'] == 'RevealMe'
+        assert d['all_revealed'] is True
+
+    def test_reveal_next_all_revealed(self, app, admin_client):
+        _create_category(admin_client, 'OnlyCat')
+        _open_vote(admin_client)
+        _close_vote(admin_client)
+        admin_client.post('/api/admin/vote/palmares', json={}, headers={'X-CSRFToken': 'test'})
+        admin_client.post('/api/admin/vote/reveal-next', json={}, headers={'X-CSRFToken': 'test'})
+        r = admin_client.post('/api/admin/vote/reveal-next',
+                              json={}, headers={'X-CSRFToken': 'test'})
+        assert r.status_code == 400
+

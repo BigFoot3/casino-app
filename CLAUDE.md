@@ -3,7 +3,7 @@
 Application roulette en ligne pour événements en présentiel — jusqu'à 100 joueurs simultanés.
 
 > Fichier de référence pour Claude Code. Mettre à jour après chaque milestone.
-> Dernière mise à jour : 2026-05-25 (feuille roulette — agrandie 100px + halo Midnight Gala + pulse)
+> Dernière mise à jour : 2026-05-28 (audit CLAUDE.md : schéma DB, routes, tests, formule vote points, pièges — synchronisation avec codebase réel)
 
 ---
 
@@ -76,8 +76,7 @@ Direction artistique appliquée en session 4 (2026-05-14). Référence : `design
 | `base.html` | Navbar : logo1.png (32px) + texte, admin btn → `btn-primary` ; favicon → logo1.png (remplace SVG data URI) |
 | `login.html` | `.login-wrap` / `.login-card`, logo (64px), eyebrow, `.mg-page-title--login` |
 | `dashboard.html` | `.mg-page-head`, `.mg-kpi` pour tokens, suppression style inline, `btn-primary` |
-| `rewards.html` | `.mg-page-head`, `.token-badge` |
-| `admin/index.html` | `.mg-page-head`, suppression `table-dark` (3 tables), suppression emojis sections, nettoyage couleurs boutons |
+| `admin/index.html` | `.mg-page-head`, suppression `table-dark` (3 tables), suppression emojis sections, nettoyage couleurs boutons ; `#vote-tracking-section` (card suivi votes, masquée par défaut) |
 | `roulette/display.html` | CSS : `#7DE0A8`→`--mg-blush`, `#FFB4AB`→`--mg-ember`, overrides `#72727F`→`--mg-rosewood` ; logo2.png en `position: absolute` dans `#main-wrap` ; favicon logo1.png ajoutée |
 
 ### Modifications session 7 (2026-05-15)
@@ -107,7 +106,7 @@ routes/
                      # + /rewards retourne claimed_ids (IDs des récompenses déjà réclamées)
   admin.py           # /admin
   api.py             # /api/session/*  /api/bet  /api/admin/*
-templates/           # Jinja2 — base.html, dashboard.html, login.html, play.html, rewards.html
+templates/           # Jinja2 — base.html, dashboard.html, login.html, play.html
 static/
   css/
     midnight-gala.css  # tout le CSS de l'app (refactor 2026-04-19, DA midnight-gala 2026-05-14, Neue Machina 2026-05-15)
@@ -129,16 +128,25 @@ static/
                      # + filtre recherche live users et films
                      # + CRUD films (renommer, supprimer) et suppression récompenses
                      # + set-role-btn : bascule player↔admin en place (super-admin uniquement)
+                     # + section vote réécrite : groupes HTML (vote-group-roulette/vote/closed/palmares)
+                     #   showVoteGroup(mode) ; voteAction() avec finally ; event delegation sur catBtnsWrap
+                     # + loadVoteTracking() / renderVoteTracking() — polling 3s quand app_mode=vote
+                     #   → tableau votants×films×rangs×boosts par catégorie (via /api/admin/vote/tracking)
+                     # + trackingInterval géré dans updateVoteStatus() : activé/désactivé selon mode
     display.js       # Lance spinWheel() depuis polling /api/session/status
                      # + cache leaderboard (isSpinning + lastLeaderboardCache) : tops
                      #   jamais vidés pendant le spin
+                     # + pollVoteDisplay() → /api/vote/display-state (public, sans auth)
+                     #   renderSingleVoteCategory(data) affiche catégorie projetée + social_boost + voter_count
+                     # + voteDisplayLoop() toutes les 5s (était 10s) ; forçage fresh fetch sur changement catId
   roulette/          # milsaware/javascript-roulette (cloné)
 logs/                # access.log, error.log (Gunicorn)
 casino.db            # Créé automatiquement au premier lancement
 tests/
   conftest.py        # Fixtures : app, admin_client, player_client, player2_client, open_session
-  test_casino.py     # 72 tests unitaires
+  test_casino.py     # 65 tests (64 passed + 1 xfail intentionnel)
   locustfile.py      # Load testing Locust — 3 scénarios (CasinoPlayer, BetStorm, PollingOnly)
+  setup_load_test.py # Script de génération des 100 comptes de test Locust
   load_test_users.json  # 100 comptes de test pré-générés (ne pas commiter)
   run_load_test.sh   # Wrapper bash pour lancer locust en headless
 .github/
@@ -163,26 +171,43 @@ requirements-dev.txt # pytest==8.3.5, pytest-cov==6.1.0 (dépendances dev unique
 | `GET /play` | player | Interface de mise |
 | `GET /rewards` | player | Catalogue de récompenses |
 | `GET /roulette/display` | player | Affichage salle (grand écran) |
-| `GET /admin` | admin | Panel administrateur |
-| `GET /api/leaderboard` | api | Top 3 plus-values / top 3 moins-values — net P&L = roulette gains − vote_boosts spend. Retourne `top_winners` + `top_losers` (plus de `top_holders`). |
+| `GET /api/leaderboard` | api | Top 5 plus-values / top 5 moins-values — net P&L. Retourne `top_winners` + `top_losers`. |
 | `GET /api/session/status` | api | Statut courant (JSON) + `app_mode` + `vote_session` |
-| `POST /api/session/open` | api | Ouvrir une session roulette (admin) |
-| `POST /api/session/spin` | api | Lancer la roue (admin) |
+| `GET /api/session/round_result` | api | Résultat du dernier spin (numéro gagnant, payouts) |
+| `GET /api/session/result` | api | Résultat de la session courante pour le joueur connecté |
+| `GET /api/session/bets` | api | Mises du joueur sur la session courante |
+| `GET /api/session/qr` | api | QR code de la session courante |
+| `GET /api/history` | api | Historique des sessions fermées |
 | `POST /api/bet` | api | Placer une mise (joueur) |
-| `POST /api/admin/*` | api | Actions admin (tokens, users, rewards) |
-| `POST /api/vote/open` | api | Ouvrir un vote film (admin) — body: `{film_title}` |
-| `POST /api/vote/close` | api | Fermer le vote courant (admin) |
-| `POST /api/vote/submit` | api | Voter (joueur) — body: `{score, bonus_amount}` |
-| `GET /api/vote/results?session_id=X` | api | Résultats détaillés (admin) |
-| `POST /api/vote/palmares` | api | Passer en mode palmarès (admin) |
-| `GET /api/vote/summary` | api | Toutes les sessions fermées triées par note (admin) |
-| `POST /api/vote/reset-mode` | api | Repasser en mode roulette (admin) |
-| `POST /api/admin/vote/<id>/delete` | api | Supprimer une session film + ses votes (admin) |
-| `POST /api/admin/vote/<id>/rename` | api | Renommer le titre d'un film (admin) — body: `{film_title}` |
-| `POST /api/admin/rewards/<id>/delete` | api | Supprimer une récompense + son historique claims (admin) |
+| `GET /api/vote/state` | api | État du vote courant (joueur) |
+| `POST /api/vote/rankings` | api | Soumettre/modifier son classement de films (joueur) |
+| `POST /api/vote/boost` | api | Ajouter un boost jetons sur une catégorie (joueur) |
+| `POST /api/admin/session/open` | api | Ouvrir une session roulette (admin) |
+| `POST /api/admin/session/spin` | api | Lancer la roue (admin) |
+| `POST /api/admin/session/close` | api | Fermer la session en cours (admin) |
+| `POST /api/admin/stats/reset` | api | Remettre à zéro les statistiques (admin) |
+| `POST /api/admin/mode` | api | Changer le mode manuel/auto (admin) |
 | `POST /api/admin/users/create` | api | Créer un utilisateur — rôle admin réservé au super-admin |
 | `POST /api/admin/users/<id>/delete` | api | Supprimer un utilisateur — admins réservés au super-admin |
 | `POST /api/admin/users/<id>/set-role` | api | Changer le rôle player↔admin (super-admin uniquement) |
+| `POST /api/admin/users/<uid>/zero-tokens` | api | Remettre les jetons d'un joueur à zéro (admin) |
+| `POST /api/admin/users/<uid>/decrement-tokens` | api | Déduire des jetons d'un joueur (admin) |
+| `POST /api/admin/users/<uid>/reset-password` | api | Réinitialiser le mot de passe d'un joueur (admin) |
+| `GET /api/admin/vote/catalogue` | api | Catalogue catégories + films (admin) |
+| `POST /api/admin/vote/categories` | api | Créer une catégorie (admin) |
+| `POST /api/admin/vote/categories/<cid>/delete` | api | Supprimer une catégorie (admin) |
+| `POST /api/admin/vote/films` | api | Ajouter un film à une catégorie (admin) |
+| `POST /api/admin/vote/films/<fid>/delete` | api | Supprimer un film (admin) |
+| `POST /api/admin/vote/open` | api | Ouvrir un vote (admin) |
+| `POST /api/admin/vote/close` | api | Fermer le vote courant (admin) |
+| `POST /api/admin/vote/display-category` | api | Choisir la catégorie affichée (admin) |
+| `POST /api/admin/vote/palmares` | api | Passer en mode palmarès (admin) |
+| `POST /api/admin/vote/reset-mode` | api | Repasser en mode roulette (admin) |
+| `GET /api/admin/vote/sessions` | api | Toutes les sessions fermées triées par note (admin) |
+| `GET /api/vote/display-state` | api | **Public (sans auth)** — état vote pour display.html : `{session, display_category{id,name,social_boost,voter_count}}` |
+| `GET /api/admin/vote/tracking` | api | Suivi votes en cours (admin) — matrice votants×films×rangs×boosts par catégorie |
+| `GET /api/vote/results` | api | Résultats détaillés par catégorie (admin) |
+| `POST /api/admin/*` | api | Actions admin génériques (tokens, users) |
 
 ---
 
@@ -192,18 +217,21 @@ requirements-dev.txt # pytest==8.3.5, pytest-cov==6.1.0 (dépendances dev unique
 users          (id, username, password_hash, role, tokens, created_at)
 game_sessions  (id, status, mode, auto_interval_seconds, winning_number, opened_at, closed_at, created_at)
 bets           (id, session_id, user_id, bet_type, bet_value, amount, payout)
-rewards        (id, name, description, token_cost, stock, active)
-reward_claims  (id, user_id, reward_id, claimed_at)
-app_config     (key, value)   -- auto_mode_ui, auto_mode_enabled, auto_interval_seconds, app_mode, current_vote_session_id
-vote_sessions  (id, film_title, status, opened_at, closed_at, created_at)
-votes          (id, vote_session_id, user_id, score, bonus_amount, weighted_score, updated_at)
-               UNIQUE(vote_session_id, user_id)
-vote_boosts    (id, user_id, amount)   -- stub Prompt 5 — déduit du net P&L leaderboard
+app_config     (key, value)   -- auto_mode_ui, auto_mode_enabled, auto_interval_seconds, app_mode,
+                                 current_vote_session_id, vote_revealed_categories (JSON array, init '[]'),
+                                 vote_display_category_id (init ''), stats_reset_at (runtime, filtre leaderboard)
+vote_sessions  (id, status, opened_at, closed_at, created_at)
+               status : 'waiting' / 'open' / 'closed' / 'palmares'
+vote_boosts    (id, session_id, user_id, category_id, amount, updated_at)
+               UNIQUE(session_id, user_id, category_id)
+vote_categories (id, name, display_order, created_at)
+vote_films      (id, category_id, title, created_at) UNIQUE(category_id, title)
+vote_rankings   (id, session_id, user_id, film_id, rank, points, updated_at) UNIQUE(session_id, user_id, film_id)
 ```
 
 `status` roulette : `waiting → open (30s) → spinning → closed → waiting`
-`app_mode` : `'roulette'` / `'vote'` / `'palmares'`
-`status` vote : `'waiting'` / `'open'` / `'closed'`
+`app_mode` : `'roulette'` / `'vote'` / `'closed'` / `'palmares'`
+`status` vote : `'waiting'` / `'open'` / `'closed'` / `'palmares'`
 
 ---
 
@@ -345,7 +373,18 @@ flask --app "app:create_app()" run
 ⚠️ Rôles           → 'admin' | 'player' — constraint SQLite CHECK
 ⚠️ winning_number  → 0 = House win (aucun parieur ne gagne, ni rouge/noir ni pair/impair)
 ⚠️ vote delta_tokens → ancien_bonus - nouveau_bonus : positif=remboursement, négatif=déduction
-⚠️ vote weighted_score → score × (1 / 1.5 / 2) selon bonus (0 / 25 / 50)
+                        status vote : waiting → open → closed → palmares
+⚠️ vote points formula  → api.py : base = max(10, n × 2.5) où n = nb films dans la catégorie
+                           raw_float = base × (0.55 ^ (rank - 1))   # décroissance exponentielle par rang
+                           points    = max(1, round(raw_float × (1 + boost_amount / 100)))
+                           — multiplicateur continu (pas de paliers fixes)
+                           — MAX_BOOST = 300 jetons par catégorie par user par session
+                           — /api/vote/boost retourne 400 si amount > MAX_BOOST
+⚠️ vote boost MAX_BOOST   → 300 jetons par catégorie par user par session — cap appliqué dans /api/vote/boost
+                             (400 si amount > 300) ; total peut dépasser 300 sur plusieurs catégories
+⚠️ app_mode 'closed'      → état transitoire émis par /api/admin/vote/close avant palmarès ou reset-mode
+                             cycle complet : 'roulette' → 'vote' → 'closed' → 'palmares' → 'roulette'
+                             — ne pas traiter 'closed' comme terminal : toujours suivre d'un palmares ou reset-mode
 ⚠️ vote UPSERT      → UNIQUE(vote_session_id, user_id) — un seul vote par user par session, modifiable
 ⚠️ app_mode         → stocké dans app_config — roulette par défaut, reset via /api/vote/reset-mode
 ⚠️ admin boutons    → états pilotés exclusivement par pollAdmin() (toutes les 3s) via updateControlsState()
@@ -440,9 +479,44 @@ flask --app "app:create_app()" run
 ⚠️ boutons +150/+350       → double-tap requis sur touch (window.matchMedia('hover:none')),
                               timer 3s via quickBtnPendingMap (Map uid+amount → timer) ;
                               desktop : action immédiate sans confirmation — jamais de alert()
+⚠️ vote-group d-flex      → vote-group-roulette et vote-group-closed ne doivent PAS avoir la classe
+                              d-flex sur leur conteneur — Bootstrap .d-flex { display: flex !important }
+                              écrase style="display:none" (inline sans !important) → groupes toujours
+                              visibles. Le d-flex doit être sur un div intérieur ; showVoteGroup() utilise
+                              el.style.display = 'none' / '' sur le conteneur → fonctionne sans d-flex
+⚠️ /api/vote/state         → retourne uniquement la catégorie projetée (vote_display_category_id) ou []
+                              si aucune catégorie n'est projetée — les joueurs voient "En attente…" jusqu'à
+                              ce que l'admin sélectionne une catégorie à projeter (U1 fix 2026-05-26)
+⚠️ /api/admin/vote/reveal-next → accepte désormais body {category_id} pour révéler une catégorie choisie
+                                 ; fallback séquentiel si category_id absent (A5 fix 2026-05-26)
+⚠️ vote tracking closed    → #vote-tracking-section visible aussi quand app_mode='closed' (admin peut
+                              consulter les résultats avant de décider palmares vs retour roulette)
 ⚠️ play.js tokens polling  → pollStatus() met à jour balanceEl depuis data.tokens (toutes les 2s)
                               /api/session/status inclut 'tokens' pour les sessions Flask authentifiées
                               (None pour les appelants non connectés — display page non affectée)
+⚠️ /api/vote/display-state → endpoint PUBLIC (aucun _require_login) — utilisé par display.html
+                              retourne {session, display_category{id,name,social_boost,voter_count}}
+                              NE PAS remplacer par /api/vote/state (protégé → 401 sur display.html public)
+                              — bug originel : pollVoteDisplay() appelait /api/vote/state → 401 → lastVoteStateData=null
+                              → catégorie jamais affichée sur le grand écran (corrigé 2026-05-26)
+⚠️ /api/admin/vote/tracking → protégé _require_admin — retourne matrice votants×films×rangs×boosts
+                               par catégorie pour la session courante (current_vote_session_id)
+                               — ne retourne que la session active, pas l'historique
+⚠️ admin.js vote section    → groupes HTML exclusifs : vote-group-roulette / vote-group-vote /
+                               vote-group-closed / vote-group-palmares — showVoteGroup(mode) affiche l'un,
+                               masque les autres — ne jamais piloter individuellement les display de ces divs
+                               — listeners attachés une seule fois au boot (pas dans updateVoteStatus)
+                               — event delegation sur catBtnsWrap pour les boutons catégorie (innerHTML
+                               acceptable ici car contenu généré côté serveur vérifié)
+⚠️ voteAction finally       → voteAction(btn, url, body) restaure btn.disabled=false et opacity=1
+                               dans le bloc finally — toujours utiliser cette fonction pour les actions vote,
+                               jamais de fetch direct qui oublierait la restauration en cas d'erreur
+⚠️ trackingInterval         → admin.js — setInterval 3s pour loadVoteTracking() ; géré dans
+                               updateVoteStatus() : activé si mode=vote, clearInterval sinon
+                               — ne pas créer d'autre interval pour le vote tracking
+⚠️ #vote-tracking-section   → display:none par défaut dans admin/index.html — rendu visible uniquement
+                               quand app_mode=vote (piloté par updateVoteStatus dans admin.js)
+                               — ne pas modifier la visibilité directement depuis d'autres fonctions
 ```
 
 ---
@@ -451,13 +525,13 @@ flask --app "app:create_app()" run
 
 ```bash
 cd /root/casino && source venv/bin/activate
-pytest tests/ -v --tb=short                          # 72 tests (71 passed + 1 xfail intentionnel)
+pytest tests/ -v --tb=short                          # 65 tests (64 passed + 1 xfail intentionnel)
 pytest tests/ --cov=. --cov-report=term-missing      # avec couverture (77% sur code applicatif)
 ```
 
 Suite dans `tests/` :
-- `conftest.py` — fixtures : `app` (DB temporaire isolée), `admin_client`, `player_client`, `player2_client`, `open_session`, `open_vote_session`
-- `test_casino.py` — 72 tests sur 11 classes : `TestAuth`, `TestRoulette`, `TestBets`, `TestRewards`, `TestLeaderboard`, `TestVoteOpen`, `TestVoteSubmit`, `TestVoteClose`, `TestVoteResults`, `TestPalmares`, `TestAdminActions`
+- `conftest.py` — fixtures : `app` (DB temporaire isolée), `client`, `admin_client`, `player_client`, `player2_client`, `open_session` (`open_vote_session` supprimée — les tests vote utilisent un helper local `_open_vote()`)
+- `test_casino.py` — 64 tests sur 12 classes : `TestAuth`, `TestRoulette`, `TestBets`, `TestLeaderboard`, `TestAdminActions`, `TestVoteCategories`, `TestVoteFilms`, `TestVoteSession`, `TestVoteRankings`, `TestVoteBoosts`, `TestVoteState`, `TestVoteResults`
 
 > `test_no_double_bet_same_session` → xfail intentionnel : l'app autorise les mises multiples par session (multi-bet frontend).
 
@@ -503,16 +577,28 @@ locust -f tests/locustfile.py --host=http://127.0.0.1:5000 \
        --users=100 --spawn-rate=10 --run-time=2m --headless \
        --class-picker PollingOnly
 
+# Baseline polling vote display (sans auth — émule grand écran)
+locust -f tests/locustfile.py --host=http://127.0.0.1:5000 \
+       --users=100 --spawn-rate=10 --run-time=2m --headless \
+       --class-picker VotePolling
+
+# Joueur réaliste en phase vote (rankings + boost)
+locust -f tests/locustfile.py --host=http://127.0.0.1:5000 \
+       --users=100 --spawn-rate=10 --run-time=3m --headless \
+       --class-picker VotePlayer
+
 # Interface web (localhost:8089) pour visualisation temps réel
 locust -f tests/locustfile.py --host=http://127.0.0.1:5000
 ```
 
-**3 scénarios Locust :**
+**5 scénarios Locust :**
 | Scénario | Comportement |
 |----------|-------------|
-| `CasinoPlayer` | Joueur réaliste : login → polling status → mise → navigation rewards |
+| `CasinoPlayer` | Joueur réaliste : login → polling status → mise → navigation |
 | `BetStorm` | Pic de mises simultanées lors d'une ouverture de session |
 | `PollingOnly` | Seulement `/api/session/status` — baseline latence serveur |
+| `VotePolling` | Polling `/api/vote/display-state` (public, sans auth) — émule le grand écran |
+| `VotePlayer` | Joueur en phase vote : polling `/api/vote/state` → rankings + boost si catégorie projetée |
 
 > `load_test_users.json` — 100 comptes précréés par `setup_load_test.py`. Ne pas commiter.
 > `RATELIMIT_ENABLED=false` — variable d'env lue dans `extensions.py` pour désactiver Flask-Limiter pendant les tests de charge.

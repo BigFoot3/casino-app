@@ -166,14 +166,6 @@
       background: linear-gradient(90deg, transparent, var(--mg-flame), transparent);
     }
 
-    /* QR */
-    .mg-qr { width: 96px; height: 96px; background: var(--mg-ivory); border-radius: 4px; }
-    .mg-qr__hint {
-      font-family: var(--mg-font-body); font-weight: 700;
-      text-transform: uppercase; letter-spacing: 0.12em;
-      font-size: 0.72rem; color: var(--mg-rosewood);
-    }
-    .mg-qr__hint strong { display: block; color: var(--mg-ivory); font-family: var(--mg-font-display); font-size: 1rem; margin-top: 2px; }
 
     /* ── Essential styles for existing template + JS-created elements ──── */
 
@@ -247,10 +239,6 @@
     .lb-net-neg { color: var(--mg-ember); font-weight: 800; flex-shrink: 0; }
     .lb-empty   { color: var(--mg-rosewood); font-size: .7rem; font-style: italic; }
 
-    /* QR block */
-    #qr-block { display: flex; flex-direction: column; align-items: center; text-align: center; margin-top: auto; padding-top: 8px; }
-    #qr-block img { width: 180px; height: 180px; display: block; background: var(--mg-ivory); border-radius: 4px; }
-    #qr-block p   { font-size: 0.9rem; text-align: center; color: var(--mg-rosewood); margin-top: 4px; font-weight: 700; text-transform: uppercase; letter-spacing: .1em; }
 
     /* Live bet panel */
     #bet-panel {
@@ -374,23 +362,112 @@
     .rl-pos { color: var(--mg-blush); font-size: 1.05rem; }
     .rl-neg { color: var(--mg-ember); font-size: 1.05rem; }
 
-    /* Vote overlay — inline color overrides (hors-palette → DS tokens) */
-    #display-voter-count { color: var(--mg-blush) !important; }
-    #vote-overlay > div:nth-child(2) span:last-child,
-    #vote-overlay > div:nth-child(3) { color: var(--mg-rosewood) !important; }
-
-    /* Palmares cards — override JS inline styles (navy → velvet, gold → claret/ivory) */
-    #palmares-list > div {
-      background: #4d0f12 !important;
-      border-color: #901e16 !important;
-      box-shadow: 0 0 0 1px #901e16 !important;
-    }
-    #palmares-list > div:first-child {
-      box-shadow: 0 0 18px rgba(144,30,22,.4), 0 0 0 1px #901e16 !important;
-    }
-    #palmares-list > div > span:nth-child(3) { color: #f8f6f6 !important; }
     .mg-display-logo { position: absolute; top: 90px; left: 24px; z-index: 10; }
     .mg-display-logo img { height: 110px; width: auto; display: block; opacity: 0.90; border-radius: 6px; object-fit: contain; }
+
+    /* ── Vote overlay ── */
+    #vote-overlay {
+      position: fixed; inset: 0; z-index: 10;
+      background: var(--mg-noir-2);
+      display: none; flex-direction: column;
+      align-items: center; justify-content: center; gap: 2rem;
+      overflow-y: auto; padding: 2rem;
+    }
+    #vote-overlay.active { display: flex; }
+
+    .vote-waiting-msg {
+      font-family: var(--mg-font-display); font-size: 1.5rem;
+      color: var(--mg-rosewood); text-align: center; padding: 2rem;
+    }
+    @keyframes voteCategoryFadeIn {
+      from { opacity: 0; transform: scale(0.95) translateY(16px); }
+      to   { opacity: 1; transform: scale(1) translateY(0); }
+    }
+    .vote-category-fadein { animation: voteCategoryFadeIn 0.5s cubic-bezier(.34,1.2,.64,1) forwards; }
+
+    .vote-category-block {
+      text-align: center; color: var(--mg-ivory);
+      background: rgba(0,0,0,0.4);
+      border: 1px solid var(--mg-claret);
+      border-radius: 10px; padding: 2rem; width: 100%; max-width: 600px;
+    }
+    .vote-category-block h3 {
+      font-family: var(--mg-font-display); font-size: 1.8rem; text-transform: uppercase;
+      letter-spacing: 0.06em; color: var(--mg-blush); margin-bottom: 1rem;
+    }
+    .social-boost-label { font-size: 0.85rem; color: var(--mg-rosewood); margin-bottom: 6px; }
+    .social-boost-bar-wrap { height: 8px; border-radius: 4px; background: rgba(255,255,255,.12); overflow: hidden; }
+    .social-boost-bar { height: 100%; border-radius: 4px; background: var(--mg-flame); transition: width 0.4s; }
+    .vote-voter-count { font-size: 0.8rem; color: var(--mg-rosewood); margin-top: 6px; }
+
+    /* ── Palmares overlay ── */
+    #palmares-overlay {
+      position: fixed; inset: 0; z-index: 11;
+      background: var(--mg-noir);
+      display: none; flex-direction: column;
+      align-items: center; justify-content: center; gap: 1.5rem;
+      overflow-y: auto; padding: 2rem;
+    }
+    #palmares-overlay.active { display: flex; }
+
+    #palmares-title {
+      font-family: var(--mg-font-display); font-size: 3rem; font-weight: 900;
+      text-transform: uppercase; letter-spacing: 0.1em; color: var(--mg-blush);
+      text-align: center; text-shadow: 0 0 40px rgba(240,175,167,0.4);
+    }
+    #palmares-progress {
+      font-size: 0.9rem; color: var(--mg-rosewood); text-align: center;
+      letter-spacing: 0.05em;
+    }
+    #palmares-category-display {
+      width: 100%; max-width: 640px;
+    }
+    .palmares-category {
+      text-align: center; padding: 3rem 2rem;
+      background: rgba(0,0,0,0.5); border: 1px solid var(--mg-claret);
+      border-radius: 16px;
+    }
+    .palmares-separator {
+      width: 60px; height: 2px; background: var(--mg-flame); margin: 1rem auto;
+    }
+    .palmares-category-title {
+      font-family: var(--mg-font-display); font-size: 3rem; text-transform: uppercase;
+      letter-spacing: 0.08em; color: var(--mg-blush);
+    }
+    .palmares-film {
+      padding: 0.6rem 1.2rem; border-radius: 8px;
+      background: rgba(0,0,0,0.4); border: 1px solid var(--mg-border-strong);
+      margin: 0.4rem 0; display: flex; justify-content: space-between;
+      align-items: center; gap: 8px;
+    }
+    .palmares-film--first {
+      background: rgba(204,40,25,0.15); border-color: var(--mg-flame); padding: 1rem 1.4rem;
+    }
+    .palmares-film-medal { font-size: 1.6rem; min-width: 36px; }
+    .palmares-film-title { flex: 1; text-align: left; font-size: 1.1rem; }
+    .palmares-film--first .palmares-film-title { font-size: 1.4rem; color: var(--mg-blush); }
+    .palmares-film-score { color: var(--mg-rosewood); font-size: 0.9rem; }
+
+    @keyframes palmaresReveal {
+      from { opacity: 0; transform: scale(0.92) translateY(20px); }
+      to   { opacity: 1; transform: scale(1) translateY(0); }
+    }
+    .palmares-reveal { animation: palmaresReveal 0.6s cubic-bezier(.34,1.2,.64,1) forwards; }
+
+    /* QR corner */
+    #qr-corner {
+      position: fixed; bottom: 24px; right: 24px; z-index: 20;
+      display: flex; flex-direction: column; align-items: center; gap: 8px;
+      background: var(--mg-noir-2); border: 1px solid var(--mg-claret);
+      border-radius: 10px; padding: 12px;
+    }
+    #qr-corner-canvas img, #qr-corner-canvas canvas {
+      width: 120px; height: 120px; display: block; border-radius: 4px;
+    }
+    #qr-corner-label {
+      font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.08em;
+      color: var(--mg-rosewood); text-align: center;
+    }
   </style>
 </head>
 <body class="mg-display">
@@ -490,13 +567,27 @@
       <div class="lb-title">💸 Top moins-values</div>
       <div id="lb-losers-list"><div class="lb-row lb-empty">Chargement…</div></div>
     </div>
-    <div id="qr-block" class="mg-display__qr">
-      <img id="qr-img" src="/api/session/qr" alt="QR /play">
-      <p>Jouer sur /play</p>
-    </div>
   </div>
 
 </div><!-- #main-wrap -->
+
+<!-- QR corner — fixed, visible in roulette + vote modes -->
+<div id="qr-corner">
+  <div id="qr-corner-canvas"></div>
+  <div id="qr-corner-label">Scannez pour voter</div>
+</div>
+
+<!-- Vote overlay -->
+<div id="vote-overlay">
+  <div id="vote-categories-display"></div>
+</div>
+
+<!-- Palmares overlay -->
+<div id="palmares-overlay">
+  <div id="palmares-title">🏆 Palmarès</div>
+  <div id="palmares-progress"></div>
+  <div id="palmares-category-display"></div>
+</div>
 
 <!-- Status bar -->
 <div id="status-bar" class="mg-display__bar mg-caller">
@@ -504,28 +595,6 @@
   <div id="last-win-display" style="display:none">
     Dernier numéro : <span id="last-win-number"></span>
   </div>
-</div>
-
-<!-- ── Vote mode overlay (full-screen) ──────────────────────────────────── -->
-<div id="vote-overlay" style="display:none;position:fixed;inset:0;background:#1a0507;z-index:500;
-     flex-direction:column;align-items:center;justify-content:center;gap:24px;text-align:center">
-  <div style="font-size:3.5rem;font-weight:900;font-family:'Neue Machina',sans-serif;color:#f8f6f6;
-              text-shadow:0 0 30px rgba(255,255,255,0.6)" id="display-film-title">—</div>
-  <div style="font-size:1.4rem;color:#FFFFFF">
-    <span id="display-voter-count" style="font-size:2.5rem;font-weight:bold;color:#7DE0A8">0</span>
-    <span style="color:#72727F"> votant(s)</span>
-  </div>
-  <div style="font-size:1.2rem;color:#72727F;margin-top:8px">📱 Votez sur votre téléphone</div>
-  <img id="display-qr" src="/api/session/qr" alt="QR /play"
-       style="width:140px;height:140px;background:#fff;padding:8px;border-radius:8px">
-</div>
-
-<!-- ── Palmares overlay (full-screen) ──────────────────────────────────── -->
-<div id="palmares-overlay" style="display:none;position:fixed;inset:0;background:#1a0507;z-index:500;
-     flex-direction:column;align-items:center;justify-content:center;padding:20px;overflow-y:auto">
-  <div style="font-size:2rem;font-weight:900;font-family:'Neue Machina',sans-serif;color:#f8f6f6;
-              margin-bottom:24px">🏆 Palmarès</div>
-  <div id="palmares-list" style="width:100%;max-width:600px"></div>
 </div>
 
 <!-- ── Round leaderboard overlay (center-bottom, per-spin) ─────────────── -->
@@ -540,6 +609,8 @@
   </div>
 </div>
 
+<!-- QR code generator -->
+<script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
 <!-- Roulette wheel engine (creates #container, appended to body, moved by display.js) -->
 <script src="/static/roulette/assets/js/app.js"></script>
 <!-- Display controller -->
