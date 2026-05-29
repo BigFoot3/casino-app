@@ -27,6 +27,7 @@ const msgPalmares  = $('msg-palmares');
 let betPlaced       = false;
 let betSessionId    = null;
 let resultShown     = false;
+let resultFetching  = false;
 let pollTimer       = null;
 let cdInterval      = null;
 let lastOpenSession = null;   // tracks session_id of last 'open' state seen
@@ -169,9 +170,10 @@ async function pollStatus() {
         // Keep pendingBets — user may have pre-filled during spinning
         updateTotals();
         betError.style.display = 'none';
-        betPlaced    = false;
-        resultShown  = false;
-        gridLocked   = false;
+        betPlaced      = false;
+        resultShown    = false;
+        resultFetching = false;
+        gridLocked     = false;
         betSubmit.disabled = false;
         betClear.disabled  = false;
         allBtns.forEach(btn => btn.style.pointerEvents = '');
@@ -195,10 +197,11 @@ async function pollStatus() {
     } else {
       // BUG 2: reset all bet state when session returns to waiting
       if (betPlaced || resultShown) {
-        betPlaced    = false;
-        betSessionId = null;
-        resultShown  = false;
-        gridLocked   = false;
+        betPlaced      = false;
+        betSessionId   = null;
+        resultShown    = false;
+        resultFetching = false;
+        gridLocked     = false;
         // Keep pendingBets for the upcoming session
         allBtns.forEach(btn => btn.style.pointerEvents = '');
         updateTotals();
@@ -220,13 +223,14 @@ async function pollStatus() {
 
 // ── Result polling ────────────────────────────────────────────────────────────
 async function pollResult() {
-  if (resultShown) return;
+  if (resultShown || resultFetching) return;
+  resultFetching = true;
   try {
     const r = await fetch('/api/session/result');
-    if (r.status === 404) { pollTimer = setTimeout(pollResult, 2000); return; }
+    if (r.status === 404) { resultFetching = false; pollTimer = setTimeout(pollResult, 2000); return; }
     const d = await r.json();
     if (betSessionId !== null && d.session_id !== betSessionId) {
-      pollTimer = setTimeout(pollResult, 2000); return;
+      resultFetching = false; pollTimer = setTimeout(pollResult, 2000); return;
     }
     resultShown = true;
     clearTimeout(pollTimer);
@@ -266,6 +270,7 @@ async function pollResult() {
       pollTimer = setTimeout(pollStatus, 2000);
     }, SPIN_DURATION_MS);
   } catch(e) {
+    resultFetching = false;
     pollTimer = setTimeout(pollResult, 2000);
   }
 }
