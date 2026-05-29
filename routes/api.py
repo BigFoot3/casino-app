@@ -94,9 +94,10 @@ def session_round_result():
             return jsonify({'session_id': None, 'winners': [], 'losers': []})
         sid = closed['id']
         rows = conn.execute(
-            '''SELECT u.username, (b.payout - b.amount) AS net
+            '''SELECT u.username, SUM(b.payout - b.amount) AS net
                FROM bets b JOIN users u ON b.user_id = u.id
                WHERE b.session_id = ?
+               GROUP BY u.id, u.username
                ORDER BY net DESC''',
             (sid,)
         ).fetchall()
