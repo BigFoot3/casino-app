@@ -173,7 +173,7 @@ requirements-dev.txt # pytest==8.3.5, pytest-cov==6.1.0 (dépendances dev unique
 | `GET /roulette/display` | player | Affichage salle (grand écran) |
 | `GET /api/leaderboard` | api | Top 5 plus-values / top 5 moins-values — net P&L. Retourne `top_winners` + `top_losers`. |
 | `GET /api/session/status` | api | Statut courant (JSON) + `app_mode` + `vote_session` |
-| `GET /api/session/round_result` | api | Résultat du dernier spin (numéro gagnant, payouts) |
+| `GET /api/session/round_result` | api | Résultat du dernier spin — winners/losers agrégés par joueur (`GROUP BY u.id, u.username, SUM(payout-amount)`). Retourne `{session_id, winners:[{username,net}], losers:[{username,net}]}`. |
 | `GET /api/session/result` | api | Résultat de la session courante pour le joueur connecté |
 | `GET /api/session/bets` | api | Mises du joueur sur la session courante |
 | `GET /api/session/qr` | api | QR code de la session courante |
@@ -435,6 +435,15 @@ flask --app "app:create_app()" run
                           — sans ces attributs renderChips() ignore silencieusement ces mises
 ⚠️ live-half/dozens/outside → width: calc(100% - 86px) = 46px (zero) + 40px (colBtn 38px + gap 2px)
                                — ne pas utiliser calc(100% - 46px), sinon déborde sous les 2→1
+⚠️ resultFetching flag      → play.js : guard contre la race condition de pollResult() — resultShown est mis à true
+                              APRÈS deux await (fetch + json()), pollStatus() peut appeler pollResult() plusieurs
+                              fois entre les yields avant que resultShown soit vrai. resultFetching=true verrouille
+                              dès l'entrée de la fonction ; remis à false sur 404, session mismatch, catch, et
+                              au reset de session (open/waiting) — reste true sur le chemin nominal (popup affiché)
+                              — ne jamais supprimer ce flag ni déplacer resultShown=true avant les awaits sans reconsidérer
+⚠️ round_result GROUP BY    → api.py session_round_result() : la requête doit grouper par u.id, u.username
+                              avec SUM(payout-amount) — sans GROUP BY, un joueur multi-mises apparaît N fois
+                              dans winners/losers (une entrée par mise) → popup display affiche N lignes identiques
 ⚠️ balanceDelta vs netDelta → play.js pollResult() : balanceDelta = sum(payout) pour mettre à jour
                                balanceEl (amount déjà déduit à la mise) ; netDelta = sum(payout-amount)
                                pour l'affichage du résultat (profit/perte net) — ne pas confondre les deux
