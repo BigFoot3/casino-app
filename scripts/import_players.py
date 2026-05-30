@@ -13,7 +13,7 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)
 
 XLSX_PATH      = os.path.join(ROOT, 'users_pass.xlsx')
-DEFAULT_TOKENS = 100
+DEFAULT_TOKENS = 0
 
 # Colonnes (1-based, openpyxl)
 COL_PRENOM   = 1
