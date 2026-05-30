@@ -188,7 +188,11 @@
   <div class="col-lg-7 col-md-9">
     <div class="card p-4">
       <div class="d-flex justify-content-between align-items-center mb-3">
-        <h4 class="mb-0">🎲 Placer une mise</h4>
+        <div class="d-flex align-items-center gap-2">
+          <h4 class="mb-0">🎲 Placer une mise</h4>
+          <button type="button" id="btn-rules-modal" class="btn btn-link btn-sm px-0 text-uppercase"
+                  data-bs-toggle="modal" data-bs-target="#rulesModal">Comment jouer</button>
+        </div>
         <span class="token-badge">
           💰 <span id="balance">{{ user['tokens'] }}</span> tokens
         </span>
@@ -297,7 +301,11 @@
 
       <!-- Vote panel -->
       <div id="vote-panel" style="display:none">
-        <h4 class="mb-3">Vote en cours</h4>
+        <div class="d-flex align-items-center gap-2 mb-3">
+          <h4 class="mb-0">Vote en cours</h4>
+          <button type="button" class="btn btn-link btn-sm px-0 text-uppercase"
+                  data-bs-toggle="modal" data-bs-target="#voteHelpModal">Comment voter</button>
+        </div>
         <div id="vote-categories-container"></div>
         <button id="btn-vote-submit" class="btn btn-primary w-100 mt-3">Valider mon classement</button>
         <div id="vote-feedback" class="mt-2"></div>
@@ -306,6 +314,89 @@
       <!-- Palmares message -->
       <div id="msg-palmares" class="alert alert-info" style="display:none">
         🏆 Palmarès en cours d'affichage…
+      </div>
+    </div>
+  </div>
+</div>
+<!-- Modale Règles du jeu -->
+<div class="modal fade" id="rulesModal" tabindex="-1" aria-labelledby="rulesModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="rulesModalLabel">Règles du jeu</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fermer"></button>
+      </div>
+      <div class="modal-body">
+
+        <h6>La roulette</h6>
+        <p>La roulette tourne, la bille choisit. Placez vos jetons sur le tableau avant le lancement :
+        couleur, numéro, colonne… Si vous avez vu juste, vous gagnez ! Méfiez-vous du <strong>67</strong>
+        — c'est le numéro de la maison, il fait perdre toutes les mises sauf le pari sur 67 exact.</p>
+
+        <h6 class="mt-3">Types de mises</h6>
+        <table class="table table-bordered table-sm">
+          <thead>
+            <tr><th>Mise</th><th>Description</th><th>Gain</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>Couleur</td><td>Rouge ou Noir</td><td>×2</td></tr>
+            <tr><td>Parité</td><td>Pair ou Impair</td><td>×2</td></tr>
+            <tr><td>Moitié</td><td>1–18 ou 19–36</td><td>×2</td></tr>
+            <tr><td>Colonne (2→1)</td><td>Une des 3 colonnes verticales</td><td>×3</td></tr>
+            <tr><td>Douzaine</td><td>1–12 · 13–24 · 25–36</td><td>×3</td></tr>
+            <tr><td>Numéro plein</td><td>Un numéro exact (0 à 36)</td><td>×36</td></tr>
+          </tbody>
+        </table>
+        <p class="text-muted small">Le gain inclut la mise initiale (ex : miser 10 sur rouge → recevoir 20).</p>
+
+        <h6 class="mt-3">Comment miser</h6>
+        <ol>
+          <li>Choisissez une dénomination de jeton : <strong>1 · 5 · 10 · 50 · 67 · 100</strong></li>
+          <li>Cliquez sur une zone du tableau de mise (couleur, numéro, colonne…)</li>
+          <li>Répétez pour mises multiples — validez avant la fin de la session</li>
+        </ol>
+
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-outline-secondary"
+                data-bs-dismiss="modal">Fermer</button>
+      </div>
+    </div>
+  </div>
+</div>
+<!-- Modale Comment voter -->
+<div class="modal fade" id="voteHelpModal" tabindex="-1"
+     aria-labelledby="voteHelpLabel" aria-hidden="true">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="voteHelpLabel">Comment voter</h5>
+        <button type="button" class="btn-close"
+                data-bs-dismiss="modal" aria-label="Fermer"></button>
+      </div>
+      <div class="modal-body">
+
+        <h6>Le principe</h6>
+        <p>Classez les films de votre <strong>préféré</strong> au
+        <strong>moins préféré</strong> dans la catégorie affichée par l'admin.</p>
+
+        <h6 class="mt-3">Comment classer</h6>
+        <ol>
+          <li>Les films de la catégorie apparaissent dans votre interface</li>
+          <li><strong>Glissez-déposez</strong> les films pour les réordonner</li>
+          <li>Le rang 1 est votre coup de cœur — le dernier rang votre moins favori</li>
+          <li>Validez votre classement avant la fermeture du vote</li>
+        </ol>
+
+        <h6 class="mt-3">Les boosts</h6>
+        <p>Vous pouvez dépenser vos <strong>jetons</strong> pour booster un film et amplifier
+        son score final. Plus vous misez de jetons sur un film, plus son score augmente.
+        Les jetons engagés sont définitivement dépensés.</p>
+
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-outline-secondary"
+                data-bs-dismiss="modal">Fermer</button>
       </div>
     </div>
   </div>

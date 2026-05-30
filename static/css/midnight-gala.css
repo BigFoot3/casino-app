@@ -1029,4 +1029,14 @@ a:hover { color: var(--mg-ivory); }
     flex: 1 1 calc(50% - 4px);
   }
 
+  #users-table tbody td:nth-child(5) .input-group .btn {
+    flex: 0 0 auto;
+    min-height: unset;
+    width: auto;
+  }
+
+  #users-table tbody td:nth-child(5) .input-group .form-control {
+    flex: 1 1 auto;
+  }
+
 }

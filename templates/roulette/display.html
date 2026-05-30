@@ -456,16 +456,16 @@
 
     /* QR corner */
     #qr-corner {
-      position: fixed; bottom: 24px; right: 24px; z-index: 20;
       display: flex; flex-direction: column; align-items: center; gap: 8px;
+      margin-top: auto; flex-shrink: 0; width: 100%;
       background: var(--mg-noir-2); border: 1px solid var(--mg-claret);
-      border-radius: 10px; padding: 12px;
+      border-radius: 10px; padding: 14px;
     }
     #qr-corner-canvas img, #qr-corner-canvas canvas {
-      width: 120px; height: 120px; display: block; border-radius: 4px;
+      width: 260px; height: 260px; display: block; border-radius: 4px;
     }
     #qr-corner-label {
-      font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.08em;
+      font-size: 0.82rem; text-transform: uppercase; letter-spacing: 0.08em;
       color: var(--mg-rosewood); text-align: center;
     }
   </style>
@@ -567,15 +567,13 @@
       <div class="lb-title">💸 Top moins-values</div>
       <div id="lb-losers-list"><div class="lb-row lb-empty">Chargement…</div></div>
     </div>
+    <div id="qr-corner">
+      <div id="qr-corner-canvas"></div>
+      <div id="qr-corner-label">Scannez pour voter</div>
+    </div>
   </div>
 
 </div><!-- #main-wrap -->
-
-<!-- QR corner — fixed, visible in roulette + vote modes -->
-<div id="qr-corner">
-  <div id="qr-corner-canvas"></div>
-  <div id="qr-corner-label">Scannez pour voter</div>
-</div>
 
 <!-- Vote overlay -->
 <div id="vote-overlay">
@@ -615,5 +613,6 @@
 <script src="/static/roulette/assets/js/app.js"></script>
 <!-- Display controller -->
 <script src="/static/js/display.js"></script>
+
 </body>
 </html>

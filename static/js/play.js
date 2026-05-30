@@ -23,6 +23,7 @@ const totalMisedEl = $('total-mised');
 const soldeResteEl = $('solde-reste');
 const votePanel    = $('vote-panel');
 const msgPalmares  = $('msg-palmares');
+const btnRulesModal = $('btn-rules-modal');
 
 let betPlaced       = false;
 let betSessionId    = null;
@@ -115,6 +116,7 @@ function showOnly(...els) {
   [msgWaiting, msgSpinning, msgCountdown, betForm, resultPanel, votePanel, msgPalmares]
     .forEach(e => e.style.display = 'none');
   els.forEach(e => { if (e) e.style.display = ''; });
+  if (btnRulesModal) btnRulesModal.style.display = els.includes(votePanel) ? 'none' : '';
 }
 
 function startCountdown(seconds) {

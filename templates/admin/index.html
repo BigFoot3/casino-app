@@ -129,6 +129,14 @@
           </select>
         </div>
         <div class="col-auto">
+          <select id="new-initial-tokens" class="form-select form-select-sm">
+            <option value="0" selected>0 jetons</option>
+            <option value="150">150 jetons</option>
+            <option value="350">350 jetons</option>
+            <option value="600">600 jetons</option>
+          </select>
+        </div>
+        <div class="col-auto">
           <button id="btn-create-user" class="btn btn-sm btn-success">Créer</button>
         </div>
       </div>
@@ -161,6 +169,7 @@
                 <input type="number" class="form-control add-tokens-input" min="1"
                        data-id="{{ u['id'] }}" placeholder="Montant">
                 <button class="btn btn-success add-tokens-btn" data-id="{{ u['id'] }}">+</button>
+                <button class="btn btn-outline-secondary sub-tokens-btn" data-id="{{ u['id'] }}">−</button>
               </div>
             </td>
             <td data-label="Actions" class="d-flex gap-1 flex-wrap">
@@ -168,14 +177,24 @@
                       data-id="{{ u['id'] }}" data-amount="150">+150</button>
               <button class="btn btn-sm btn-outline-secondary add-tokens-quick-btn"
                       data-id="{{ u['id'] }}" data-amount="350">+350</button>
+              <button class="btn btn-sm btn-outline-secondary add-tokens-quick-btn"
+                      data-id="{{ u['id'] }}" data-amount="600">+600</button>
+              <div class="d-md-none w-100 mt-1">
+                <div class="input-group input-group-sm">
+                  <input class="add-tokens-input form-control" data-id="{{ u['id'] }}"
+                         placeholder="Montant" type="number" min="1"
+                         style="max-width:100px">
+                  <button class="add-tokens-btn btn btn-outline-success btn-sm"
+                          data-id="{{ u['id'] }}">+</button>
+                  <button class="sub-tokens-btn btn btn-outline-secondary btn-sm"
+                          data-id="{{ u['id'] }}">−</button>
+                </div>
+              </div>
               <button class="btn btn-sm btn-secondary reset-pw-btn" data-id="{{ u['id'] }}"
                       data-name="{{ u['username'] }}">
                 🔑 MDP
               </button>
-              <button class="btn btn-sm btn-secondary decrement-tokens-btn" data-id="{{ u['id'] }}">
-                −1
-              </button>
-              <button class="btn btn-sm btn-outline-secondary zero-tokens-btn" data-id="{{ u['id'] }}"
+              <button class="btn btn-sm btn-outline-secondary zero-tokens-btn d-none d-md-inline-flex" data-id="{{ u['id'] }}"
                       data-name="{{ u['username'] }}">
                 🪙 0
               </button>

@@ -544,7 +544,7 @@ def admin_add_tokens(uid):
     _require_admin()
     data   = request.get_json(force=True)
     amount = data.get('amount')
-    if not isinstance(amount, int) or amount <= 0:
+    if not isinstance(amount, int) or amount == 0:
         return jsonify({'error': 'Montant invalide'}), 400
     with db_conn() as conn:
         conn.execute('BEGIN IMMEDIATE')
@@ -552,7 +552,7 @@ def admin_add_tokens(uid):
         if not user:
             conn.execute('ROLLBACK')
             return jsonify({'error': 'Utilisateur introuvable'}), 404
-        conn.execute('UPDATE users SET tokens = tokens + ? WHERE id=?', (amount, uid))
+        conn.execute('UPDATE users SET tokens = MAX(0, tokens + ?) WHERE id=?', (amount, uid))
         new_balance = conn.execute('SELECT tokens FROM users WHERE id=?', (uid,)).fetchone()['tokens']
         conn.execute('COMMIT')
     return jsonify({'new_balance': new_balance})
@@ -562,8 +562,11 @@ def admin_add_tokens(uid):
 def admin_create_user():
     _require_admin()
     data     = request.get_json(force=True)
-    username = data.get('username', '').strip()
-    role     = data.get('role', 'player')
+    username       = data.get('username', '').strip()
+    role           = data.get('role', 'player')
+    initial_tokens = data.get('initial_tokens', 0)
+    if initial_tokens not in (0, 150, 350, 600):
+        initial_tokens = 0
     if not username:
         return jsonify({'error': 'Nom requis'}), 400
     if role not in ('admin', 'player'):
@@ -575,8 +578,8 @@ def admin_create_user():
     with db_conn() as conn:
         try:
             conn.execute(
-                'INSERT INTO users(username, password_hash, role) VALUES (?,?,?)',
-                (username, pw_hash, role)
+                'INSERT INTO users(username, password_hash, role, tokens) VALUES (?,?,?,?)',
+                (username, pw_hash, role, initial_tokens)
             )
             conn.commit()
         except Exception as e:

@@ -1,624 +1,332 @@
 # Casino
 
-Application roulette en ligne pour événements en présentiel — jusqu'à 100 joueurs simultanés.
-
-> Fichier de référence pour Claude Code. Mettre à jour après chaque milestone.
-> Dernière mise à jour : 2026-05-28 (audit CLAUDE.md : schéma DB, routes, tests, formule vote points, pièges — synchronisation avec codebase réel)
+Online roulette app for live events — up to 100 concurrent players.
 
 ---
 
-## Infrastructure
+## Infrastructure & Stack
 
-| Composant | Détail |
-|-----------|--------|
+| Component | Details |
+|-----------|---------|
 | VPS | Hetzner CX23, Nuremberg — 178.104.41.200 |
 | OS | Ubuntu 24.04, Python 3.12 |
-| URL | `https://casino.kryptide.fr` (nginx → Gunicorn port 5000) |
-| Service | `casino.service` |
-| Logs | `journalctl -u casino -f` |
+| URL | `https://casino.kryptide.fr` (nginx → Gunicorn:5000) |
+| Service | `systemctl {status,restart,stop} casino` / `journalctl -u casino -f` |
 
----
+**Stack:** Flask 3.1.3 (factory) · Gunicorn 23.0.0 (1 worker, 12 gthread, preload_app=True) · APScheduler 3.10.4 (game_tick every 5s) · SQLite WAL (busy_timeout=10s) · Flask-WTF (CSRF) · Flask-Limiter (10 req/min/IP on `/login`) · bcrypt · qrcode/Pillow
 
-## Stack
-
-| Package | Version | Rôle |
-|---------|---------|------|
-| Flask | 3.1.3 | Web framework (factory pattern) |
-| Gunicorn | 23.0.0 | WSGI — 1 worker, 12 threads (gthread), `preload_app=True` |
-| APScheduler | 3.10.4 | Game tick toutes les 5s |
-| SQLite WAL | — | Base de données — `busy_timeout=10s` |
-| Flask-WTF | 1.2.2 | CSRF sur tous les POST |
-| Flask-Limiter | 3.9.0 | Rate limiting (10 req/min/IP sur `/login`) |
-| bcrypt | 4.2.1 | Hash des mots de passe |
-| qrcode / Pillow | 8.0 / 12.2.0 | QR codes |
+**Env vars:**
+- `CASINO_SECRET_KEY` — **required** (RuntimeError if missing)
+- `FLASK_ENV` — `development` or `production` (prod requires cookie Secure)
+- `CASINO_BASE_URL` — for QR codes (defaults to request.host_url if absent)
+- `RATELIMIT_ENABLED` — set to `false` for Locust load tests (read by extensions.py)
 
 ---
 
 ## Design System — Midnight Gala
 
-Direction artistique appliquée en session 4 (2026-05-14). Référence : `design-livraison/` (mockups JSX + CSS livré).
+**Palette (static/css/midnight-gala.css):** All app CSS centralized here. Never add inline styles to templates or modify colors outside the token list below.
 
-### Palette de tokens CSS
+| Token | Color | Usage |
+|-------|-------|-------|
+| `--mg-flame` | `#cc2819` | Primary accent — borders, strips, buttons |
+| `--mg-ember` | `#ec2415` | Loss/danger signal |
+| `--mg-velvet` | `#4d0f12` | Deep secondary surface |
+| `--mg-oxblood` | `#6d1613` | Intermediate accent |
+| `--mg-claret` | `#901e16` | Strong borders |
+| `--mg-rosewood` | `#a35e57` | Secondary text / muted labels |
+| `--mg-blush` | `#f0afa7` | Gain/positive highlights |
+| `--mg-ivory` | `#f8f6f6` | Primary text |
+| `--mg-noir` | `#1a0507` | Body background |
+| `--mg-noir-2` | `#0e0405` | Card/sidebar surfaces |
 
-| Token | Valeur | Usage |
-|-------|--------|-------|
-| `--mg-flame` | `#cc2819` | Accent principal — bordures, strips, boutons primaires |
-| `--mg-ember` | `#ec2415` | Signal danger/perte — titres perdants, montants négatifs |
-| `--mg-velvet` | `#4d0f12` | Surface secondaire profonde |
-| `--mg-oxblood` | `#6d1613` | Accent intermédiaire |
-| `--mg-claret` | `#901e16` | `--mg-border-strong` — bordures fortes |
-| `--mg-rosewood` | `#a35e57` | Texte secondaire / labels muted |
-| `--mg-blush` | `#f0afa7` | Accent positif/gain — highlights, montants positifs |
-| `--mg-ivory` | `#f8f6f6` | Texte principal |
-| `--mg-noir` | `#1a0507` | Fond body |
-| `--mg-noir-2` | `#0e0405` | Surfaces cartes, sidebars |
+**Components (CSS classes):**
+`.mg-page-head` (eyebrow + h1) · `.mg-page-title` / `.mg-page-title--login` · `.mg-kpi` / `.mg-kpi__label` / `.mg-kpi__value` · `.mg-brand-logo` · `.login-wrap` / `.login-card` · `.token-badge` / `.token-count` · `.mg-chip` (variants: `--black`, `--zero`, `--latest`) · `.mg-strip` / `.mg-strip__label` · `.mg-display-logo` (position: absolute in #main-wrap)
 
-### Composants DS dans midnight-gala.css
+**Key template changes (sessions 4–7):**
+- `base.html`: Navbar with logo1.png (32px) + admin btn as `btn-primary`
+- `login.html`: `.login-wrap`, `.login-card`, eyebrow, logo (64px)
+- `dashboard.html`: `.mg-page-head`, `.mg-kpi` for tokens
+- `admin/index.html`: `.mg-page-head`, no `table-dark` (conflicts with midnight-gala overrides)
+- `roulette/display.html`: Inline `<style>` block (standalone template, not extending base.html), felt-green radial background, Neue Machina OTF
+- `static/roulette/assets/css/style.css`: Neue Machina Ultrabold (font-weight: 800), `.double` rotated 3deg with left: 147px
 
-| Classe | Usage |
-|--------|-------|
-| `.mg-page-head` | En-tête de page : eyebrow + titre h1 |
-| `.mg-eyebrow` | Label chapeau uppercase |
-| `.mg-page-title` | H1 display (Neue Machina) |
-| `.mg-page-title--login` | Variante login (2.4rem) |
-| `.mg-kpi` / `.mg-kpi__label` / `.mg-kpi__value` | Carte KPI (tokens dashboard) |
-| `.mg-brand-logo` | Logo img dans navbar (border-radius + object-fit) |
-| `.login-wrap` / `.login-card` | Centrage vertical page login (max-width 420px) |
-| `.token-badge` / `.token-count` | Badge jetons (pill, Neue Machina, blush) |
-| `.mg-chip` / `.mg-chip--black` / `.mg-chip--zero` / `.mg-chip--latest` | Jetons roulette strip |
-| `.mg-strip` / `.mg-strip__label` | Bande derniers tirages (display.html) |
-| `.mg-display-logo` | Logo absolu dans display.html — `position: absolute; top: 90px; left: 24px` dans `#main-wrap` |
-
-### Templates modifiés (session 4–5)
-
-| Template | Modifications |
-|----------|---------------|
-| `base.html` | Navbar : logo1.png (32px) + texte, admin btn → `btn-primary` ; favicon → logo1.png (remplace SVG data URI) |
-| `login.html` | `.login-wrap` / `.login-card`, logo (64px), eyebrow, `.mg-page-title--login` |
-| `dashboard.html` | `.mg-page-head`, `.mg-kpi` pour tokens, suppression style inline, `btn-primary` |
-| `admin/index.html` | `.mg-page-head`, suppression `table-dark` (3 tables), suppression emojis sections, nettoyage couleurs boutons ; `#vote-tracking-section` (card suivi votes, masquée par défaut) |
-| `roulette/display.html` | CSS : `#7DE0A8`→`--mg-blush`, `#FFB4AB`→`--mg-ember`, overrides `#72727F`→`--mg-rosewood` ; logo2.png en `position: absolute` dans `#main-wrap` ; favicon logo1.png ajoutée |
-
-### Modifications session 7 (2026-05-15)
-
-| Fichier | Modifications |
-|---------|---------------|
-| `midnight-gala.css` | Police migrée Archivo/Archivo Black → **Neue Machina Ultrabold** (self-hosted OTF) ; `@font-face` + tokens `--mg-font-display`/`--mg-font-body` mis à jour ; tokens felt `--mg-felt-light/felt/felt-dark` ajoutés |
-| `roulette/display.html` | Stage background → radial-gradient felt vert (`--mg-felt-*`) ; logo2.png retiré ; `@font-face` Neue Machina ajouté (standalone template) ; 3 occurrences `'Archivo Black'` remplacées |
-| `static/roulette/assets/css/style.css` | `font-family: arial` → `'Neue Machina', sans-serif` ; 6× `font-weight: bold` → `font-weight: 800` ; `.double` → `transform: rotate(3deg) scaleX(0.75)` + `left: 147px` (compression doubles chiffres Neue Machina) |
-| `static/fonts/` | `NeueMachina-Ultrabold.otf` copié depuis `fonts/` → servi par Flask sur `/static/fonts/` |
+**Font:** Neue Machina Ultrabold (self-hosted OTF) — declared in `midnight-gala.css` AND standalone in display.html `<style>` block.
 
 ---
 
-## Structure du projet
+## Project Structure
 
 ```
-app.py               # Flask factory — create_app()
-db.py                # Connexion SQLite, schéma, resolve_spin()
-scheduler.py         # APScheduler — game_tick() toutes les 5s
-cli.py               # Commande CLI : flask create-user
-extensions.py        # Limiter Flask-Limiter (partagé entre modules)
-gunicorn.conf.py     # 1 worker, 12 threads (gthread), preload_app=True, logs/
-casino.service       # Unité systemd
+app.py                 # Factory: create_app()
+db.py                  # SQLite schema, resolve_spin(), startup_check()
+scheduler.py           # APScheduler: game_tick() every 5s (Gunicorn master only)
+cli.py                 # CLI: flask create-user <nom> <role>
+extensions.py          # Flask-Limiter (shared)
+gunicorn.conf.py       # 1 worker, 12 gthread, preload_app=True, logs/
+casino.service         # Systemd unit
 routes/
-  auth.py            # /login  /logout — redirect post-login vers /play
-  player.py          # /dashboard  /play  /rewards  /roulette/display
-                     # + /rewards retourne claimed_ids (IDs des récompenses déjà réclamées)
-  admin.py           # /admin
-  api.py             # /api/session/*  /api/bet  /api/admin/*
-templates/           # Jinja2 — base.html, dashboard.html, login.html, play.html
+  auth.py              # /login, /logout (redirects to /play)
+  player.py            # /dashboard, /play, /rewards, /roulette/display
+                       # /rewards returns claimed_ids (already-claimed reward IDs)
+  admin.py             # /admin
+  api.py               # /api/session/*, /api/bet, /api/admin/*, /api/vote/*
+templates/             # Jinja2: base.html, login.html, dashboard.html, play.html, admin/index.html
 static/
-  css/
-    midnight-gala.css  # tout le CSS de l'app (refactor 2026-04-19, DA midnight-gala 2026-05-14, Neue Machina 2026-05-15)
-  fonts/
-    NeueMachina-Ultrabold.otf  # police self-hosted — servie sur /static/fonts/
-  img/
-    logo1.png          # 206×205px — logo principal (utilisé dans navbar et login)
-    logo2.png          # 209×205px — variante logo
-  js/
-    play.js          # Polling → formulaire de mise → affichage résultat
-                     # + mises colonne/douzaine/moitié (column/dozen/half)
-                     # + gridLocked : grille déverrouillée pendant spin pour pré-miser le tour suivant
-    admin.js         # Modal mot de passe, contrôles session, gestion users/récompenses
-                     # + pollAdmin() toutes les 3s → updateControlsState(status, mode)
-                     # + btn-action : bouton contextuel unique (▶ Ouvrir / 🎯 Lancer / ⏳ En cours…)
-                     # + btn-close : visible uniquement en open (Fermer ↯)
-                     # + toggle Manuel/Auto (btn-mode-manual/auto) + interval-wrap (toujours visible)
-                     # + btn-interval-apply : bouton OK pour valider l'intervalle sans quitter le champ
-                     # + filtre recherche live users et films
-                     # + CRUD films (renommer, supprimer) et suppression récompenses
-                     # + set-role-btn : bascule player↔admin en place (super-admin uniquement)
-                     # + section vote réécrite : groupes HTML (vote-group-roulette/vote/closed/palmares)
-                     #   showVoteGroup(mode) ; voteAction() avec finally ; event delegation sur catBtnsWrap
-                     # + loadVoteTracking() / renderVoteTracking() — polling 3s quand app_mode=vote
-                     #   → tableau votants×films×rangs×boosts par catégorie (via /api/admin/vote/tracking)
-                     # + trackingInterval géré dans updateVoteStatus() : activé/désactivé selon mode
-    display.js       # Lance spinWheel() depuis polling /api/session/status
-                     # + cache leaderboard (isSpinning + lastLeaderboardCache) : tops
-                     #   jamais vidés pendant le spin
-                     # + pollVoteDisplay() → /api/vote/display-state (public, sans auth)
-                     #   renderSingleVoteCategory(data) affiche catégorie projetée + social_boost + voter_count
-                     # + voteDisplayLoop() toutes les 5s (était 10s) ; forçage fresh fetch sur changement catId
-  roulette/          # milsaware/javascript-roulette (cloné)
-logs/                # access.log, error.log (Gunicorn)
-casino.db            # Créé automatiquement au premier lancement
-tests/
-  conftest.py        # Fixtures : app, admin_client, player_client, player2_client, open_session
-  test_casino.py     # 65 tests (64 passed + 1 xfail intentionnel)
-  locustfile.py      # Load testing Locust — 3 scénarios (CasinoPlayer, BetStorm, PollingOnly)
-  setup_load_test.py # Script de génération des 100 comptes de test Locust
-  load_test_users.json  # 100 comptes de test pré-générés (ne pas commiter)
-  run_load_test.sh   # Wrapper bash pour lancer locust en headless
-.github/
-  workflows/
-    tests.yml        # CI GitHub Actions : pytest + upload Codecov sur push/PR → main
-pytest.ini           # Config pytest (testpaths=tests, --tb=short)
-.coveragerc          # Exclut scheduler.py, locustfile.py, setup_load_test.py du rapport
-codecov.yml          # Seuil de régression couverture : tolérance 2%
-requirements-dev.txt # pytest==8.3.5, pytest-cov==6.1.0 (dépendances dev uniquement)
+  css/midnight-gala.css           # All app styles
+  fonts/NeueMachina-Ultrabold.otf # Self-hosted OTF
+  img/logo1.png (206×205), logo2.png (209×205), feuille.png (697×354)
+  js/play.js                      # Polling → bet form → result display (gridLocked, resultFetching flag)
+     admin.js                     # Session controls, user/film/reward CRUD, vote tracking
+     display.js                   # spinWheel() polling, leaderboard cache, public vote display
+  roulette/                       # milsaware/javascript-roulette (nested, no .gitmodules, local CSS mods committed)
+logs/, casino.db, tests/, .github/workflows/tests.yml
 ```
 
 ---
 
-## Routes
+## Routes (42 endpoints)
 
-| Route | Blueprint | Description |
-|-------|-----------|-------------|
-| `GET /login` | auth | Page de login |
-| `POST /login` | auth | Authentification |
-| `GET /logout` | auth | Déconnexion |
-| `GET /dashboard` | player | Tableau de bord joueur |
-| `GET /play` | player | Interface de mise |
-| `GET /rewards` | player | Catalogue de récompenses |
-| `GET /roulette/display` | player | Affichage salle (grand écran) |
-| `GET /api/leaderboard` | api | Top 5 plus-values / top 5 moins-values — net P&L. Retourne `top_winners` + `top_losers`. |
-| `GET /api/session/status` | api | Statut courant (JSON) + `app_mode` + `vote_session` |
-| `GET /api/session/round_result` | api | Résultat du dernier spin — winners/losers agrégés par joueur (`GROUP BY u.id, u.username, SUM(payout-amount)`). Retourne `{session_id, winners:[{username,net}], losers:[{username,net}]}`. |
-| `GET /api/session/result` | api | Résultat de la session courante pour le joueur connecté |
-| `GET /api/session/bets` | api | Mises du joueur sur la session courante |
-| `GET /api/session/qr` | api | QR code de la session courante |
-| `GET /api/history` | api | Historique des sessions fermées |
-| `POST /api/bet` | api | Placer une mise (joueur) |
-| `GET /api/vote/state` | api | État du vote courant (joueur) |
-| `POST /api/vote/rankings` | api | Soumettre/modifier son classement de films (joueur) |
-| `POST /api/vote/boost` | api | Ajouter un boost jetons sur une catégorie (joueur) |
-| `POST /api/admin/session/open` | api | Ouvrir une session roulette (admin) |
-| `POST /api/admin/session/spin` | api | Lancer la roue (admin) |
-| `POST /api/admin/session/close` | api | Fermer la session en cours (admin) |
-| `POST /api/admin/stats/reset` | api | Remettre à zéro les statistiques (admin) |
-| `POST /api/admin/mode` | api | Changer le mode manuel/auto (admin) |
-| `POST /api/admin/users/create` | api | Créer un utilisateur — rôle admin réservé au super-admin |
-| `POST /api/admin/users/<id>/delete` | api | Supprimer un utilisateur — admins réservés au super-admin |
-| `POST /api/admin/users/<id>/set-role` | api | Changer le rôle player↔admin (super-admin uniquement) |
-| `POST /api/admin/users/<uid>/zero-tokens` | api | Remettre les jetons d'un joueur à zéro (admin) |
-| `POST /api/admin/users/<uid>/decrement-tokens` | api | Déduire des jetons d'un joueur (admin) |
-| `POST /api/admin/users/<uid>/reset-password` | api | Réinitialiser le mot de passe d'un joueur (admin) |
-| `GET /api/admin/vote/catalogue` | api | Catalogue catégories + films (admin) |
-| `POST /api/admin/vote/categories` | api | Créer une catégorie (admin) |
-| `POST /api/admin/vote/categories/<cid>/delete` | api | Supprimer une catégorie (admin) |
-| `POST /api/admin/vote/films` | api | Ajouter un film à une catégorie (admin) |
-| `POST /api/admin/vote/films/<fid>/delete` | api | Supprimer un film (admin) |
-| `POST /api/admin/vote/open` | api | Ouvrir un vote (admin) |
-| `POST /api/admin/vote/close` | api | Fermer le vote courant (admin) |
-| `POST /api/admin/vote/display-category` | api | Choisir la catégorie affichée (admin) |
-| `POST /api/admin/vote/palmares` | api | Passer en mode palmarès (admin) |
-| `POST /api/admin/vote/reset-mode` | api | Repasser en mode roulette (admin) |
-| `GET /api/admin/vote/sessions` | api | Toutes les sessions fermées triées par note (admin) |
-| `GET /api/vote/display-state` | api | **Public (sans auth)** — état vote pour display.html : `{session, display_category{id,name,social_boost,voter_count}}` |
-| `GET /api/admin/vote/tracking` | api | Suivi votes en cours (admin) — matrice votants×films×rangs×boosts par catégorie |
-| `GET /api/vote/results` | api | Résultats détaillés par catégorie (admin) |
-| `POST /api/admin/*` | api | Actions admin génériques (tokens, users) |
+**Player routes (auth.py, player.py):**
+`GET /login` · `POST /login` · `GET /logout` · `GET /dashboard` · `GET /play` · `GET /rewards` · `GET /roulette/display`
+
+**Session API (api.py):**
+`GET /api/leaderboard` (top 5 winners/losers by net P&L) · `GET /api/session/status` (current state + app_mode + vote_session + tokens) · `GET /api/session/round_result` (winners/losers aggregated per player, GROUP BY u.id, u.username, SUM(payout-amount)) · `GET /api/session/result` · `GET /api/session/bets` · `GET /api/session/qr` · `GET /api/history` · `POST /api/bet`
+
+**Vote API (api.py):**
+`GET /api/vote/state` (projected category only, or [] if none) · `POST /api/vote/rankings` · `POST /api/vote/boost` (MAX_BOOST=300 per category per user per session; 400 response if exceeded) · `GET /api/vote/display-state` (**public, no auth**; used by display.html) · `GET /api/admin/vote/tracking` (matrix: voters × films × ranks × boosts per category)
+
+**Admin session API (api.py):**
+`POST /api/admin/session/open` · `POST /api/admin/session/spin` · `POST /api/admin/session/close` · `POST /api/admin/stats/reset`
+
+**Admin mode API (api.py):**
+`POST /api/admin/mode` (toggle manual/auto)
+
+**Admin user API (api.py):**
+`POST /api/admin/users/create` · `POST /api/admin/users/<id>/delete` · `POST /api/admin/users/<id>/set-role` (super-admin only, protected from username='admin') · `POST /api/admin/users/<uid>/zero-tokens` · `POST /api/admin/users/<uid>/decrement-tokens` · `POST /api/admin/users/<uid>/reset-password`
+
+**Admin vote API (api.py):**
+`GET /api/admin/vote/catalogue` · `POST /api/admin/vote/categories` · `POST /api/admin/vote/categories/<cid>/delete` · `POST /api/admin/vote/films` · `POST /api/admin/vote/films/<fid>/delete` (protected if status='open') · `POST /api/admin/vote/open` · `POST /api/admin/vote/close` · `POST /api/admin/vote/display-category` · `POST /api/admin/vote/palmares` · `POST /api/admin/vote/reset-mode` · `GET /api/admin/vote/sessions` · `GET /api/vote/results`
 
 ---
 
-## Schéma SQLite (`db.py`)
+## Database Schema (SQLite)
 
 ```sql
 users          (id, username, password_hash, role, tokens, created_at)
+               role: 'admin' | 'player' — super-admin = username=='admin' (no DB column)
 game_sessions  (id, status, mode, auto_interval_seconds, winning_number, opened_at, closed_at, created_at)
+               status: waiting → open (30s) → spinning → closed → waiting
 bets           (id, session_id, user_id, bet_type, bet_value, amount, payout)
-app_config     (key, value)   -- auto_mode_ui, auto_mode_enabled, auto_interval_seconds, app_mode,
-                                 current_vote_session_id, vote_revealed_categories (JSON array, init '[]'),
-                                 vote_display_category_id (init ''), stats_reset_at (runtime, filtre leaderboard)
+app_config     (key, value)
+               Keys: auto_mode_ui, auto_mode_enabled, auto_interval_seconds, app_mode,
+                     current_vote_session_id, vote_revealed_categories (JSON []),
+                     vote_display_category_id, stats_reset_at (isoformat for lexicographic comparison)
 vote_sessions  (id, status, opened_at, closed_at, created_at)
-               status : 'waiting' / 'open' / 'closed' / 'palmares'
-vote_boosts    (id, session_id, user_id, category_id, amount, updated_at)
-               UNIQUE(session_id, user_id, category_id)
+               status: waiting → open → closed → palmares
+vote_boosts    (id, session_id, user_id, category_id, amount, updated_at) UNIQUE(session_id, user_id, category_id)
 vote_categories (id, name, display_order, created_at)
-vote_films      (id, category_id, title, created_at) UNIQUE(category_id, title)
-vote_rankings   (id, session_id, user_id, film_id, rank, points, updated_at) UNIQUE(session_id, user_id, film_id)
+vote_films     (id, category_id, title, created_at) UNIQUE(category_id, title)
+vote_rankings  (id, session_id, user_id, film_id, rank, points, updated_at) UNIQUE(session_id, user_id, film_id)
+               points = max(1, round(base × (0.55 ^ (rank-1)) × (1 + boost%)))
+               base = max(10, n × 2.5) where n = num films in category
 ```
-
-`status` roulette : `waiting → open (30s) → spinning → closed → waiting`
-`app_mode` : `'roulette'` / `'vote'` / `'closed'` / `'palmares'`
-`status` vote : `'waiting'` / `'open'` / `'closed'` / `'palmares'`
 
 ---
 
-## Cycle de session
+## Session Lifecycle
 
+**Roulette:** waiting → open (30s bet window) → spinning → closed → waiting
+
+**Vote:** waiting → open → closed → palmares → back to roulette via reset-mode
+
+**Manual mode:** Admin clicks ▶ Open, then 🎯 Spin.
+
+**Auto mode:** Toggle ⚡ Auto sets `auto_mode_ui='1'`. Scheduler activates `auto_mode_enabled='1'` **only on the first click** of ▶ Open. Subsequent sessions chain automatically (5s after close). Btn Fermer ↯ disables `auto_mode_enabled` but preserves `auto_mode_ui` (toggle stays ⚡ Auto; next ▶ Open restarts chaining).
+
+**Payouts:** color/parity/half ×2 · number ×36 · column/dozen ×3. Chip denominations: 1, 5, 10, 50, 67, 100. Columns: `column=1` → n%3==0 (3,6,…,36); `column=2` → n%3==2 (2,5,…,35); `column=3` → n%3==1 (1,4,…,34).
+
+**Roulette grid layout:**
 ```
-waiting → open (fenêtre de mise 30s) → spinning → closed → waiting
-```
-
-- **Mode manuel** : l'admin clique "Ouvrir session" puis "Lancer roue".
-- **Mode auto** : le toggle ⚡ Auto définit l'intention (`auto_mode_ui='1'`). L'activation réelle du scheduler (`auto_mode_enabled='1'`) se fait au moment où l'admin clique ▶ Ouvrir — la **première session est toujours manuelle**. Les sessions suivantes s'enchaînent automatiquement (5s après fermeture).
-- **Fermer ↯** : désactive `auto_mode_enabled` (chaining stoppé) mais conserve `auto_mode_ui` (toggle reste ⚡ Auto — le prochain ▶ Ouvrir relance l'enchaînement).
-- **Redémarrage** : `startup_check()` dans `db.py` récupère automatiquement toute session en `spinning` ou `open` stale.
-
-### Payouts roulette
-| Type de mise | Condition | Multiplicateur |
-|-------------|-----------|----------------|
-| `color` red/black | Numéro rouge/noir (0 = House win) | ×2 |
-| `parity` even/odd | Parité (0 = House win) | ×2 |
-| `number` | Numéro exact | ×36 |
-| `column` 1/2/3 | Colonne (0 = House win) | ×3 |
-| `dozen` 1/2/3 | 1–12 / 13–24 / 25–36 (0 = House win) | ×3 |
-| `half` low/high | 1–18 / 19–36 (0 = House win) | ×2 |
-
-Dénominations de jetons disponibles (play.html `.chip-btn`) : **1, 5, 10, 50, 67, 100**
-
-Correspondance colonnes :
-- `column=1` → numéros 3,6,9,…,36 (n%3==0) — bouton "2→1" haut
-- `column=2` → numéros 2,5,8,…,35 (n%3==2) — bouton "2→1" milieu
-- `column=3` → numéros 1,4,7,…,34 (n%3==1) — bouton "2→1" bas
-
-Disposition du tableau de mise (play.html et display.html) :
-```
-[ 1-18 ]  [ 19-36 ]                      ← #half-bets / #live-half
-[ 0 ][ 3 ][ 6 ]…[ 36 ][ 2→1 ]           ← #roulette-grid / #live-roulette-grid
+[ 1-18 ]  [ 19-36 ]
+[ 0 ][ 3 ][ 6 ]…[ 36 ][ 2→1 ]
      [ 2 ][ 5 ]…[ 35 ][ 2→1 ]
      [ 1 ][ 4 ]…[ 34 ][ 2→1 ]
-[ 1ère (1-12) ][ 2ème (13-24) ][ 3ème ]  ← #dozen-bets / #live-dozens
-[ PAIR ][ ROUGE ][ NOIR ][ IMPAIR ]       ← #outside-bets / #live-outside
+[ 1–12 ][ 13–24 ][ 25–36 ]
+[ PAIR ][ RED ][ BLACK ][ ODD ]
 ```
+
+**app_mode:** `'roulette'` (default) · `'vote'` (voting phase) · `'closed'` (transient, before palmares or reset) · `'palmares'` (display results).
 
 ---
 
-## Scheduler (`scheduler.py`)
+## Commands & Operations
 
-`game_tick()` toutes les 5 secondes — lancé uniquement dans le processus Gunicorn master (`preload_app=True`). Ne jamais appeler en mode dev Flask (`flask run`).
-
-```python
-if os.environ.get('SERVER_SOFTWARE', '').startswith('gunicorn'):
-    from scheduler import start_scheduler
-    start_scheduler(app)
-```
-
----
-
-## Gestion des utilisateurs
-
+**Create user:**
 ```bash
-# Créer un utilisateur (mot de passe affiché une seule fois)
-flask --app "app:create_app()" create-user <nom> <role>
-# role : player | admin
+flask --app "app:create_app()" create-user <name> <role>  # role: player | admin
 ```
 
----
-
-## Services
-
+**Service management:**
 ```bash
-systemctl status casino
-systemctl restart casino
-journalctl -u casino -f
+systemctl {status,restart,stop} casino
+journalctl -u casino -f              # tail logs
 journalctl -u casino -n 50 --no-pager
 ```
 
----
-
-## Développement local
-
+**Local dev:**
 ```bash
 source venv/bin/activate
 pip install -r requirements.txt
-cp .env.example .env   # Renseigner CASINO_SECRET_KEY
+cp .env.example .env  # set CASINO_SECRET_KEY
 flask --app "app:create_app()" run
 ```
 
----
-
-## Environnement (`.env`)
-
-| Variable | Description |
-|----------|-------------|
-| `CASINO_SECRET_KEY` | Clé secrète Flask — **obligatoire**, lève `RuntimeError` si absente |
-| `FLASK_ENV` | `development` ou `production` (prod requis pour cookie Secure) |
-| `CASINO_BASE_URL` | URL de base pour le QR code (ex. `https://casino.kryptide.fr`) — si absent, utilise `request.host_url` |
-
-`.env` est chargé manuellement dans `create_app()` (sans python-dotenv).
-
----
-
-## Invariants critiques
-
-- Toutes les opérations de tokens utilisent `BEGIN IMMEDIATE` avec vérification du solde — aucun double-spend.
-- CSRF activé sur toutes les routes POST. Les appels API JSON envoient `X-CSRFToken` dans le header.
-- `resolve_spin()` est **idempotent** — sûr à rappeler après un redémarrage.
-- Le modal de mot de passe s'auto-supprime du DOM après 30s — jamais stocké côté client.
-- Sessions en `open` ou `spinning` au démarrage sont automatiquement récupérées par `startup_check()`.
-- `CASINO_SECRET_KEY` est **obligatoire** — `create_app()` lève `RuntimeError` si la variable est absente ou vide.
-- `ProxyFix(x_for=1, x_proto=1, x_host=1)` appliqué sur `app.wsgi_app` — nécessaire pour que Flask-Limiter lise la vraie IP derrière nginx.
-- Tout rendu de données API en JavaScript utilise `textContent` — jamais `innerHTML` avec données non-trusted.
-
----
-
-## Pièges connus
-
-```
-⚠️ midnight-gala.css → tout le CSS de l'app est dans static/css/midnight-gala.css — ne pas remettre de style inline dans les templates
-⚠️ display.html CSS  → le CSS de display.html vit dans un bloc <style> inline (template standalone, pas d'extend base.html)
-                        — ne pas déplacer ce CSS dans midnight-gala.css
-⚠️ DA midnight-gala  → ne jamais introduire de couleurs hors-palette (#7DE0A8, #FFB4AB, #72727F, etc.)
-                        — utiliser exclusivement les tokens --mg-* définis dans :root
-⚠️ admin.js className → admin.js écrase admin.js className complet à chaque pollAdmin() (3s)
-                          — la classe CSS initiale dans Jinja est cosmétique seulement au runtime
-                          — seul le sélecteur d'ID (btn-action, btn-close, etc.) est stable
-⚠️ table-dark        → Bootstrap table-dark écrase --bs-table-bg et entre en conflit avec les overrides
-                          midnight-gala.css — ne jamais utiliser table-dark dans les templates admin
-⚠️ mg-display-logo   → position: absolute dans #main-wrap — #main-wrap a display:contents donc
-                          position:relative y est inopérant ; le logo se positionne par rapport au viewport
-                          — disparaît automatiquement quand JS met mainWrap.style.display='none' (vote/palmares)
-⚠️ favicon           → base.html et display.html utilisent logo1.png — remplace l'ancien SVG data URI dans base.html
-⚠️ claimed_ids       → /rewards retourne les IDs des récompenses déjà réclamées par le joueur — utilisé côté client pour désactiver les boutons
-⚠️ redirect /play    → routes/auth.py redirige vers /play après login (pas /dashboard)
-⚠️ RATELIMIT_ENABLED → variable d'env lue dans extensions.py — mettre à false pour les tests de charge Locust
-⚠️ APScheduler      → un seul processus (Gunicorn master) — ne pas lancer en mode flask run
-⚠️ SQLite WAL       → busy_timeout=10s — les connexions ne doivent pas rester ouvertes longtemps
-⚠️ isolation_level  → None dans db_conn() — transactions manuelles (BEGIN IMMEDIATE requis)
-⚠️ resolve_spin()   → idempotent — status != 'spinning' → ROLLBACK silencieux
-⚠️ SESSION_COOKIE_SECURE → True en prod, False en dev HTTP (sinon cookie jamais envoyé)
-⚠️ preload_app=True → forking : les objets initialisés avant le fork sont partagés — éviter les connexions DB globales
-⚠️ Rôles           → 'admin' | 'player' — constraint SQLite CHECK
-⚠️ winning_number  → 0 = House win (aucun parieur ne gagne, ni rouge/noir ni pair/impair)
-⚠️ vote delta_tokens → ancien_bonus - nouveau_bonus : positif=remboursement, négatif=déduction
-                        status vote : waiting → open → closed → palmares
-⚠️ vote points formula  → api.py : base = max(10, n × 2.5) où n = nb films dans la catégorie
-                           raw_float = base × (0.55 ^ (rank - 1))   # décroissance exponentielle par rang
-                           points    = max(1, round(raw_float × (1 + boost_amount / 100)))
-                           — multiplicateur continu (pas de paliers fixes)
-                           — MAX_BOOST = 300 jetons par catégorie par user par session
-                           — /api/vote/boost retourne 400 si amount > MAX_BOOST
-⚠️ vote boost MAX_BOOST   → 300 jetons par catégorie par user par session — cap appliqué dans /api/vote/boost
-                             (400 si amount > 300) ; total peut dépasser 300 sur plusieurs catégories
-⚠️ app_mode 'closed'      → état transitoire émis par /api/admin/vote/close avant palmarès ou reset-mode
-                             cycle complet : 'roulette' → 'vote' → 'closed' → 'palmares' → 'roulette'
-                             — ne pas traiter 'closed' comme terminal : toujours suivre d'un palmares ou reset-mode
-⚠️ vote UPSERT      → UNIQUE(vote_session_id, user_id) — un seul vote par user par session, modifiable
-⚠️ app_mode         → stocké dans app_config — roulette par défaut, reset via /api/vote/reset-mode
-⚠️ admin boutons    → états pilotés exclusivement par pollAdmin() (toutes les 3s) via updateControlsState()
-                      — ne jamais ajouter de variable JS locale pour l'état des boutons
-                      — currentStatus (admin.js) est mis à jour par updateControlsState(), pas autrement
-⚠️ #right-panel display.html → flex column uniquement — ne jamais mettre grid multi-colonnes (grid-template-columns: 1fr 1fr
-                        met lb-winners et lb-losers côte à côte au lieu d'être empilés)
-⚠️ leaderboard cache → display.js mémorise lastLeaderboardCache {top_winners, top_losers} ; pendant isSpinning,
-                        un payload vide ne vide pas les tops — comportement voulu, pas un bug
-                        — top_holders supprimé (session 8, 2026-05-25) : plus de renderTopHolders() ni de #top-holders-list
-⚠️ vote_boosts stub    → table minimale ajoutée dans db.py init_db() (session 8) — sera remplacée en Prompt 5
-                          net P&L leaderboard = SUM(payout-amount) closed sessions − SUM(vote_boosts.amount)
-⚠️ btn-action       → bouton unique contextuel : waiting→▶ Ouvrir, open→🎯 Lancer, spinning→⏳ En cours…
-                        les actions sont routées selon currentStatus — ne pas restaurer les 3 boutons séparés
-⚠️ btn-close        → affiché uniquement quand status='open' (Fermer ↯) — action d'urgence destructive
-⚠️ auto_mode_ui vs auto_mode_enabled → deux clés distinctes dans app_config :
-                        auto_mode_ui     = intent du toggle (ce que session_status() retourne comme `mode`)
-                        auto_mode_enabled = ce que scheduler.py lit pour l'enchaînement automatique
-                        — auto_mode_enabled n'est activé ('1') que par admin_open_session() quand auto_mode_ui='1'
-                        — admin_close_session() remet auto_mode_enabled='0' mais laisse auto_mode_ui intact
-                        — admin_set_mode(manual) remet les deux à '0'
-⚠️ mode toggle      → btn-mode-manual / btn-mode-auto — écrit auto_mode_ui via applyMode()
-                        interval-wrap toujours visible (auto_interval_seconds contrôle la durée de mise dans les deux modes)
-                        bouton btn-interval-apply (OK) pour valider sans quitter le champ ; event change (Enter/blur) en filet
-⚠️ /api/session/status → retourne `mode` ('auto'|'manual') basé sur auto_mode_ui (pas auto_mode_enabled)
-                          et `auto_interval_seconds` — utilisés par admin.js pour piloter le toggle
-⚠️ grace period spinning → /api/session/status simule 'spinning' pendant 12s après fermeture normale
-                            pour la page display — court-circuité si winning_number IS NULL (force-close admin)
-                            — ne pas retirer la condition `prev['winning_number'] is not None`
-⚠️ /api/claim          → endpoint supprimé (2026-05-08) — ne plus utiliser ; les récompenses sont
-                          distribuées exclusivement via /api/admin/reward/give (admin)
-⚠️ CASINO_SECRET_KEY   → obligatoire en prod ET en test — conftest.py injecte 'test-secret-for-pytest'
-                          via os.environ.setdefault() avant create_app()
-⚠️ ProxyFix            → configuré dans app.py (x_for=1, x_proto=1, x_host=1) — ne pas le retirer,
-                          Flask-Limiter lirait 127.0.0.1 pour toutes les IPs sans lui
-⚠️ CSP nginx           → 'unsafe-inline' conservé pour scripts (inline script dans play.html)
-                          — à durcir avec nonce si les templates sont refactorisés
-⚠️ CASINO_BASE_URL     → si absent, le QR code utilise request.host_url (Host header — injectable)
-                          — toujours définir dans .env en production
-⚠️ stats_reset_at      → stocké en isoformat() (ex: '2026-05-13T14:15:14+00:00') pour comparaison
-                          lexicographique correcte avec closed_at — ne jamais utiliser strftime()
-⚠️ column bet display  → les colBtn dans display.html doivent avoir data-type="column" et data-val
-                          — sans ces attributs renderChips() ignore silencieusement les mises colonne
-⚠️ admin films         → suppression protégée si status='open' (vote en cours) — renommer idem
-⚠️ admin users         → liste collapsible (collapse show par défaut) + filtre live + scroll 5 lignes
-⚠️ admin récompenses   → suppression cascade reward_claims via /api/admin/rewards/<id>/delete
-⚠️ dozen/half display  → les cellules ldoz/lhalf dans display.html doivent avoir data-type et data-val
-                          — sans ces attributs renderChips() ignore silencieusement ces mises
-⚠️ live-half/dozens/outside → width: calc(100% - 86px) = 46px (zero) + 40px (colBtn 38px + gap 2px)
-                               — ne pas utiliser calc(100% - 46px), sinon déborde sous les 2→1
-⚠️ resultFetching flag      → play.js : guard contre la race condition de pollResult() — resultShown est mis à true
-                              APRÈS deux await (fetch + json()), pollStatus() peut appeler pollResult() plusieurs
-                              fois entre les yields avant que resultShown soit vrai. resultFetching=true verrouille
-                              dès l'entrée de la fonction ; remis à false sur 404, session mismatch, catch, et
-                              au reset de session (open/waiting) — reste true sur le chemin nominal (popup affiché)
-                              — ne jamais supprimer ce flag ni déplacer resultShown=true avant les awaits sans reconsidérer
-⚠️ round_result GROUP BY    → api.py session_round_result() : la requête doit grouper par u.id, u.username
-                              avec SUM(payout-amount) — sans GROUP BY, un joueur multi-mises apparaît N fois
-                              dans winners/losers (une entrée par mise) → popup display affiche N lignes identiques
-⚠️ balanceDelta vs netDelta → play.js pollResult() : balanceDelta = sum(payout) pour mettre à jour
-                               balanceEl (amount déjà déduit à la mise) ; netDelta = sum(payout-amount)
-                               pour l'affichage du résultat (profit/perte net) — ne pas confondre les deux
-⚠️ gridLocked vs betPlaced → gridLocked : verrou UI (grille non-cliquable entre soumission et spin)
-                              betPlaced : routage vers pollResult() — les deux sont indépendants
-                              gridLocked=false dès que spinning démarre, betPlaced reste true jusqu'au résultat
-⚠️ auto-reload mode        → play.js : lastKnownMode détecte les transitions app_mode (roulette↔vote↔palmares)
-                              → window.location.reload() + return au prochain pollStatus() (2s max)
-                              — premier appel silencieux (lastKnownMode=null → init sans reload)
-                              — ne pas supprimer le bloc showOnly() : reste fallback dans le même tick
-⚠️ roulette lib CSS        → static/roulette/assets/css/style.css — repo git imbriqué (milsaware/javascript-roulette)
-                              PAS de .gitmodules dans casino : les modifs CSS sont commitées localement dans le
-                              sous-repo mais ne peuvent pas être poussées vers l'upstream milsaware
-                              — référence visuelle : tous les éléments concentriques centrés sur (155, 155)
-                              dans le repère .wheel 312×312 px (session 7, 2026-05-15)
-⚠️ roulette centrage       → après session 7 : ballTrack 212×212 (left/top 49), pocketsRim (left/top 37.5),
-                              cone (left/top 65, gradient circle at 90px 90px), turret (left/top 132),
-                              turretHandle (left 111) — ne pas revenir aux valeurs originales
-⚠️ roulette turret         → feuille.png (static/img/feuille.png, RGBA 697×354) remplace le gradient or — turret 100×100px
-                              (top:106px, left:106px, centré sur 156px) ; filter drop-shadow #cc2819/#ec2415 + brightness(1.15)
-                              + animation leaf-pulse 3s ease-in-out infinite ; turretHandle + thendOne/thendTwo masqués (display:none)
-                              — ne pas rétablir le gradient ni le handle doré ; pas de box-shadow (inefficace sur PNG transparent)
-⚠️ roulette police         → style.css : font-family 'Neue Machina' (session 8) ; font-weight 800 sur tous
-                              les éléments texte ; .double overridé avec transform: rotate(3deg) scaleX(0.75)
-                              + left: 147px pour compenser la largeur de Neue Machina vs Arial sur les doubles
-                              chiffres — .single inchangé (left: 152px, font-size: 14px partagé)
-⚠️ Neue Machina font       → self-hosted OTF dans static/fonts/ — @font-face déclaré dans midnight-gala.css
-                              (pages app) ET dans le <style> inline de display.html (standalone)
-                              — font-weight: 100 900 mappé sur le fichier Ultrabold unique
-⚠️ super-admin             → username == 'admin' exactement — pas de colonne DB, pas de rôle distinct
-                              droits exclusifs : créer des admins, supprimer des admins, changer les rôles
-                              protégé contre sa propre suppression et modification (anti-lockout)
-                              — session['username'] accessible nativement dans les templates Jinja
-⚠️ set-role                → /api/admin/users/<id>/set-role — super-admin uniquement (403 sinon)
-                              interdit sur username='admin' — met à jour badge + bouton en place sans reload
-⚠️ admin delete user       → super-admin peut supprimer des admins (sauf username='admin')
-                              admin classique → 403 sur tout compte admin
-⚠️ admin mobile            → @media (max-width:768px) dans midnight-gala.css : #users-table en cartes flex,
-                              seule colonne 4 (Ajouter tokens) cachée — colonne 3 (Tokens) visible avec padding:4px 0
-                              data-label="Joueur/Rôle/Tokens/Actions" sur td 1/2/3/5 — thead masqué, labels via ::before
-                              boutons +150/+350 dans colonne 5 (Actions), PAS dans colonne 4 (cachée mobile)
-⚠️ boutons +150/+350       → double-tap requis sur touch (window.matchMedia('hover:none')),
-                              timer 3s via quickBtnPendingMap (Map uid+amount → timer) ;
-                              desktop : action immédiate sans confirmation — jamais de alert()
-⚠️ vote-group d-flex      → vote-group-roulette et vote-group-closed ne doivent PAS avoir la classe
-                              d-flex sur leur conteneur — Bootstrap .d-flex { display: flex !important }
-                              écrase style="display:none" (inline sans !important) → groupes toujours
-                              visibles. Le d-flex doit être sur un div intérieur ; showVoteGroup() utilise
-                              el.style.display = 'none' / '' sur le conteneur → fonctionne sans d-flex
-⚠️ /api/vote/state         → retourne uniquement la catégorie projetée (vote_display_category_id) ou []
-                              si aucune catégorie n'est projetée — les joueurs voient "En attente…" jusqu'à
-                              ce que l'admin sélectionne une catégorie à projeter (U1 fix 2026-05-26)
-⚠️ /api/admin/vote/reveal-next → accepte désormais body {category_id} pour révéler une catégorie choisie
-                                 ; fallback séquentiel si category_id absent (A5 fix 2026-05-26)
-⚠️ vote tracking closed    → #vote-tracking-section visible aussi quand app_mode='closed' (admin peut
-                              consulter les résultats avant de décider palmares vs retour roulette)
-⚠️ play.js tokens polling  → pollStatus() met à jour balanceEl depuis data.tokens (toutes les 2s)
-                              /api/session/status inclut 'tokens' pour les sessions Flask authentifiées
-                              (None pour les appelants non connectés — display page non affectée)
-⚠️ /api/vote/display-state → endpoint PUBLIC (aucun _require_login) — utilisé par display.html
-                              retourne {session, display_category{id,name,social_boost,voter_count}}
-                              NE PAS remplacer par /api/vote/state (protégé → 401 sur display.html public)
-                              — bug originel : pollVoteDisplay() appelait /api/vote/state → 401 → lastVoteStateData=null
-                              → catégorie jamais affichée sur le grand écran (corrigé 2026-05-26)
-⚠️ /api/admin/vote/tracking → protégé _require_admin — retourne matrice votants×films×rangs×boosts
-                               par catégorie pour la session courante (current_vote_session_id)
-                               — ne retourne que la session active, pas l'historique
-⚠️ admin.js vote section    → groupes HTML exclusifs : vote-group-roulette / vote-group-vote /
-                               vote-group-closed / vote-group-palmares — showVoteGroup(mode) affiche l'un,
-                               masque les autres — ne jamais piloter individuellement les display de ces divs
-                               — listeners attachés une seule fois au boot (pas dans updateVoteStatus)
-                               — event delegation sur catBtnsWrap pour les boutons catégorie (innerHTML
-                               acceptable ici car contenu généré côté serveur vérifié)
-⚠️ voteAction finally       → voteAction(btn, url, body) restaure btn.disabled=false et opacity=1
-                               dans le bloc finally — toujours utiliser cette fonction pour les actions vote,
-                               jamais de fetch direct qui oublierait la restauration en cas d'erreur
-⚠️ trackingInterval         → admin.js — setInterval 3s pour loadVoteTracking() ; géré dans
-                               updateVoteStatus() : activé si mode=vote, clearInterval sinon
-                               — ne pas créer d'autre interval pour le vote tracking
-⚠️ #vote-tracking-section   → display:none par défaut dans admin/index.html — rendu visible uniquement
-                               quand app_mode=vote (piloté par updateVoteStatus dans admin.js)
-                               — ne pas modifier la visibilité directement depuis d'autres fonctions
-```
-
----
-
-## Tests
-
+**Tests:**
 ```bash
 cd /root/casino && source venv/bin/activate
-pytest tests/ -v --tb=short                          # 65 tests (64 passed + 1 xfail intentionnel)
-pytest tests/ --cov=. --cov-report=term-missing      # avec couverture (77% sur code applicatif)
+pytest tests/ -v --tb=short                  # 65 tests (64 passed + 1 xfail)
+pytest tests/ --cov=. --cov-report=term-missing
 ```
+Suite: conftest.py (fixtures: app, client, admin_client, player_client, player2_client, open_session) · test_casino.py (12 test classes)
+xfail: test_no_double_bet_same_session (multi-bet allowed by frontend).
 
-Suite dans `tests/` :
-- `conftest.py` — fixtures : `app` (DB temporaire isolée), `client`, `admin_client`, `player_client`, `player2_client`, `open_session` (`open_vote_session` supprimée — les tests vote utilisent un helper local `_open_vote()`)
-- `test_casino.py` — 64 tests sur 12 classes : `TestAuth`, `TestRoulette`, `TestBets`, `TestLeaderboard`, `TestAdminActions`, `TestVoteCategories`, `TestVoteFilms`, `TestVoteSession`, `TestVoteRankings`, `TestVoteBoosts`, `TestVoteState`, `TestVoteResults`
-
-> `test_no_double_bet_same_session` → xfail intentionnel : l'app autorise les mises multiples par session (multi-bet frontend).
-
----
-
-## CI / Couverture
-
-GitHub Actions (`tests.yml`) — déclenché sur push et PR vers `main` :
-1. Python 3.12, installation `requirements.txt` + `requirements-dev.txt`
-2. `pytest --cov --cov-report=xml`
-3. Upload vers Codecov (`CODECOV_TOKEN` dans GitHub Secrets)
-
-Couverture actuelle : **77%** (excluant `scheduler.py`, `locustfile.py`, `setup_load_test.py` via `.coveragerc`).
-Rapport : `https://app.codecov.io/gh/BigFoot3/casino-app`
-
----
-
-## Load testing (Locust)
-
-Suite de montée en charge pour valider la tenue sous 100 joueurs simultanés.
-
+**Load testing (Locust):**
 ```bash
-cd /root/casino && source venv/bin/activate
+export RATELIMIT_ENABLED=false  # disable rate limiter for load tests
+python tests/setup_load_test.py  # create 100 test accounts (once)
 
-# Prérequis : désactiver le rate limiter pour les tests
-export RATELIMIT_ENABLED=false
-
-# Créer les 100 comptes de test (une seule fois)
-python tests/setup_load_test.py
-
-# Scénario complet — 100 users, spawn 10/s, durée 3 min
+# Run scenarios:
 locust -f tests/locustfile.py --host=http://127.0.0.1:5000 \
-       --users=100 --spawn-rate=10 --run-time=3m --headless \
-       --class-picker CasinoPlayer
+  --users=100 --spawn-rate=10 --run-time=3m --headless --class-picker CasinoPlayer
+# Other classes: BetStorm (spike bets), PollingOnly (baseline), VotePolling (public /api/vote/display-state), VotePlayer (rankings + boost)
 
-# Pic de mises — 100 users, spawn rapide
-locust -f tests/locustfile.py --host=http://127.0.0.1:5000 \
-       --users=100 --spawn-rate=50 --run-time=2m --headless \
-       --class-picker BetStorm
-
-# Baseline polling seul
-locust -f tests/locustfile.py --host=http://127.0.0.1:5000 \
-       --users=100 --spawn-rate=10 --run-time=2m --headless \
-       --class-picker PollingOnly
-
-# Baseline polling vote display (sans auth — émule grand écran)
-locust -f tests/locustfile.py --host=http://127.0.0.1:5000 \
-       --users=100 --spawn-rate=10 --run-time=2m --headless \
-       --class-picker VotePolling
-
-# Joueur réaliste en phase vote (rankings + boost)
-locust -f tests/locustfile.py --host=http://127.0.0.1:5000 \
-       --users=100 --spawn-rate=10 --run-time=3m --headless \
-       --class-picker VotePlayer
-
-# Interface web (localhost:8089) pour visualisation temps réel
+# Web UI (localhost:8089):
 locust -f tests/locustfile.py --host=http://127.0.0.1:5000
 ```
 
-**5 scénarios Locust :**
-| Scénario | Comportement |
-|----------|-------------|
-| `CasinoPlayer` | Joueur réaliste : login → polling status → mise → navigation |
-| `BetStorm` | Pic de mises simultanées lors d'une ouverture de session |
-| `PollingOnly` | Seulement `/api/session/status` — baseline latence serveur |
-| `VotePolling` | Polling `/api/vote/display-state` (public, sans auth) — émule le grand écran |
-| `VotePlayer` | Joueur en phase vote : polling `/api/vote/state` → rankings + boost si catégorie projetée |
-
-> `load_test_users.json` — 100 comptes précréés par `setup_load_test.py`. Ne pas commiter.
-> `RATELIMIT_ENABLED=false` — variable d'env lue dans `extensions.py` pour désactiver Flask-Limiter pendant les tests de charge.
+**CI:** GitHub Actions (tests.yml) — pytest + Codecov on push/PR to main. Coverage: 77% (excludes scheduler.py, locustfile.py, setup_load_test.py). Report: https://app.codecov.io/gh/BigFoot3/casino-app
 
 ---
 
-## Instructions pour Claude Code
+## Critical Invariants
 
-À la fin de chaque session de travail :
-1. Mettre à jour ce CLAUDE.md si l'architecture, les routes, les bugs connus ou la stack ont changé
-2. Synchroniser la copie : `cp /root/casino/CLAUDE.md /root/CLAUDE_docs/CLAUDE-casino.md`
-3. Commiter et pousser : `cd /root/casino && git add -A && git commit -m "..." && git push`
-4. Redémarrer si des fichiers de prod ont été modifiés : `systemctl restart casino`
-5. Mettre à jour `/root/VPS_OVERVIEW.md` si l'infrastructure a changé
+- All token operations use `BEGIN IMMEDIATE` with balance verification — no double-spend.
+- CSRF enabled on all POST routes. JSON API calls send `X-CSRFToken` header.
+- `resolve_spin()` is idempotent — safe to retry after restart.
+- Password modal auto-deletes DOM after 30s — never stored client-side.
+- Sessions in `open` or `spinning` at startup auto-recovered by `startup_check()`.
+- `CASINO_SECRET_KEY` required — RuntimeError if missing. conftest.py injects 'test-secret-for-pytest'.
+- `ProxyFix(x_for=1, x_proto=1, x_host=1)` on app.wsgi_app — Flask-Limiter needs real IP behind nginx.
+- JS API data rendered via `textContent` only — never `innerHTML` with untrusted data.
+- `/api/vote/display-state` is **public (no auth)** — used by display.html. DO NOT replace with /api/vote/state (protected).
+- `stats_reset_at` stored as isoformat (e.g., '2026-05-13T14:15:14+00:00') for lexicographic comparison with closed_at — never strftime().
+
+---
+
+## Traps & Anti-Patterns
+
+**CSS / Design:**
+- ⚠️ **midnight-gala.css** — all app CSS centralized. Never add inline styles to templates.
+- ⚠️ **display.html CSS** — lives in inline `<style>` block (standalone template). Do NOT move to midnight-gala.css.
+- ⚠️ **DA colors** — never use colors outside the token palette (#7DE0A8, #FFB4AB, #72727F, etc.). Use only --mg-* tokens.
+- ⚠️ **table-dark** — Bootstrap conflicts with midnight-gala overrides. Never use in admin templates.
+- ⚠️ **mg-display-logo** — position: absolute in #main-wrap (which has display:contents). Logo positioned relative to viewport, not parent. Auto-hides when JS sets mainWrap.style.display='none' (vote/palmares).
+- ⚠️ **#right-panel display.html** — flex column only. Never use grid multi-column (grid-template-columns: 1fr 1fr puts leaderboards side-by-side instead of stacked).
+- ⚠️ **live-half/dozens/outside width** — calc(100% - 86px) = 46px (zero) + 40px (colBtn 38px + gap 2px). Do NOT use calc(100% - 46px) → overflow.
+- ⚠️ **roulette lib CSS** — nested git repo (milsaware/javascript-roulette), no .gitmodules. Local CSS mods committed locally, cannot push upstream.
+- ⚠️ **roulette centering** — after session 7: ballTrack 212×212 (left/top 49), pocketsRim (left/top 37.5), cone (left/top 65, gradient circle at 90px 90px), turret (left/top 132), turretHandle (left 111). Do NOT revert.
+- ⚠️ **roulette turret** — feuille.png (RGBA 697×354) replaces gold gradient. Turret 100×100px (top:106px, left:106px, centered at 156px). Filter: drop-shadow #cc2819/#ec2415 + brightness(1.15) + animation leaf-pulse 3s infinite. turretHandle + thendOne/thendTwo hidden (display:none). Do NOT restore gold gradient or handle.
+- ⚠️ **roulette fonts** — Neue Machina Ultrabold (font-weight: 800). .double: transform: rotate(3deg) scaleX(0.75) + left: 147px (compensation for Neue Machina width vs Arial). .single: left: 152px, font-size: 14px (shared).
+- ⚠️ **Neue Machina @font-face** — declared in midnight-gala.css (app pages) AND inline `<style>` in display.html (standalone). font-weight: 100–900 mapped to single Ultrabold file.
+- ⚠️ **favicon** — base.html and display.html use logo1.png (replaces old SVG data URI).
+
+**Database & Transactions:**
+- ⚠️ **isolation_level=None** — manual transactions required. BEGIN IMMEDIATE must be used for token ops.
+- ⚠️ **SQLite WAL** — busy_timeout=10s. Connections should not stay open long.
+- ⚠️ **resolve_spin() idempotent** — status != 'spinning' → silent ROLLBACK.
+- ⚠️ **preload_app=True** — forking: objects initialized before fork are shared. Avoid global DB connections.
+- ⚠️ **stats_reset_at** — isoformat for lexicographic correctness vs closed_at.
+- ⚠️ **round_result GROUP BY** — api.py session_round_result() MUST group by u.id, u.username with SUM(payout-amount). Without GROUP BY, multi-bet players appear N times (one per bet) → popup displays duplicate lines.
+
+**Frontend JS / Play & Display:**
+- ⚠️ **resultFetching flag** — play.js guard against pollResult() race condition. Lock at entry; clear on 404, session mismatch, catch, session reset (open/waiting). Remains true on success path (popup shown). Do NOT remove or move resultShown=true before awaits without reconsidering.
+- ⚠️ **balanceDelta vs netDelta** — pollResult(): balanceDelta = sum(payout) for balance update (amount already deducted at bet); netDelta = sum(payout-amount) for result display (net profit/loss). Do NOT confuse.
+- ⚠️ **gridLocked vs betPlaced** — gridLocked: UI lock (grid unclickable between submit and spin). betPlaced: routes to pollResult(). Independent. gridLocked=false when spinning starts; betPlaced remains true until result.
+- ⚠️ **auto-reload mode** — play.js lastKnownMode detects app_mode transitions (roulette↔vote↔palmares) → window.location.reload() on next pollStatus() (max 2s). First call silent (lastKnownMode=null → init). Do NOT remove showOnly() fallback.
+- ⚠️ **leaderboard cache** — display.js caches lastLeaderboardCache {top_winners, top_losers}. During isSpinning, empty payload does NOT clear tops (intended). top_holders removed (session 8, 2026-05-25).
+- ⚠️ **claimed_ids** — /rewards returns IDs of already-claimed rewards (used client-side to disable buttons).
+- ⚠️ **column/dozen/half display** — colBtn/ldoz/lhalf must have data-type and data-val attributes. Without them, renderChips() silently ignores these bets.
+- ⚠️ **play.js tokens polling** — pollStatus() updates balanceEl from data.tokens (every 2s). /api/session/status includes 'tokens' for authenticated Flask sessions (None for unauthenticated callers — display page unaffected).
+
+**Admin JS:**
+- ⚠️ **admin.js className** — pollAdmin() (every 3s) completely rewrites button className. Jinja initial CSS class is cosmetic only. Only ID selectors (btn-action, btn-close, etc.) are stable.
+- ⚠️ **btn-action** — single contextual button: waiting→▶ Open, open→🎯 Spin, spinning→⏳ Spinning… Routes per currentStatus. Do NOT restore 3 separate buttons.
+- ⚠️ **btn-close** — visible only when status='open' (Fermer ↯). Emergency destructive action.
+- ⚠️ **admin buttons state** — piloted exclusively by pollAdmin() (3s) via updateControlsState(). Never add local JS variables for button state. currentStatus updated only by updateControlsState().
+- ⚠️ **auto_mode_ui vs auto_mode_enabled** — two separate app_config keys: auto_mode_ui = toggle intent (returned by session_status() as `mode`); auto_mode_enabled = scheduler read flag. auto_mode_enabled='1' only on admin_open_session() when auto_mode_ui='1'. admin_close_session() resets auto_mode_enabled='0', preserves auto_mode_ui. admin_set_mode(manual) resets both to '0'.
+- ⚠️ **mode toggle** — btn-mode-manual/auto write auto_mode_ui via applyMode(). interval-wrap always visible (auto_interval_seconds controls bet window in both modes). btn-interval-apply (OK) validates without blur; Enter/blur also work.
+- ⚠️ **vote-group d-flex** — vote-group-roulette and vote-group-closed must NOT have .d-flex (Bootstrap .d-flex { display: flex !important } overrides inline style="display:none"). d-flex goes on inner div. showVoteGroup() uses el.style.display = 'none' / '' on container → works without d-flex.
+- ⚠️ **admin.js vote section** — exclusive HTML groups: vote-group-roulette / vote-group-vote / vote-group-closed / vote-group-palmares. showVoteGroup(mode) shows one, hides others. Never pilot display individually. Listeners attached once at boot (not in updateVoteStatus). Event delegation on catBtnsWrap for category buttons (innerHTML OK here: server-verified content).
+- ⚠️ **voteAction finally** — voteAction(btn, url, body) restores btn.disabled=false and opacity=1 in finally block. Always use for vote actions. Never bare fetch() without restoration on error.
+- ⚠️ **trackingInterval** — admin.js setInterval 3s for loadVoteTracking(). Managed in updateVoteStatus(): active if mode=vote, cleared otherwise. Do NOT create another interval for vote tracking.
+- ⚠️ **#vote-tracking-section** — display:none by default. Shown only when app_mode='vote' (controlled by updateVoteStatus). Do NOT toggle visibility elsewhere.
+- ⚠️ **admin mobile** — @media (max-width:768px): #users-table as flex cards, column 4 (Add Tokens) hidden, column 3 (Tokens) visible (padding:4px 0), thead hidden (labels via ::before), data-label="Player/Role/Tokens/Actions" on td 1/2/3/5. Buttons +150/+350 in column 5, NOT in column 4 (hidden). Double-tap confirmation on touch (window.matchMedia('hover:none')), timer 3s via quickBtnPendingMap. Desktop: immediate action, never alert().
+- ⚠️ **admin films** — deletion protected if status='open'. Rename protected similarly.
+- ⚠️ **admin users** — collapsible list (collapse show by default) + live filter + scroll 5 rows.
+- ⚠️ **admin rewards** — deletion cascades reward_claims via /api/admin/rewards/<id>/delete.
+- ⚠️ **vote tracking closed** — #vote-tracking-section visible when app_mode='closed' (admin can review results before palmares/reset-mode decision).
+
+**Roulette & Session State:**
+- ⚠️ **APScheduler** — game_tick() runs only in Gunicorn master (preload_app=True). Do NOT run in `flask run`.
+- ⚠️ **grace period spinning** — /api/session/status simulates 'spinning' for 12s after normal close (for display page). Bypassed if winning_number IS NULL (admin force-close). Do NOT remove condition `prev['winning_number'] is not None`.
+- ⚠️ **redirect /play** — routes/auth.py redirects to /play after login (not /dashboard).
+- ⚠️ **SESSION_COOKIE_SECURE** — True in prod, False in dev HTTP (else cookie never sent).
+- ⚠️ **winning_number** — 0 = House win (no payout for red/black, even/odd, column, dozen, half).
+- ⚠️ **btn-interval-apply** — OK button to apply interval change without blur. Works alongside Enter/blur.
+
+**Vote System:**
+- ⚠️ **vote delta_tokens** — bonus_delta = old_bonus - new_bonus (positive = refund, negative = deduction).
+- ⚠️ **vote points formula** — base = max(10, n × 2.5); raw = base × (0.55 ^ (rank-1)); points = max(1, round(raw × (1 + boost%))).
+- ⚠️ **vote boost MAX_BOOST** — 300 per category per user per session (400 response if exceeded). Total can exceed 300 across categories.
+- ⚠️ **vote UPSERT** — UNIQUE(vote_session_id, user_id) — one ranking per user per session, modifiable.
+- ⚠️ **app_mode 'closed'** — transient state before palmares or reset-mode. Full cycle: roulette → vote → closed → palmares → roulette. Never treat closed as terminal.
+- ⚠️ **app_mode storage** — in app_config. Roulette default. Reset via /api/vote/reset-mode.
+- ⚠️ **vote_boosts stub** — minimal table in db.py init_db(). Net P&L leaderboard = SUM(payout-amount) closed sessions − SUM(vote_boosts.amount).
+- ⚠️ **/api/vote/state** — returns only projected category (vote_display_category_id) or [] if none. Players see "Waiting…" until admin projects a category.
+- ⚠️ **/api/vote/display-state** — **public, no auth**. Used by display.html. Returns {session, display_category{id,name,social_boost,voter_count}}. DO NOT replace with /api/vote/state (protected → 401 on display). Original bug: pollVoteDisplay() called /api/vote/state → 401 → category never displayed (fixed 2026-05-26).
+- ⚠️ **/api/admin/vote/tracking** — protected _require_admin. Matrix: voters × films × ranks × boosts per category for current vote session (current_vote_session_id). Only active session, not history.
+- ⚠️ **vote_boosts net P&L** — calculation: sum(payout-amount) from closed game_sessions minus sum(amount) from vote_boosts for the user. Allows negative bonus adjustments (refunds).
+
+**Security & Infrastructure:**
+- ⚠️ **ProxyFix** — configured in app.py (x_for=1, x_proto=1, x_host=1). Do NOT remove. Flask-Limiter reads 127.0.0.1 for all IPs without it.
+- ⚠️ **CSP nginx** — 'unsafe-inline' kept for scripts (inline script in play.html). Harden with nonce if templates refactored.
+- ⚠️ **CASINO_BASE_URL** — if missing, QR code uses request.host_url (Host header — injectable). Always define in .env for prod.
+- ⚠️ **super-admin** — username == 'admin' exactly (no DB column, no distinct role). Exclusive rights: create admins, delete admins, change roles. Protected from self-deletion/modification (anti-lockout). session['username'] accessible natively in Jinja.
+- ⚠️ **set-role** — /api/admin/users/<id>/set-role super-admin only (403 otherwise). Forbidden on username='admin'. Updates badge + button in-place without reload.
+- ⚠️ **admin delete user** — super-admin can delete admins (except username='admin'). Regular admin → 403 on any admin account.
+- ⚠️ **/api/claim** — endpoint removed (2026-05-08). Rewards distributed exclusively via /api/admin/reward/give (admin).
+- ⚠️ **Roles** — 'admin' | 'player' — SQLite CHECK constraint.
+
+**Load Tests:**
+- ⚠️ **RATELIMIT_ENABLED=false** — required for Locust. Set before pytest or locust commands.
+- ⚠️ **load_test_users.json** — 100 precreated accounts. Do NOT commit.
+
+---
+
+## Changelog
+
+| Session | Fichier | Modification |
+|---------|---------|-------------|
+| 9 (2026-05-30) | `play.html` | Ajout bouton `?` (modale `#rulesModal`) dans le header card mise — règles du jeu statiques, zéro JS, zéro route |
+| 9 (2026-05-30) | `templates/play.html` | Ajout modale #rulesModal (règles roulette + mises + jetons) + bouton "COMMENT JOUER" permanent dans header card |
+| 9 (2026-05-30) | `templates/play.html` | Ajout modale #voteHelpModal + bouton "COMMENT VOTER" contextuel dans #vote-panel |
+| 9 (2026-05-30) | `static/js/play.js` | Masquage btn-rules-modal en mode vote (show/hide via display) |
+| 9 (2026-05-30) | `templates/roulette/display.html` | QR code sorti du flux fixed → 3ème enfant de #right-panel, 260×260px, margin-top:auto |
+| 9 (2026-05-30) | `static/css/midnight-gala.css` | Neutralisation flex:1 1 calc(50%) sur .btn dans .input-group mobile (#users-table) |
+| 9 (2026-05-30) | `templates/admin/index.html` | Bouton − libre dans colonne "Ajouter tokens" (desktop) + bouton +600 + suppression −1 hardcodé |
+| 9 (2026-05-30) | `templates/admin/index.html` | Bloc d-md-none : input+boutons +/− mobile dans colonne 5 + masquage 🪙0 sur mobile |
+| 9 (2026-05-30) | `templates/admin/index.html` | Select jetons initiaux (0/150/350/600, défaut 0) dans formulaire création utilisateur |
+| 9 (2026-05-30) | `routes/api.py` | add-tokens accepte les négatifs + plancher MAX(0, tokens+?) ; create user accepte initial_tokens |
+| 9 (2026-05-30) | `static/js/admin.js` | Handler − libre (sub-tokens-btn) + suppression decrement-tokens-btn + flag pendingReloadAfterPw |
+

@@ -5,6 +5,7 @@ const $ = id => document.getElementById(id);
 
 // ── Password modal ────────────────────────────────────────────────────────────
 let pwTimer = null;
+let pendingReloadAfterPw = false;
 const pwModal    = new bootstrap.Modal($('pwModal'), {backdrop: true, keyboard: false});
 const pwDisplay  = $('pw-display');
 const pwCountdown= $('pw-countdown');
@@ -43,6 +44,7 @@ pwCopyBtn.addEventListener('click', () => {
 $('pwModal').addEventListener('hidden.bs.modal', () => {
   clearInterval(pwTimer);
   pwDisplay.textContent = '';
+  if (pendingReloadAfterPw) { location.reload(); }
 });
 
 // ── API helper ────────────────────────────────────────────────────────────────
@@ -222,20 +224,7 @@ if (userSearch) {
   });
 }
 
-// ── Decrement tokens (−1, no modal needed) ───────────────────────────────────
-document.querySelectorAll('.decrement-tokens-btn').forEach(btn => {
-  btn.addEventListener('click', async () => {
-    const uid  = parseInt(btn.dataset.id);
-    const [s, d] = await post(`/api/admin/users/${uid}/decrement-tokens`);
-    if (s === 200) {
-      document.querySelector(`.user-tokens[data-id="${uid}"]`).textContent = d.new_balance;
-    } else {
-      alert(d.error || 'Erreur');
-    }
-  });
-});
-
-// ── Quick-add tokens (+150 / +350) — double-tap confirmation on touch ────────
+// ── Quick-add tokens (+150 / +350 / +600) — double-tap confirmation on touch ──
 const quickBtnPendingMap = new Map(); // key: "uid-amount" → timer
 
 document.querySelectorAll('.add-tokens-quick-btn').forEach(btn => {
@@ -274,6 +263,22 @@ document.querySelectorAll('.add-tokens-quick-btn').forEach(btn => {
 });
 
 // ── Tokens ────────────────────────────────────────────────────────────────────
+document.addEventListener('click', async e => {
+  const btn = e.target.closest('.sub-tokens-btn');
+  if (!btn) return;
+  const uid   = parseInt(btn.dataset.id);
+  const input = document.querySelector(`.add-tokens-input[data-id="${uid}"]`);
+  const amount = parseInt(input.value);
+  if (!amount || amount <= 0) return;
+  const [s, d] = await post(`/api/admin/users/${uid}/add-tokens`, {amount: -amount});
+  if (s === 200) {
+    document.querySelector(`.user-tokens[data-id="${uid}"]`).textContent = d.new_balance;
+    input.value = '';
+  } else {
+    alert(d.error || 'Erreur');
+  }
+});
+
 document.querySelectorAll('.add-tokens-btn').forEach(btn => {
   btn.addEventListener('click', async () => {
     const uid    = parseInt(btn.dataset.id);
@@ -292,23 +297,16 @@ document.querySelectorAll('.add-tokens-btn').forEach(btn => {
 
 // ── Create user ───────────────────────────────────────────────────────────────
 $('btn-create-user').addEventListener('click', async () => {
-  const username = $('new-username').value.trim();
-  const role     = $('new-role').value;
+  const username      = $('new-username').value.trim();
+  const role          = $('new-role').value;
+  const initialTokens = parseInt(document.getElementById('new-initial-tokens').value) || 0;
   if (!username) return;
-  const [s, d] = await post('/api/admin/users/create', {username, role});
+  const [s, d] = await post('/api/admin/users/create', {username, role, initial_tokens: initialTokens});
   if (s === 200) {
+    pendingReloadAfterPw = true;
     showPassword(`Utilisateur créé : ${d.username}`, d.password);
     $('new-username').value = '';
-    // Append row to table
-    const tbody = document.querySelector('#users-table tbody');
-    tbody.insertAdjacentHTML('beforeend', `
-      <tr>
-        <td>${d.username}</td>
-        <td><span class="badge ${role==='admin'?'bg-warning text-dark':'bg-secondary'}">${role}</span></td>
-        <td>0</td>
-        <td><em class="text-muted small">rechargez la page</em></td>
-        <td><em class="text-muted small">rechargez la page</em></td>
-      </tr>`);
+    document.getElementById('new-initial-tokens').value = '0';
   } else {
     alert(d.error || 'Erreur');
   }
