@@ -128,19 +128,19 @@ function renderChips(bets) {
     const visible  = entries.slice(0, MAX_CHIPS_PER_CELL);
     const overflow = total - visible.length;
 
-    // Single chip: use full 16px size; multiple: 10px to fit the spread layout
+    // Single chip: 16px; multiple: 10px — anchored to bottom-right corner so number stays visible
     const chipSize = visible.length === 1 ? 16 : 10;
-    const half     = chipSize / 2;
-    const positions = CHIP_SPREAD[Math.min(visible.length, CHIP_SPREAD.length) - 1];
+    const cols = 2;
 
     visible.forEach((e, idx) => {
-      const [ox, oy] = positions[idx];
+      const row = Math.floor(idx / cols);
+      const col = idx % cols;
       const chip = document.createElement('div');
       chip.className = 'bet-chip';
       chip.style.cssText =
         `width:${chipSize}px;height:${chipSize}px;` +
         `background:${e.color};` +
-        `top:calc(50% + ${oy - half}px);left:calc(50% + ${ox - half}px);` +
+        `bottom:${2 + row * (chipSize + 3)}px;right:${2 + col * (chipSize + 3)}px;top:auto;left:auto;` +
         `transform:none;z-index:${10 + idx};` +
         `font-size:${chipSize <= 10 ? '5px' : '6px'};`;
       chip.title = `${e.username}: ${e.amount} token${e.amount > 1 ? 's' : ''}`;

@@ -113,7 +113,7 @@ betClear.addEventListener('click', () => {
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 function showOnly(...els) {
-  [msgWaiting, msgSpinning, msgCountdown, betForm, resultPanel, votePanel, msgPalmares]
+  [msgWaiting, msgSpinning, msgCountdown, betForm, votePanel, msgPalmares]
     .forEach(e => e.style.display = 'none');
   els.forEach(e => { if (e) e.style.display = ''; });
   if (btnRulesModal) btnRulesModal.style.display = els.includes(votePanel) ? 'none' : '';
@@ -194,8 +194,8 @@ async function pollStatus() {
       }
       betSubmit.disabled = true;
       betClear.disabled  = false;
-      if (!resultShown) { showOnly(msgSpinning, betForm); }
-      else              { betForm.style.display = ''; }  // keep result panel, add form below
+      resultPanel.style.display = 'none';
+      showOnly(msgSpinning, betForm);
     } else {
       // BUG 2: reset all bet state when session returns to waiting
       if (betPlaced || resultShown) {
@@ -240,7 +240,8 @@ async function pollResult() {
     // Delay result by SPIN_DURATION_MS — ball frozen at t=9000ms on display page
     setTimeout(() => {
       $('result-number').textContent = d.winning_number === 0 ? 67 : d.winning_number;
-      showOnly(resultPanel);
+      resultPanel.style.display = '';
+      msgSpinning.style.display = 'none';
 
       const listEl = $('result-bets-list');
       listEl.innerHTML = '';

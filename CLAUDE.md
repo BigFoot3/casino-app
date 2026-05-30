@@ -329,4 +329,8 @@ locust -f tests/locustfile.py --host=http://127.0.0.1:5000
 | 9 (2026-05-30) | `templates/admin/index.html` | Select jetons initiaux (0/150/350/600, défaut 0) dans formulaire création utilisateur |
 | 9 (2026-05-30) | `routes/api.py` | add-tokens accepte les négatifs + plancher MAX(0, tokens+?) ; create user accepte initial_tokens |
 | 9 (2026-05-30) | `static/js/admin.js` | Handler − libre (sub-tokens-btn) + suppression decrement-tokens-btn + flag pendingReloadAfterPw |
+| 9 (2026-05-30) | `templates/dashboard.html` | Lien "Voir le résultat" ajouté pendant status=spinning (même pattern que "Placer une mise" en open) |
+| 9 (2026-05-30) | `templates/play.html` | #result-panel enveloppé en card p-4 mt-3, titre "Dernier résultat", hr + bouton "Nouvelle partie" supprimés |
+| 9 (2026-05-30) | `static/js/play.js` | resultPanel retiré de showOnly() — s'affiche en dessous du contenu actif, masqué uniquement au spin suivant |
+| 9 (2026-05-30) | `static/js/display.js` | renderChips() : chips ancrés bottom/right (grille 2×n) — numéro de cellule toujours visible ; CHIP_SPREAD devient code mort |
 

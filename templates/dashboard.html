@@ -22,7 +22,7 @@
           Session ouverte — <a href="/play" class="alert-link">Placer une mise</a>
         </div>
       {% elif active and active['status'] == 'spinning' %}
-        <div class="alert alert-warning mt-3">Roue en cours…</div>
+        <div class="alert alert-warning mt-3">Roue en cours… — <a href="/play" class="alert-link">Voir le résultat</a></div>
       {% else %}
         <p class="text-muted mt-3">Aucune session ouverte pour l'instant.</p>
       {% endif %}
