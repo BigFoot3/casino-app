@@ -376,7 +376,7 @@
     #vote-overlay.active { display: flex; }
 
     .vote-waiting-msg {
-      font-family: var(--mg-font-display); font-size: 1.5rem;
+      font-family: var(--mg-font-display); font-size: 2.2rem;
       color: var(--mg-rosewood); text-align: center; padding: 2rem;
     }
     @keyframes voteCategoryFadeIn {
@@ -389,16 +389,16 @@
       text-align: center; color: var(--mg-ivory);
       background: rgba(0,0,0,0.4);
       border: 1px solid var(--mg-claret);
-      border-radius: 10px; padding: 2rem; width: 100%; max-width: 600px;
+      border-radius: 10px; padding: 3rem; width: 100%; max-width: 800px;
     }
     .vote-category-block h3 {
-      font-family: var(--mg-font-display); font-size: 1.8rem; text-transform: uppercase;
+      font-family: var(--mg-font-display); font-size: 3rem; text-transform: uppercase;
       letter-spacing: 0.06em; color: var(--mg-blush); margin-bottom: 1rem;
     }
-    .social-boost-label { font-size: 0.85rem; color: var(--mg-rosewood); margin-bottom: 6px; }
-    .social-boost-bar-wrap { height: 8px; border-radius: 4px; background: rgba(255,255,255,.12); overflow: hidden; }
+    .social-boost-label { font-size: 1.1rem; color: var(--mg-rosewood); margin-bottom: 6px; }
+    .social-boost-bar-wrap { height: 14px; border-radius: 4px; background: rgba(255,255,255,.12); overflow: hidden; }
     .social-boost-bar { height: 100%; border-radius: 4px; background: var(--mg-flame); transition: width 0.4s; }
-    .vote-voter-count { font-size: 0.8rem; color: var(--mg-rosewood); margin-top: 6px; }
+    .vote-voter-count { font-size: 1rem; color: var(--mg-rosewood); margin-top: 6px; }
 
     /* ── Palmares overlay ── */
     #palmares-overlay {
@@ -466,6 +466,19 @@
     }
     #qr-corner-label {
       font-size: 0.82rem; text-transform: uppercase; letter-spacing: 0.08em;
+      color: var(--mg-rosewood); text-align: center;
+    }
+
+    /* QR vote overlay */
+    #qr-vote {
+      margin-top: auto; display: flex; flex-direction: column;
+      align-items: center; gap: 8px; padding: 16px;
+    }
+    #qr-vote canvas, #qr-vote img {
+      width: 300px; height: 300px; display: block; border-radius: 6px;
+    }
+    #qr-vote-label {
+      font-size: 1rem; text-transform: uppercase; letter-spacing: 0.08em;
       color: var(--mg-rosewood); text-align: center;
     }
   </style>
@@ -569,7 +582,7 @@
     </div>
     <div id="qr-corner">
       <div id="qr-corner-canvas"></div>
-      <div id="qr-corner-label">Scannez pour voter</div>
+      <div id="qr-corner-label">Scannez pour miser</div>
     </div>
   </div>
 
@@ -578,6 +591,10 @@
 <!-- Vote overlay -->
 <div id="vote-overlay">
   <div id="vote-categories-display"></div>
+  <div id="qr-vote">
+    <div id="qr-vote-canvas"></div>
+    <div id="qr-vote-label">Scannez pour voter</div>
+  </div>
 </div>
 
 <!-- Palmares overlay -->

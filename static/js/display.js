@@ -197,6 +197,8 @@ function setDisplayMode(mode) {
   if (drawsStrip) drawsStrip.style.display = showWheel ? '' : 'none';
   const qrCorner = document.getElementById('qr-corner');
   if (qrCorner) qrCorner.style.display = (mode === 'palmares') ? 'none' : '';
+  const qrLabel = document.getElementById('qr-corner-label');
+  if (qrLabel) qrLabel.textContent = (mode === 'vote') ? 'Scannez pour voter' : 'Scannez pour miser';
   if (mode === 'palmares') {
     lastPalmaresSig     = '';
     currentDisplayCatId = null;
@@ -637,12 +639,10 @@ palmaresDisplayLoop();
 
 // QR code init
 (function() {
-  const canvas = document.getElementById('qr-corner-canvas');
-  if (!canvas || typeof QRCode === 'undefined') return;
-  new QRCode(canvas, {
-    text: 'https://casino.kryptide.fr/login',
-    width: 120, height: 120,
-    colorDark: '#1a0507',
-    colorLight: '#f8f6f6',
-  });
+  if (typeof QRCode === 'undefined') return;
+  const opts = { text: 'https://casino.kryptide.fr/login', colorDark: '#1a0507', colorLight: '#f8f6f6' };
+  const corner = document.getElementById('qr-corner-canvas');
+  if (corner) new QRCode(corner, Object.assign({}, opts, { width: 120, height: 120 }));
+  const vote = document.getElementById('qr-vote-canvas');
+  if (vote) new QRCode(vote, Object.assign({}, opts, { width: 300, height: 300 }));
 })();
