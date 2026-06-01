@@ -8,7 +8,7 @@ A real-time multiplayer roulette and voting app for live events — built to run
 
 ## Demo
 
-Live demo: https://casino.kryptide.fr
+Live demo: https://casino.kryptide.fr/roulette/display
 
 ![Demo](static/img/demo.gif)
 
@@ -78,7 +78,7 @@ pytest tests/ -v --tb=short
 
 ## Project Status
 
-Built and deployed for a live event in June 2026; the service remains running as a public demo at `https://casino.kryptide.fr`. The repo is open — issues and pull requests are welcome.
+Built and deployed for a live event in June 2026; the service remains running as a public demo at `https://casino.kryptide.fr/roulette/display`. The repo is open — issues and pull requests are welcome.
 
 ---
 
