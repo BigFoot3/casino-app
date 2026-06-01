@@ -21,7 +21,7 @@ from db import db_conn, init_db
 LOAD_TEST_CREDENTIALS_FILE = os.path.join(
     os.path.dirname(os.path.abspath(__file__)), "load_test_users.json"
 )
-PASSWORD = "LoadTest2026!"
+PASSWORD = os.environ.get("LOAD_TEST_PASSWORD", "changeme")
 N_USERS = 100
 
 

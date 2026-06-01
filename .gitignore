@@ -50,3 +50,13 @@ Thumbs.db
 
 # Load test data (generated, not source)
 tests/load_test_users.json
+
+# PII / credentials (never commit)
+users_pass.xlsx
+
+# Design deliverables (local working files)
+design-livraison/
+
+# Fonts (personal license — no redistribution)
+fonts/
+static/fonts/

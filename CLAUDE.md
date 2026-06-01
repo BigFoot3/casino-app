@@ -8,7 +8,7 @@ Online roulette app for live events — up to 100 concurrent players.
 
 | Component | Details |
 |-----------|---------|
-| VPS | Hetzner CX23, Nuremberg — 178.104.41.200 |
+| VPS | Hetzner CX23, Nuremberg — <VPS_IP> |
 | OS | Ubuntu 24.04, Python 3.12 |
 | URL | `https://casino.kryptide.fr` (nginx → Gunicorn:5000) |
 | Service | `systemctl {status,restart,stop} casino` / `journalctl -u casino -f` |
