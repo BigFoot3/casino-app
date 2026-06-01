@@ -8,14 +8,8 @@
   <link rel="stylesheet" href="/static/roulette/assets/css/style.css">
   <style>
     /* ── Midnight Gala design system — display-inline.html ────────────────── */
+    @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300..700&display=swap');
     @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&display=swap');
-    @font-face {
-      font-family: 'Neue Machina';
-      src: url('/static/fonts/NeueMachina-Ultrabold.otf') format('opentype');
-      font-weight: 100 900;
-      font-style: normal;
-      font-display: swap;
-    }
 
     :root {
       --mg-flame:#cc2819; --mg-ember:#ec2415; --mg-velvet:#4d0f12;
@@ -25,8 +19,8 @@
       --mg-border:rgba(248,246,246,0.08);
       --mg-border-strong:#901e16;
       --mg-roul-red:#cc2819; --mg-roul-black:#14080a; --mg-roul-zero:#1f5a3a;
-      --mg-font-display:'Neue Machina',system-ui,sans-serif;
-      --mg-font-body:'Neue Machina',system-ui,-apple-system,sans-serif;
+      --mg-font-display:'Space Grotesk',system-ui,sans-serif;
+      --mg-font-body:'Space Grotesk',system-ui,-apple-system,sans-serif;
       --mg-font-mono:'JetBrains Mono',ui-monospace,monospace;
     }
 
@@ -93,7 +87,7 @@
       overflow-x: auto;
     }
     .mg-strip__label {
-      font-family: var(--mg-font-body); font-weight: 800;
+      font-family: var(--mg-font-body); font-weight: 700;
       text-transform: uppercase; letter-spacing: 0.2em;
       color: var(--mg-blush); font-size: 0.78rem;
       padding-right: 16px; margin-right: 4px;
@@ -148,7 +142,7 @@
     }
     .mg-mini-panel__title {
       display: flex; align-items: center; gap: 8px;
-      font-family: var(--mg-font-body); font-weight: 800;
+      font-family: var(--mg-font-body); font-weight: 700;
       text-transform: uppercase; letter-spacing: 0.18em;
       font-size: 0.68rem; color: var(--mg-blush); margin-bottom: 5px;
     }
@@ -187,7 +181,7 @@
     #winning-display {
       position: absolute; top: 50%; left: 50%;
       transform: translate(-50%, -50%);
-      font-size: 5rem; font-weight: 900;
+      font-size: 5rem; font-weight: 700;
       font-family: var(--mg-font-display);
       color: var(--mg-ivory);
       text-shadow: 0 0 40px rgba(255,255,255,0.8), 0 0 80px rgba(255,255,255,0.4);
@@ -223,7 +217,7 @@
     #lb-winners { border: 1px solid var(--mg-ivory); box-shadow: 0 0 8px rgba(255,255,255,0.1); }
     #lb-losers  { border: 1px solid var(--mg-flame); box-shadow: 0 0 8px rgba(204,40,25,0.15); }
     .lb-title {
-      font-family: var(--mg-font-display); font-size: 0.85rem; font-weight: 900;
+      font-family: var(--mg-font-display); font-size: 0.85rem; font-weight: 700;
       text-transform: uppercase; letter-spacing: .05em; margin-bottom: 6px;
       white-space: normal; overflow: visible; text-overflow: unset; word-break: break-word;
     }
@@ -235,8 +229,8 @@
       margin-bottom: 3px;
     }
     .lb-row span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 60%; }
-    .lb-net-pos { color: var(--mg-blush); font-weight: 800; flex-shrink: 0; }
-    .lb-net-neg { color: var(--mg-ember); font-weight: 800; flex-shrink: 0; }
+    .lb-net-pos { color: var(--mg-blush); font-weight: 700; flex-shrink: 0; }
+    .lb-net-neg { color: var(--mg-ember); font-weight: 700; flex-shrink: 0; }
     .lb-empty   { color: var(--mg-rosewood); font-size: .7rem; font-style: italic; }
 
 
@@ -246,7 +240,7 @@
       padding: 8px 10px 6px; overflow: hidden; min-height: 0;
     }
     #bet-panel h3 {
-      font-family: var(--mg-font-display); font-size: .72rem; font-weight: 900;
+      font-family: var(--mg-font-display); font-size: .72rem; font-weight: 700;
       text-transform: uppercase; letter-spacing: .08em;
       color: var(--mg-ivory); margin-bottom: 6px; flex-shrink: 0;
     }
@@ -317,7 +311,7 @@
       border: 1px solid #901e16;
       border-radius: 999px;
       color: #f8f6f6;
-      font-family: 'Neue Machina', sans-serif;
+      font-family: 'Space Grotesk', sans-serif;
       font-size: 1.35rem; font-weight: bold;
       padding: 14px 28px;
     }
@@ -348,7 +342,7 @@
     #rl-winners-section { border: 4px solid var(--mg-ivory); box-shadow: 0 0 24px rgba(255,255,255,0.45), 0 4px 16px rgba(0,0,0,.6); }
     #rl-losers-section  { border: 4px solid var(--mg-flame); box-shadow: 0 0 24px rgba(204,40,25,0.35), 0 4px 16px rgba(0,0,0,.6); }
     .rl-title {
-      font-family: var(--mg-font-display); font-size: 1.1rem; font-weight: 900;
+      font-family: var(--mg-font-display); font-size: 1.1rem; font-weight: 700;
       text-transform: uppercase; letter-spacing: .07em; margin-bottom: 8px;
     }
     #rl-winners-section .rl-title { color: var(--mg-ivory); text-shadow: 0 0 10px rgba(255,255,255,0.5); }
@@ -411,7 +405,7 @@
     #palmares-overlay.active { display: flex; }
 
     #palmares-title {
-      font-family: var(--mg-font-display); font-size: 3rem; font-weight: 900;
+      font-family: var(--mg-font-display); font-size: 3rem; font-weight: 700;
       text-transform: uppercase; letter-spacing: 0.1em; color: var(--mg-blush);
       text-align: center; text-shadow: 0 0 40px rgba(240,175,167,0.4);
     }
