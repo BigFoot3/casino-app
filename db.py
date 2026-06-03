@@ -183,6 +183,36 @@ def init_db():
                 updated_at  TEXT DEFAULT (datetime('now')),
                 UNIQUE(session_id, user_id, category_id)
             );
+            CREATE TABLE IF NOT EXISTS shop_items (
+                id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                name        TEXT NOT NULL,
+                description TEXT,
+                price       REAL,
+                image_path  TEXT,
+                active      INTEGER NOT NULL DEFAULT 1,
+                created_at  TEXT DEFAULT (datetime('now'))
+            );
+            CREATE TABLE IF NOT EXISTS shop_variants (
+                id         INTEGER PRIMARY KEY AUTOINCREMENT,
+                item_id    INTEGER NOT NULL REFERENCES shop_items(id) ON DELETE CASCADE,
+                size_label TEXT NOT NULL,
+                stock      INTEGER NOT NULL DEFAULT 0
+            );
+            CREATE TABLE IF NOT EXISTS shop_orders (
+                id         INTEGER PRIMARY KEY AUTOINCREMENT,
+                first_name TEXT NOT NULL,
+                last_name  TEXT NOT NULL,
+                phone      TEXT NOT NULL,
+                status     TEXT NOT NULL DEFAULT 'pending'
+                           CHECK(status IN ('pending','confirmed','cancelled')),
+                created_at TEXT DEFAULT (datetime('now'))
+            );
+            CREATE TABLE IF NOT EXISTS shop_order_lines (
+                id         INTEGER PRIMARY KEY AUTOINCREMENT,
+                order_id   INTEGER NOT NULL REFERENCES shop_orders(id) ON DELETE CASCADE,
+                variant_id INTEGER NOT NULL REFERENCES shop_variants(id),
+                quantity   INTEGER NOT NULL DEFAULT 1
+            );
         ''')
         conn.execute("INSERT OR IGNORE INTO app_config(key,value) VALUES ('auto_mode_enabled','0')")
         conn.execute("INSERT OR IGNORE INTO app_config(key,value) VALUES ('auto_interval_seconds','120')")
@@ -190,6 +220,7 @@ def init_db():
         conn.execute("INSERT OR IGNORE INTO app_config(key,value) VALUES ('current_vote_session_id','')")
         conn.execute("INSERT OR IGNORE INTO app_config(key,value) VALUES ('vote_revealed_categories','[]')")
         conn.execute("INSERT OR IGNORE INTO app_config(key,value) VALUES ('vote_display_category_id','')")
+        conn.execute("INSERT OR IGNORE INTO app_config(key,value) VALUES ('shop_enabled','0')")
         conn.commit()
         _migrate_vote_schema(conn)
         _migrate_vote_boosts_amount()
@@ -198,6 +229,13 @@ def init_db():
 def get_config(conn) -> dict:
     rows = conn.execute('SELECT key, value FROM app_config').fetchall()
     return {r['key']: r['value'] for r in rows}
+
+
+def get_shop_config(db) -> bool:
+    row = db.execute(
+        "SELECT value FROM app_config WHERE key='shop_enabled'"
+    ).fetchone()
+    return row is not None and row['value'] == '1'
 
 
 def get_active_session(conn):

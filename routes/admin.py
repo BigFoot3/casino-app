@@ -25,3 +25,13 @@ def index():
                            users=users,
                            active=active,
                            cfg=cfg)
+
+
+@admin_bp.route('/admin/shop')
+def shop():
+    redir = _require_admin()
+    if redir:
+        return redir
+    with db_conn() as conn:
+        cfg = get_config(conn)
+    return render_template('admin/shop.html', cfg=cfg)

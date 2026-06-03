@@ -1,0 +1,405 @@
+{% extends 'base.html' %}
+{% block title %}Boutique — Casino{% endblock %}
+
+{% block content %}
+<div class="mg-page-head mb-4">
+  <div>
+    <span class="mg-eyebrow">Goodies</span>
+    <h1 class="mg-page-title">Boutique</h1>
+  </div>
+</div>
+
+{% if not shop_enabled %}
+<div class="card p-4 text-center">
+  <p class="mb-0" style="color:var(--mg-rosewood)">La boutique est temporairement fermée.</p>
+</div>
+
+{% else %}
+<div id="shop-loading" class="text-center py-5" style="color:var(--mg-rosewood)">Chargement…</div>
+<div id="shop-grid" class="shop-grid" style="display:none"></div>
+<div id="shop-empty" class="card p-4 text-center" style="display:none">
+  <p class="mb-0" style="color:var(--mg-rosewood)">Aucun article disponible pour le moment.</p>
+</div>
+
+<!-- Modale ajout au panier -->
+<div class="modal fade" id="modal-add-to-cart" tabindex="-1">
+  <div class="modal-dialog modal-dialog-centered modal-sm">
+    <div class="modal-content p-4">
+      <h5 class="modal-title mb-3" id="cart-modal-title"></h5>
+      <div class="mb-3">
+        <label class="form-label" for="cart-size-select">Taille</label>
+        <select id="cart-size-select" class="form-select form-select-sm"></select>
+      </div>
+      <div class="mb-4">
+        <label class="form-label" for="cart-qty-input">Quantité</label>
+        <input type="number" id="cart-qty-input" class="form-control form-control-sm" min="1" value="1">
+      </div>
+      <div id="cart-modal-error" class="small mb-2" style="display:none;color:var(--mg-ember)"></div>
+      <div class="d-flex gap-2">
+        <button type="button" class="btn btn-secondary btn-sm flex-fill" data-bs-dismiss="modal">Annuler</button>
+        <button type="button" class="btn btn-primary btn-sm flex-fill" id="btn-add-to-cart">Ajouter</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Panneau panier latéral -->
+<div id="cart-panel" class="cart-panel" style="display:none">
+  <div class="cart-panel__header">
+    <span class="cart-panel__title">Panier</span>
+    <button type="button" class="btn btn-sm btn-outline-secondary" id="btn-close-cart">×</button>
+  </div>
+  <div id="cart-lines" class="cart-lines"></div>
+  <div class="cart-panel__form">
+    <div class="mb-2">
+      <label class="form-label" for="order-first-name">Prénom</label>
+      <input type="text" id="order-first-name" class="form-control form-control-sm" placeholder="Jean" autocomplete="given-name">
+    </div>
+    <div class="mb-2">
+      <label class="form-label" for="order-last-name">Nom</label>
+      <input type="text" id="order-last-name" class="form-control form-control-sm" placeholder="Dupont" autocomplete="family-name">
+    </div>
+    <div class="mb-3">
+      <label class="form-label" for="order-phone">Téléphone</label>
+      <input type="tel" id="order-phone" class="form-control form-control-sm" placeholder="06XXXXXXXX" autocomplete="tel">
+    </div>
+    <div id="cart-order-error" class="small mb-2" style="display:none;color:var(--mg-ember)"></div>
+    <div id="cart-order-success" class="small mb-2" style="display:none;color:var(--mg-blush)"></div>
+    <button type="button" class="btn btn-primary w-100" id="btn-place-order">Commander</button>
+  </div>
+</div>
+
+<!-- FAB panier (fixe) -->
+<button type="button" id="btn-cart" class="cart-fab" aria-label="Panier">
+  <svg width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true">
+    <path d="M6 2L3 6v14a2 2 0 002 2h14a2 2 0 002-2V6l-3-4z"/>
+    <line x1="3" y1="6" x2="21" y2="6"/>
+    <path d="M16 10a4 4 0 01-8 0"/>
+  </svg>
+  <span id="cart-badge" class="cart-fab__badge" style="display:none">0</span>
+</button>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+{% if shop_enabled %}
+<script>
+'use strict';
+
+const items       = [];
+const cart        = [];
+let   currentItem = null;
+
+const shopLoading    = document.getElementById('shop-loading');
+const shopGrid       = document.getElementById('shop-grid');
+const shopEmpty      = document.getElementById('shop-empty');
+const cartBadge      = document.getElementById('cart-badge');
+const btnCart        = document.getElementById('btn-cart');
+const cartPanel      = document.getElementById('cart-panel');
+const btnCloseCart   = document.getElementById('btn-close-cart');
+const cartLines      = document.getElementById('cart-lines');
+const btnPlaceOrder  = document.getElementById('btn-place-order');
+const cartModalEl    = document.getElementById('modal-add-to-cart');
+const cartModal      = new bootstrap.Modal(cartModalEl);
+const cartModalTitle = document.getElementById('cart-modal-title');
+const cartSizeSelect = document.getElementById('cart-size-select');
+const cartQtyInput   = document.getElementById('cart-qty-input');
+const btnAddToCart   = document.getElementById('btn-add-to-cart');
+const cartModalError = document.getElementById('cart-modal-error');
+const orderFirstName = document.getElementById('order-first-name');
+const orderLastName  = document.getElementById('order-last-name');
+const orderPhone     = document.getElementById('order-phone');
+const cartOrderError   = document.getElementById('cart-order-error');
+const cartOrderSuccess = document.getElementById('cart-order-success');
+
+// ── Chargement des articles ──────────────────────────────────────────────────
+
+async function loadItems() {
+  try {
+    const r = await fetch('/api/shop/items');
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    const data = await r.json();
+    items.splice(0, items.length, ...data);
+    renderGrid();
+  } catch {
+    shopLoading.textContent = 'Erreur lors du chargement.';
+  }
+}
+
+function renderGrid() {
+  shopLoading.style.display = 'none';
+  if (items.length === 0) {
+    shopEmpty.style.display = '';
+    return;
+  }
+  shopGrid.style.display = '';
+  shopGrid.replaceChildren();
+
+  for (const item of items) {
+    const card = document.createElement('div');
+    card.className = 'card shop-card';
+
+    // Image
+    const imgWrap = document.createElement('div');
+    if (item.image_path) {
+      imgWrap.className = 'shop-card__img-wrap';
+      const img = document.createElement('img');
+      img.src = item.image_path;
+      img.alt = '';
+      img.className = 'shop-card__img';
+      imgWrap.appendChild(img);
+    } else {
+      imgWrap.className = 'shop-card__img-wrap shop-card__img-wrap--placeholder';
+      const ph = document.createElement('span');
+      ph.className = 'shop-card__img-placeholder';
+      ph.textContent = '🛍';
+      imgWrap.appendChild(ph);
+    }
+    card.appendChild(imgWrap);
+
+    // Corps
+    const body = document.createElement('div');
+    body.className = 'shop-card__body';
+
+    const nameEl = document.createElement('div');
+    nameEl.className = 'shop-card__name';
+    nameEl.textContent = item.name;
+    body.appendChild(nameEl);
+
+    if (item.price != null) {
+      const priceEl = document.createElement('div');
+      priceEl.className = 'shop-card__price';
+      priceEl.textContent = Number(item.price).toFixed(2) + ' €';
+      body.appendChild(priceEl);
+    }
+
+    if (item.description) {
+      const descEl = document.createElement('div');
+      descEl.className = 'shop-card__desc';
+      descEl.textContent = item.description;
+      body.appendChild(descEl);
+    }
+
+    const hasStock = item.variants.some(v => v.stock > 0);
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'btn btn-sm shop-card__btn ' + (hasStock ? 'btn-primary' : 'btn-secondary');
+    btn.textContent = hasStock ? 'Ajouter au panier' : 'Épuisé';
+    btn.disabled = !hasStock;
+    if (hasStock) btn.addEventListener('click', () => openAddModal(item));
+    body.appendChild(btn);
+
+    card.appendChild(body);
+    shopGrid.appendChild(card);
+  }
+}
+
+// ── Modale ajout panier ──────────────────────────────────────────────────────
+
+function openAddModal(item) {
+  currentItem = item;
+  cartModalTitle.textContent = item.name;
+  cartModalError.style.display = 'none';
+  cartSizeSelect.replaceChildren();
+
+  let firstAvailId = null;
+  for (const v of item.variants) {
+    const opt = document.createElement('option');
+    opt.value = v.id;
+    opt.textContent = v.size_label + (v.stock > 0 ? ' (' + v.stock + ' dispo)' : ' (épuisé)');
+    opt.disabled = v.stock === 0;
+    if (v.stock > 0 && firstAvailId === null) firstAvailId = v.id;
+    cartSizeSelect.appendChild(opt);
+  }
+
+  if (firstAvailId !== null) cartSizeSelect.value = firstAvailId;
+  cartQtyInput.value = 1;
+  updateQtyMax();
+  cartModal.show();
+}
+
+function updateQtyMax() {
+  const variantId = parseInt(cartSizeSelect.value, 10);
+  if (!currentItem) return;
+  const v = currentItem.variants.find(x => x.id === variantId);
+  cartQtyInput.max = v ? v.stock : 1;
+}
+
+cartSizeSelect.addEventListener('change', updateQtyMax);
+
+btnAddToCart.addEventListener('click', () => {
+  cartModalError.style.display = 'none';
+  const variantId = parseInt(cartSizeSelect.value, 10);
+  const qty = parseInt(cartQtyInput.value, 10);
+  const variant = currentItem && currentItem.variants.find(v => v.id === variantId);
+
+  if (!variant || variant.stock === 0) {
+    cartModalError.textContent = 'Variante non disponible.';
+    cartModalError.style.display = '';
+    return;
+  }
+  if (!qty || qty < 1) {
+    cartModalError.textContent = 'Quantité invalide.';
+    cartModalError.style.display = '';
+    return;
+  }
+
+  const existing = cart.find(l => l.variantId === variantId);
+  const alreadyInCart = existing ? existing.quantity : 0;
+  if (alreadyInCart + qty > variant.stock) {
+    cartModalError.textContent = 'Stock insuffisant (max ' + variant.stock + ').';
+    cartModalError.style.display = '';
+    return;
+  }
+
+  if (existing) {
+    existing.quantity += qty;
+  } else {
+    cart.push({
+      variantId,
+      itemName:  currentItem.name,
+      sizeLabel: variant.size_label,
+      quantity:  qty,
+      maxStock:  variant.stock,
+    });
+  }
+
+  updateCartBadge();
+  cartModal.hide();
+});
+
+// ── Panier ───────────────────────────────────────────────────────────────────
+
+function updateCartBadge() {
+  const total = cart.reduce((s, l) => s + l.quantity, 0);
+  if (total > 0) {
+    cartBadge.textContent = total;
+    cartBadge.style.display = '';
+  } else {
+    cartBadge.style.display = 'none';
+  }
+}
+
+function renderCartLines() {
+  cartLines.replaceChildren();
+  if (cart.length === 0) {
+    const empty = document.createElement('p');
+    empty.className = 'cart-empty';
+    empty.textContent = 'Votre panier est vide.';
+    cartLines.appendChild(empty);
+    return;
+  }
+  for (let i = 0; i < cart.length; i++) {
+    const line = cart[i];
+    const row = document.createElement('div');
+    row.className = 'cart-line';
+
+    const info = document.createElement('div');
+    info.className = 'cart-line__info';
+
+    const nameEl = document.createElement('span');
+    nameEl.className = 'cart-line__name';
+    nameEl.textContent = line.itemName;
+    info.appendChild(nameEl);
+
+    const sizeEl = document.createElement('span');
+    sizeEl.className = 'cart-line__size';
+    sizeEl.textContent = line.sizeLabel + ' × ' + line.quantity;
+    info.appendChild(sizeEl);
+
+    const del = document.createElement('button');
+    del.type = 'button';
+    del.className = 'cart-line__del';
+    del.textContent = '×';
+    del.setAttribute('aria-label', 'Supprimer');
+    const idx = i;
+    del.addEventListener('click', () => {
+      cart.splice(idx, 1);
+      updateCartBadge();
+      renderCartLines();
+    });
+
+    row.appendChild(info);
+    row.appendChild(del);
+    cartLines.appendChild(row);
+  }
+}
+
+btnCart.addEventListener('click', () => {
+  renderCartLines();
+  cartPanel.style.display = '';
+  btnCart.style.display = 'none';
+});
+
+btnCloseCart.addEventListener('click', () => {
+  cartPanel.style.display = 'none';
+  btnCart.style.display = '';
+});
+
+// ── Commande ─────────────────────────────────────────────────────────────────
+
+btnPlaceOrder.addEventListener('click', async () => {
+  cartOrderError.style.display = 'none';
+  cartOrderSuccess.style.display = 'none';
+
+  if (cart.length === 0) {
+    cartOrderError.textContent = 'Panier vide.';
+    cartOrderError.style.display = '';
+    return;
+  }
+
+  const firstName = orderFirstName.value.trim();
+  const lastName  = orderLastName.value.trim();
+  const phone     = orderPhone.value.trim();
+
+  if (!firstName) { cartOrderError.textContent = 'Prénom requis.'; cartOrderError.style.display = ''; return; }
+  if (!lastName)  { cartOrderError.textContent = 'Nom requis.';    cartOrderError.style.display = ''; return; }
+  if (!phone)     { cartOrderError.textContent = 'Téléphone requis.'; cartOrderError.style.display = ''; return; }
+
+  btnPlaceOrder.disabled = true;
+  const origText = btnPlaceOrder.textContent;
+  btnPlaceOrder.textContent = '…';
+
+  try {
+    const r = await fetch('/api/shop/order', {
+      method:  'POST',
+      headers: {'Content-Type': 'application/json'},
+      body:    JSON.stringify({
+        first_name: firstName,
+        last_name:  lastName,
+        phone,
+        lines: cart.map(l => ({variant_id: l.variantId, quantity: l.quantity})),
+      }),
+    });
+    const d = await r.json();
+    if (r.ok && d.ok) {
+      cart.splice(0, cart.length);
+      updateCartBadge();
+      renderCartLines();
+      orderFirstName.value = '';
+      orderLastName.value  = '';
+      orderPhone.value     = '';
+      cartOrderSuccess.replaceChildren();
+      cartOrderSuccess.append('Commande enregistrée ! Référence : #');
+      const refEl = document.createElement('strong');
+      refEl.textContent = String(d.order_id);
+      cartOrderSuccess.appendChild(refEl);
+      cartOrderSuccess.style.display = '';
+    } else {
+      cartOrderError.textContent = d.error || 'Erreur inconnue.';
+      cartOrderError.style.display = '';
+    }
+  } catch {
+    cartOrderError.textContent = 'Erreur réseau. Réessayez.';
+    cartOrderError.style.display = '';
+  } finally {
+    btnPlaceOrder.disabled = false;
+    btnPlaceOrder.textContent = origText;
+  }
+});
+
+// ── Init ─────────────────────────────────────────────────────────────────────
+loadItems();
+</script>
+{% endif %}
+{% endblock %}

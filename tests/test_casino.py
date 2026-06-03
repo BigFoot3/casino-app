@@ -848,3 +848,205 @@ class TestVoteResults:
                               json={}, headers={'X-CSRFToken': 'test'})
         assert r.status_code == 400
 
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# TestShop
+# ═══════════════════════════════════════════════════════════════════════════════
+
+class TestShop:
+
+    # ── Helpers ───────────────────────────────────────────────────────────────
+
+    def _enable_shop(self, admin_client):
+        r = admin_client.post('/api/admin/shop/shop_enabled',
+                              json={'enabled': True},
+                              headers={'X-CSRFToken': 'test'})
+        assert r.status_code == 200, f"_enable_shop failed: {r.data}"
+
+    def _create_item(self, admin_client, name='Article Test', price=25.0, variants=None):
+        r = admin_client.post('/api/admin/shop/items',
+                              json={'name': name, 'price': price, 'variants': variants or []},
+                              headers={'X-CSRFToken': 'test'})
+        assert r.status_code == 200, f"_create_item failed: {r.data}"
+        return r.get_json()['item_id']
+
+    def _create_variant(self, admin_client, item_id, size_label='M', stock=5):
+        r = admin_client.post('/api/admin/shop/variants',
+                              json={'item_id': item_id, 'size_label': size_label, 'stock': stock},
+                              headers={'X-CSRFToken': 'test'})
+        assert r.status_code == 200, f"_create_variant failed: {r.data}"
+        return r.get_json()['variant_id']
+
+    def _place_order(self, client, variant_id, quantity=1,
+                     first_name='Jean', last_name='Dupont', phone='0612345678'):
+        return client.post('/api/shop/order',
+                           json={
+                               'first_name': first_name,
+                               'last_name':  last_name,
+                               'phone':      phone,
+                               'lines':      [{'variant_id': variant_id, 'quantity': quantity}],
+                           })
+
+    # ── Tests ─────────────────────────────────────────────────────────────────
+
+    def test_shop_disabled_by_default(self, app, client):
+        """shop_enabled='0' par défaut — GET /shop retourne 200 dans tous les cas."""
+        assert _get_config('shop_enabled') == '0'
+        r = client.get('/shop')
+        assert r.status_code == 200
+
+    def test_toggle_shop_enabled(self, app, admin_client):
+        """POST shop_enabled {enabled:true} → app_config shop_enabled='1'."""
+        self._enable_shop(admin_client)
+        assert _get_config('shop_enabled') == '1'
+
+        r = admin_client.post('/api/admin/shop/shop_enabled',
+                              json={'enabled': False},
+                              headers={'X-CSRFToken': 'test'})
+        assert r.status_code == 200
+        assert _get_config('shop_enabled') == '0'
+
+    def test_create_item_admin(self, app, admin_client):
+        """Création d'un article → 200, item_id retourné, ligne en DB."""
+        r = admin_client.post('/api/admin/shop/items',
+                              json={'name': 'T-Shirt', 'description': 'Coton bio',
+                                    'price': 20.0, 'variants': []},
+                              headers={'X-CSRFToken': 'test'})
+        assert r.status_code == 200
+        d = r.get_json()
+        assert d['ok'] is True
+        assert isinstance(d['item_id'], int)
+        with db_conn() as conn:
+            row = conn.execute('SELECT name, price FROM shop_items WHERE id=?',
+                               (d['item_id'],)).fetchone()
+        assert row['name'] == 'T-Shirt'
+        assert row['price'] == 20.0
+
+    def test_create_variant(self, app, admin_client):
+        """Création variante sur article existant → vérifiée en DB."""
+        item_id    = self._create_item(admin_client, 'Hoodie')
+        variant_id = self._create_variant(admin_client, item_id, 'L', stock=10)
+        with db_conn() as conn:
+            row = conn.execute(
+                'SELECT size_label, stock FROM shop_variants WHERE id=?', (variant_id,)
+            ).fetchone()
+        assert row['size_label'] == 'L'
+        assert row['stock'] == 10
+
+    def test_order_success_decrements_stock(self, app, client, admin_client):
+        """Commande réussie → stock décrémenté, order_id retourné, ligne en DB."""
+        self._enable_shop(admin_client)
+        item_id    = self._create_item(admin_client, 'Casquette')
+        variant_id = self._create_variant(admin_client, item_id, 'Unique', stock=3)
+
+        r = self._place_order(client, variant_id, quantity=2)
+        assert r.status_code == 200
+        d = r.get_json()
+        assert d['ok'] is True
+        assert isinstance(d['order_id'], int)
+
+        with db_conn() as conn:
+            v   = conn.execute(
+                'SELECT stock FROM shop_variants WHERE id=?', (variant_id,)
+            ).fetchone()
+            sol = conn.execute(
+                'SELECT quantity FROM shop_order_lines WHERE order_id=?', (d['order_id'],)
+            ).fetchone()
+        assert v['stock'] == 1
+        assert sol['quantity'] == 2
+
+    def test_order_blocked_if_stock_zero(self, app, client, admin_client):
+        """Commande sur variante stock=0 → 400."""
+        self._enable_shop(admin_client)
+        item_id    = self._create_item(admin_client, 'Mug')
+        variant_id = self._create_variant(admin_client, item_id, 'Unique', stock=0)
+
+        r = self._place_order(client, variant_id, quantity=1)
+        assert r.status_code == 400
+        assert r.get_json()['ok'] is False
+
+    def test_order_invalid_phone(self, app, client, admin_client):
+        """Téléphone hors format → 400."""
+        self._enable_shop(admin_client)
+        item_id    = self._create_item(admin_client, 'Stylo')
+        variant_id = self._create_variant(admin_client, item_id, 'Unique', stock=5)
+
+        r = self._place_order(client, variant_id, phone='1234')
+        assert r.status_code == 400
+        assert r.get_json()['ok'] is False
+
+    def test_order_missing_first_name(self, app, client, admin_client):
+        """Prénom vide → 400."""
+        self._enable_shop(admin_client)
+        item_id    = self._create_item(admin_client, 'Badge')
+        variant_id = self._create_variant(admin_client, item_id, 'Unique', stock=5)
+
+        r = self._place_order(client, variant_id, first_name='')
+        assert r.status_code == 400
+        assert r.get_json()['ok'] is False
+
+    def test_order_empty_lines(self, app, client, admin_client):
+        """Lignes vides → 400."""
+        self._enable_shop(admin_client)
+        r = client.post('/api/shop/order',
+                        json={'first_name': 'Jean', 'last_name': 'Dupont',
+                              'phone': '0612345678', 'lines': []})
+        assert r.status_code == 400
+        assert r.get_json()['ok'] is False
+
+    def test_delete_item_blocked_if_orders_exist(self, app, client, admin_client):
+        """Suppression article impossible si commandes existent → 400."""
+        self._enable_shop(admin_client)
+        item_id    = self._create_item(admin_client, 'Carnet')
+        variant_id = self._create_variant(admin_client, item_id, 'A5', stock=5)
+        self._place_order(client, variant_id)
+
+        r = admin_client.post(f'/api/admin/shop/items/{item_id}/delete',
+                              json={}, headers={'X-CSRFToken': 'test'})
+        assert r.status_code == 400
+        assert r.get_json()['ok'] is False
+
+    def test_admin_order_status_change(self, app, client, admin_client):
+        """Changement statut commande confirmed → vérifié en DB."""
+        self._enable_shop(admin_client)
+        item_id    = self._create_item(admin_client, 'Tote bag')
+        variant_id = self._create_variant(admin_client, item_id, 'Unique', stock=5)
+        order_id   = self._place_order(client, variant_id).get_json()['order_id']
+
+        r = admin_client.post(f'/api/admin/shop/orders/{order_id}/status',
+                              json={'status': 'confirmed'},
+                              headers={'X-CSRFToken': 'test'})
+        assert r.status_code == 200
+        assert r.get_json()['ok'] is True
+        with db_conn() as conn:
+            row = conn.execute('SELECT status FROM shop_orders WHERE id=?', (order_id,)).fetchone()
+        assert row['status'] == 'confirmed'
+
+    def test_shop_public_no_auth_required(self, app, client):
+        """GET /shop accessible sans authentification → 200."""
+        r = client.get('/shop')
+        assert r.status_code == 200
+
+    def test_order_public_no_auth_required(self, app, client, admin_client):
+        """POST /api/shop/order accessible sans authentification — pas de 401/403."""
+        self._enable_shop(admin_client)
+        item_id    = self._create_item(admin_client, "Pin's")
+        variant_id = self._create_variant(admin_client, item_id, 'Unique', stock=5)
+
+        # client est non authentifié (fixture sans login)
+        r = self._place_order(client, variant_id)
+        assert r.status_code not in (401, 403)
+        assert r.status_code == 200
+
+    def test_order_blocked_if_shop_disabled(self, app, client, admin_client):
+        """Commande rejetée si boutique fermée (shop_enabled='0')."""
+        # shop non activée — état par défaut
+        item_id    = self._create_item(admin_client, 'Décapsuleur')
+        variant_id = self._create_variant(admin_client, item_id, 'Unique', stock=5)
+
+        r = self._place_order(client, variant_id)
+        assert r.status_code == 400
+        d = r.get_json()
+        assert d['ok'] is False
+        assert 'fermée' in d['error']
+

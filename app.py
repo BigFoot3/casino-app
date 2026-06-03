@@ -3,15 +3,12 @@ import logging
 from datetime import timedelta
 
 from flask import Flask
-from flask_wtf import CSRFProtect
 from werkzeug.middleware.proxy_fix import ProxyFix
 
-from extensions import limiter
+from extensions import limiter, csrf
 
 logging.basicConfig(level=logging.INFO,
                     format='%(asctime)s %(levelname)s %(message)s')
-
-csrf = CSRFProtect()
 
 
 def create_app():
@@ -34,6 +31,7 @@ def create_app():
     app.config['SECRET_KEY']                = secret
     # Set RATELIMIT_ENABLED=false in .env to disable rate limiting (load tests only)
     app.config['RATELIMIT_ENABLED']         = os.environ.get('RATELIMIT_ENABLED', 'true').lower() != 'false'
+    app.config['MAX_CONTENT_LENGTH']        = 2 * 1024 * 1024  # 2 MB upload limit
     is_prod = os.environ.get('FLASK_ENV', 'production') == 'production'
     app.config['SESSION_COOKIE_SECURE']     = is_prod  # False on HTTP, True on HTTPS/prod
     app.config['SESSION_COOKIE_HTTPONLY']   = True
@@ -49,11 +47,25 @@ def create_app():
     from routes.player import player_bp
     from routes.admin  import admin_bp
     from routes.api    import api_bp
+    from routes.shop   import shop_bp
 
     app.register_blueprint(auth_bp)
     app.register_blueprint(player_bp)
     app.register_blueprint(admin_bp)
     app.register_blueprint(api_bp)
+    app.register_blueprint(shop_bp)
+
+    @app.context_processor
+    def inject_shop_config():
+        try:
+            from db import db_conn
+            with db_conn() as conn:
+                row = conn.execute(
+                    "SELECT value FROM app_config WHERE key='shop_enabled'"
+                ).fetchone()
+                return {'shop_enabled': row is not None and row['value'] == '1'}
+        except Exception:
+            return {'shop_enabled': False}
 
     @app.route('/')
     def index():

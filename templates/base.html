@@ -21,6 +21,9 @@
       Casino · Midnight Gala
     </a>
     <div class="d-flex align-items-center gap-3">
+      {% if shop_enabled %}
+        <a href="/shop" class="btn btn-sm btn-outline-light">Boutique</a>
+      {% endif %}
       {% if session.username %}
         <a href="{{ url_for('player.dashboard') }}" class="text-light text-decoration-none">{{ session.username }}</a>
         {% if session.role == 'admin' %}

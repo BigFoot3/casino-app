@@ -1,0 +1,121 @@
+{% extends 'base.html' %}
+{% block title %}Boutique — Administration{% endblock %}
+{% block content %}
+
+<!-- Modal confirmation générique -->
+<div class="modal fade" id="confirm-modal" tabindex="-1">
+  <div class="modal-dialog modal-dialog-centered modal-sm">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="confirm-modal-title">Confirmer</h5>
+      </div>
+      <div class="modal-body"><p id="confirm-modal-body"></p></div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Annuler</button>
+        <button type="button" class="btn btn-danger btn-sm" id="confirm-modal-ok">Confirmer</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Modal nouvel article -->
+<div class="modal fade" id="modal-new-item" tabindex="-1">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content p-4">
+      <h5 class="modal-title mb-3">Nouvel article</h5>
+      <div class="mb-2">
+        <label class="form-label" for="new-item-name">Nom *</label>
+        <input type="text" id="new-item-name" class="form-control form-control-sm" placeholder="Ex : T-Shirt Casino">
+      </div>
+      <div class="mb-2">
+        <label class="form-label" for="new-item-desc">Description</label>
+        <textarea id="new-item-desc" class="form-control form-control-sm" rows="2" placeholder="Description courte…"></textarea>
+      </div>
+      <div class="mb-3">
+        <label class="form-label" for="new-item-price">Prix (€)</label>
+        <input type="number" id="new-item-price" class="form-control form-control-sm" min="0" step="0.01" placeholder="0.00">
+      </div>
+      <div class="d-flex align-items-center justify-content-between mb-1">
+        <label class="form-label mb-0">Tailles / variantes</label>
+        <button type="button" class="btn btn-sm btn-outline-light" id="btn-add-variant-row">+ Ajouter</button>
+      </div>
+      <div id="new-item-variants" class="mb-3"></div>
+      <div id="new-item-error" class="small mb-2" style="display:none;color:var(--mg-ember)"></div>
+      <div class="d-flex gap-2">
+        <button type="button" class="btn btn-secondary btn-sm flex-fill" data-bs-dismiss="modal">Annuler</button>
+        <button type="button" class="btn btn-primary btn-sm flex-fill" id="btn-submit-new-item">Créer</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Modal ajout taille (article existant) -->
+<div class="modal fade" id="modal-new-variant" tabindex="-1">
+  <div class="modal-dialog modal-dialog-centered modal-sm">
+    <div class="modal-content p-4">
+      <h5 class="modal-title mb-3">Ajouter une taille</h5>
+      <div class="mb-2">
+        <label class="form-label" for="new-variant-size">Taille / label *</label>
+        <input type="text" id="new-variant-size" class="form-control form-control-sm" placeholder="Ex : M, L, Unique…">
+      </div>
+      <div class="mb-3">
+        <label class="form-label" for="new-variant-stock">Stock initial</label>
+        <input type="number" id="new-variant-stock" class="form-control form-control-sm" min="0" value="0">
+      </div>
+      <div id="new-variant-error" class="small mb-2" style="display:none;color:var(--mg-ember)"></div>
+      <div class="d-flex gap-2">
+        <button type="button" class="btn btn-secondary btn-sm flex-fill" data-bs-dismiss="modal">Annuler</button>
+        <button type="button" class="btn btn-primary btn-sm flex-fill" id="btn-submit-new-variant">Ajouter</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="mg-page-head mb-4">
+  <div>
+    <span class="mg-eyebrow">Administration</span>
+    <h1 class="mg-page-title">Boutique</h1>
+  </div>
+  <a href="/admin" class="btn btn-sm btn-outline-secondary">← Admin</a>
+</div>
+
+<!-- Section 1 : Toggle boutique -->
+<div class="card p-4 mb-4">
+  <div class="d-flex align-items-center justify-content-between">
+    <div>
+      <h5 class="mb-1">État de la boutique</h5>
+      <span id="shop-status-text" class="small"></span>
+    </div>
+    <button id="btn-shop-toggle" class="btn btn-sm btn-outline-light">…</button>
+  </div>
+</div>
+
+<!-- Section 2+3 : Catalogue + Stock -->
+<div class="card p-4 mb-4">
+  <div class="d-flex justify-content-between align-items-center mb-3">
+    <h5 class="mb-0">Catalogue</h5>
+    <button class="btn btn-sm btn-primary" data-bs-toggle="modal" data-bs-target="#modal-new-item">+ Nouvel article</button>
+  </div>
+  <div id="items-error" class="small mb-2" style="display:none;color:var(--mg-ember)"></div>
+  <div id="items-list"></div>
+</div>
+
+<!-- Section 4 : Commandes -->
+<div class="card p-4 mb-4">
+  <div class="d-flex justify-content-between align-items-center mb-3">
+    <h5 class="mb-0">Commandes</h5>
+    <select id="orders-filter" class="form-select form-select-sm" style="max-width:220px">
+      <option value="">Tous les articles</option>
+    </select>
+  </div>
+  <div id="orders-error" class="small mb-2" style="display:none;color:var(--mg-ember)"></div>
+  <div id="orders-list"></div>
+</div>
+
+{% endblock %}
+{% block scripts %}
+<script>
+const INITIAL_SHOP_ENABLED = {{ 'true' if cfg.get('shop_enabled','0') == '1' else 'false' }};
+</script>
+<script src="/static/js/shop-admin.js"></script>
+{% endblock %}

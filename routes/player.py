@@ -69,3 +69,9 @@ def play():
 def roulette_display():
     """Public fullscreen display page — no auth required."""
     return render_template('roulette/display.html')
+
+
+@player_bp.route('/shop')
+def shop():
+    """Public shop page — no auth required."""
+    return render_template('shop.html')
