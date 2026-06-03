@@ -1050,3 +1050,169 @@ class TestShop:
         assert d['ok'] is False
         assert 'fermée' in d['error']
 
+    def test_cancel_order_restores_stock(self, app, client, admin_client):
+        """Annulation d'une commande pending → stock restitué."""
+        self._enable_shop(admin_client)
+        item_id    = self._create_item(admin_client, 'Carafe')
+        variant_id = self._create_variant(admin_client, item_id, 'Unique', stock=5)
+        order_id   = self._place_order(client, variant_id, quantity=3).get_json()['order_id']
+
+        with db_conn() as conn:
+            before = conn.execute(
+                'SELECT stock FROM shop_variants WHERE id=?', (variant_id,)
+            ).fetchone()['stock']
+        assert before == 2  # 5 - 3
+
+        r = admin_client.post(f'/api/admin/shop/orders/{order_id}/status',
+                              json={'status': 'cancelled'},
+                              headers={'X-CSRFToken': 'test'})
+        assert r.status_code == 200
+        assert r.get_json()['ok'] is True
+
+        with db_conn() as conn:
+            after = conn.execute(
+                'SELECT stock FROM shop_variants WHERE id=?', (variant_id,)
+            ).fetchone()['stock']
+        assert after == 5  # stock restitué
+
+    def test_cancel_already_cancelled_no_double_credit(self, app, client, admin_client):
+        """Re-annuler une commande déjà annulée → stock non crédité deux fois."""
+        self._enable_shop(admin_client)
+        item_id    = self._create_item(admin_client, 'Lampe')
+        variant_id = self._create_variant(admin_client, item_id, 'Unique', stock=4)
+        order_id   = self._place_order(client, variant_id, quantity=2).get_json()['order_id']
+
+        # Première annulation
+        admin_client.post(f'/api/admin/shop/orders/{order_id}/status',
+                          json={'status': 'cancelled'}, headers={'X-CSRFToken': 'test'})
+
+        with db_conn() as conn:
+            stock_after_first = conn.execute(
+                'SELECT stock FROM shop_variants WHERE id=?', (variant_id,)
+            ).fetchone()['stock']
+        assert stock_after_first == 4  # restitué une fois
+
+        # Deuxième annulation — ne doit rien changer
+        r = admin_client.post(f'/api/admin/shop/orders/{order_id}/status',
+                              json={'status': 'cancelled'}, headers={'X-CSRFToken': 'test'})
+        assert r.status_code == 200
+
+        with db_conn() as conn:
+            stock_after_second = conn.execute(
+                'SELECT stock FROM shop_variants WHERE id=?', (variant_id,)
+            ).fetchone()['stock']
+        assert stock_after_second == 4  # inchangé — pas de double crédit
+
+    def test_confirm_cancelled_order_decrements_stock(self, app, client, admin_client):
+        """Confirmer une commande annulée → stock décrémenté."""
+        self._enable_shop(admin_client)
+        item_id    = self._create_item(admin_client, 'Réveil')
+        variant_id = self._create_variant(admin_client, item_id, 'Unique', stock=6)
+        order_id   = self._place_order(client, variant_id, quantity=2).get_json()['order_id']
+
+        # Annuler → stock restitué (stock=6)
+        admin_client.post(f'/api/admin/shop/orders/{order_id}/status',
+                          json={'status': 'cancelled'}, headers={'X-CSRFToken': 'test'})
+
+        with db_conn() as conn:
+            s = conn.execute('SELECT stock FROM shop_variants WHERE id=?',
+                             (variant_id,)).fetchone()['stock']
+        assert s == 6
+
+        # Confirmer → stock décrémenté
+        r = admin_client.post(f'/api/admin/shop/orders/{order_id}/status',
+                              json={'status': 'confirmed'}, headers={'X-CSRFToken': 'test'})
+        assert r.status_code == 200
+        assert r.get_json()['ok'] is True
+
+        with db_conn() as conn:
+            s = conn.execute('SELECT stock FROM shop_variants WHERE id=?',
+                             (variant_id,)).fetchone()['stock']
+        assert s == 4  # 6 - 2
+
+    def test_order_phone_international_format(self, app, client, admin_client):
+        """Téléphone +33XXXXXXXXX normalisé et accepté."""
+        self._enable_shop(admin_client)
+        item_id    = self._create_item(admin_client, 'Agenda')
+        variant_id = self._create_variant(admin_client, item_id, 'Unique', stock=5)
+
+        r = self._place_order(client, variant_id, phone='+33612345678')
+        assert r.status_code == 200
+        assert r.get_json()['ok'] is True
+
+        # Vérifier que le numéro est stocké en format local normalisé
+        with db_conn() as conn:
+            order = conn.execute(
+                'SELECT phone FROM shop_orders WHERE id=?', (r.get_json()['order_id'],)
+            ).fetchone()
+        assert order['phone'] == '0612345678'
+
+    def test_order_phone_0033_format(self, app, client, admin_client):
+        """Téléphone 0033XXXXXXXXX normalisé et accepté."""
+        self._enable_shop(admin_client)
+        item_id    = self._create_item(admin_client, 'Carnet')
+        variant_id = self._create_variant(admin_client, item_id, 'Unique', stock=5)
+
+        r = self._place_order(client, variant_id, phone='0033612345678')
+        assert r.status_code == 200
+        assert r.get_json()['ok'] is True
+
+        with db_conn() as conn:
+            order = conn.execute(
+                'SELECT phone FROM shop_orders WHERE id=?', (r.get_json()['order_id'],)
+            ).fetchone()
+        assert order['phone'] == '0612345678'
+
+    def test_delete_item_allowed_if_all_orders_cancelled(self, app, client, admin_client):
+        """Suppression article autorisée si toutes les commandes sont annulées → 200."""
+        self._enable_shop(admin_client)
+        item_id    = self._create_item(admin_client, 'Porte-clés')
+        variant_id = self._create_variant(admin_client, item_id, 'Unique', stock=3)
+        order_id   = self._place_order(client, variant_id).get_json()['order_id']
+
+        # Annuler la commande
+        r = admin_client.post(f'/api/admin/shop/orders/{order_id}/status',
+                              json={'status': 'cancelled'},
+                              headers={'X-CSRFToken': 'test'})
+        assert r.status_code == 200
+
+        # Suppression doit maintenant réussir
+        r = admin_client.post(f'/api/admin/shop/items/{item_id}/delete',
+                              json={}, headers={'X-CSRFToken': 'test'})
+        assert r.status_code == 200
+        assert r.get_json()['ok'] is True
+
+        with db_conn() as conn:
+            row = conn.execute('SELECT id FROM shop_items WHERE id=?', (item_id,)).fetchone()
+        assert row is None
+
+    def test_delete_item_still_blocked_with_active_orders(self, app, client, admin_client):
+        """Suppression article toujours bloquée si commande pending/confirmed existe → 400."""
+        self._enable_shop(admin_client)
+        item_id    = self._create_item(admin_client, 'Stylo')
+        variant_id = self._create_variant(admin_client, item_id, 'Unique', stock=5)
+        self._place_order(client, variant_id)  # commande pending, non annulée
+
+        r = admin_client.post(f'/api/admin/shop/items/{item_id}/delete',
+                              json={}, headers={'X-CSRFToken': 'test'})
+        assert r.status_code == 400
+        assert r.get_json()['ok'] is False
+
+    def test_has_orders_flag_excludes_cancelled(self, app, client, admin_client):
+        """GET /api/admin/shop/items — has_orders=False si seules commandes annulées."""
+        self._enable_shop(admin_client)
+        item_id    = self._create_item(admin_client, 'Badge')
+        variant_id = self._create_variant(admin_client, item_id, 'Unique', stock=2)
+        order_id   = self._place_order(client, variant_id).get_json()['order_id']
+
+        admin_client.post(f'/api/admin/shop/orders/{order_id}/status',
+                          json={'status': 'cancelled'},
+                          headers={'X-CSRFToken': 'test'})
+
+        r = admin_client.get('/api/admin/shop/items')
+        assert r.status_code == 200
+        items = r.get_json()
+        target = next(i for i in items if i['id'] == item_id)
+        assert target['has_orders'] is False
+        assert target['variants'][0]['has_orders'] is False
+

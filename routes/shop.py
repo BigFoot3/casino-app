@@ -55,6 +55,13 @@ def shop_order():
     phone      = (data.get('phone')      or '').strip()
     lines      = data.get('lines')
 
+    # Normalisation format international → format local 0XXXXXXXXX
+    if phone.startswith('+33'):
+        phone = '0' + phone[3:]
+    elif phone.startswith('0033'):
+        phone = '0' + phone[4:]
+    phone = phone.replace(' ', '').replace('-', '').replace('.', '')
+
     if not first_name:
         return jsonify({'ok': False, 'error': 'Prénom requis'}), 400
     if not last_name:
@@ -137,13 +144,16 @@ def admin_list_items():
             has_orders = conn.execute(
                 """SELECT COUNT(*) FROM shop_order_lines sol
                    JOIN shop_variants sv ON sv.id = sol.variant_id
-                   WHERE sv.item_id = ?""",
+                   JOIN shop_orders so ON so.id = sol.order_id
+                   WHERE sv.item_id = ? AND so.status != 'cancelled'""",
                 (item['id'],)
             ).fetchone()[0] > 0
             variant_list = []
             for v in variants:
                 v_has_orders = conn.execute(
-                    "SELECT COUNT(*) FROM shop_order_lines WHERE variant_id=?",
+                    """SELECT COUNT(*) FROM shop_order_lines sol
+                       JOIN shop_orders so ON so.id = sol.order_id
+                       WHERE sol.variant_id = ? AND so.status != 'cancelled'""",
                     (v['id'],)
                 ).fetchone()[0] > 0
                 variant_list.append({
@@ -225,13 +235,21 @@ def admin_delete_item(item_id):
         orders_exist = conn.execute(
             """SELECT sol.id FROM shop_order_lines sol
                JOIN shop_variants sv ON sv.id = sol.variant_id
-               WHERE sv.item_id = ? LIMIT 1""",
+               JOIN shop_orders so ON so.id = sol.order_id
+               WHERE sv.item_id = ? AND so.status != 'cancelled' LIMIT 1""",
             (item_id,)
         ).fetchone()
         if orders_exist:
             conn.execute('ROLLBACK')
             return jsonify({'ok': False, 'error': 'Des commandes existent pour cet article'}), 400
         image_path = item['image_path']
+        # Supprimer les lignes de commandes (toutes annulées — vérifié ci-dessus)
+        # avant la suppression de l'article pour éviter la contrainte FK sur variant_id
+        conn.execute(
+            "DELETE FROM shop_order_lines WHERE variant_id IN "
+            "(SELECT id FROM shop_variants WHERE item_id=?)",
+            (item_id,)
+        )
         conn.execute("DELETE FROM shop_items WHERE id=?", (item_id,))
         conn.execute('COMMIT')
 
@@ -331,7 +349,10 @@ def admin_delete_variant(variant_id):
             conn.execute('ROLLBACK')
             return jsonify({'ok': False, 'error': 'Variante introuvable'}), 404
         in_order = conn.execute(
-            "SELECT id FROM shop_order_lines WHERE variant_id=? LIMIT 1", (variant_id,)
+            """SELECT sol.id FROM shop_order_lines sol
+               JOIN shop_orders so ON so.id = sol.order_id
+               WHERE sol.variant_id = ? AND so.status != 'cancelled' LIMIT 1""",
+            (variant_id,)
         ).fetchone()
         if in_order:
             conn.execute('ROLLBACK')
@@ -395,18 +416,60 @@ def admin_list_orders():
 @shop_bp.route('/api/admin/shop/orders/<int:order_id>/status', methods=['POST'])
 def admin_update_order_status(order_id):
     _require_admin()
-    data   = request.get_json(force=True) or {}
-    status = data.get('status')
-    if status not in ('confirmed', 'cancelled'):
+    data       = request.get_json(force=True) or {}
+    new_status = data.get('status')
+    if new_status not in ('confirmed', 'cancelled'):
         return jsonify({'ok': False, 'error': 'Statut invalide'}), 400
 
     with db_conn() as conn:
         conn.execute('BEGIN IMMEDIATE')
-        row = conn.execute("SELECT id FROM shop_orders WHERE id=?", (order_id,)).fetchone()
-        if not row:
+        order = conn.execute(
+            "SELECT id, status FROM shop_orders WHERE id=?", (order_id,)
+        ).fetchone()
+        if not order:
             conn.execute('ROLLBACK')
             return jsonify({'ok': False, 'error': 'Commande introuvable'}), 404
-        conn.execute("UPDATE shop_orders SET status=? WHERE id=?", (status, order_id))
+
+        cur_status = order['status']
+
+        if cur_status == new_status:
+            conn.execute('ROLLBACK')
+            return jsonify({'ok': True})
+
+        lines = conn.execute(
+            "SELECT variant_id, quantity FROM shop_order_lines WHERE order_id=?",
+            (order_id,)
+        ).fetchall()
+
+        if new_status == 'cancelled' and cur_status in ('pending', 'confirmed'):
+            # Restituer le stock
+            for line in lines:
+                conn.execute(
+                    "UPDATE shop_variants SET stock = stock + ? WHERE id=?",
+                    (line['quantity'], line['variant_id'])
+                )
+
+        elif new_status == 'confirmed' and cur_status == 'cancelled':
+            # Vérifier le stock disponible avant de décrémenter
+            for line in lines:
+                v = conn.execute(
+                    "SELECT stock, size_label FROM shop_variants WHERE id=?",
+                    (line['variant_id'],)
+                ).fetchone()
+                if not v or v['stock'] < line['quantity']:
+                    conn.execute('ROLLBACK')
+                    label = v['size_label'] if v else str(line['variant_id'])
+                    return jsonify({
+                        'ok':    False,
+                        'error': f'Stock insuffisant pour {label}',
+                    }), 400
+            for line in lines:
+                conn.execute(
+                    "UPDATE shop_variants SET stock = stock - ? WHERE id=?",
+                    (line['quantity'], line['variant_id'])
+                )
+
+        conn.execute("UPDATE shop_orders SET status=? WHERE id=?", (new_status, order_id))
         conn.execute('COMMIT')
     return jsonify({'ok': True})
 
