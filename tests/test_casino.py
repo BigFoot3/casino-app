@@ -1237,3 +1237,56 @@ class TestShop:
         assert r.status_code == 400
         assert r.get_json()['ok'] is False
 
+    def test_create_item_with_preorder(self, app, admin_client):
+        """POST /api/admin/shop/items {preorder:1} — preorder=1 persisté en DB."""
+        r = admin_client.post('/api/admin/shop/items',
+                              json={'name': 'Article Précommande', 'preorder': 1, 'variants': []},
+                              headers={'X-CSRFToken': 'test'})
+        assert r.status_code == 200
+        item_id = r.get_json()['item_id']
+        items = admin_client.get('/api/admin/shop/items').get_json()
+        target = next(i for i in items if i['id'] == item_id)
+        assert target['preorder'] == 1
+
+    def test_toggle_preorder(self, app, admin_client):
+        """POST /api/admin/shop/items/<id>/preorder — bascule preorder 0→1 en DB."""
+        item_id = self._create_item(admin_client, 'Article Standard')
+        items = admin_client.get('/api/admin/shop/items').get_json()
+        assert next(i for i in items if i['id'] == item_id)['preorder'] == 0
+
+        r = admin_client.post(f'/api/admin/shop/items/{item_id}/preorder',
+                              json={'preorder': True},
+                              headers={'X-CSRFToken': 'test'})
+        assert r.status_code == 200
+        assert r.get_json()['preorder'] == 1
+
+        items = admin_client.get('/api/admin/shop/items').get_json()
+        assert next(i for i in items if i['id'] == item_id)['preorder'] == 1
+
+    def test_order_preorder_ignores_stock(self, app, client, admin_client):
+        """Commande article preorder avec stock=0 → 200, stock inchangé."""
+        self._enable_shop(admin_client)
+        r = admin_client.post('/api/admin/shop/items',
+                              json={'name': 'T-Shirt Préco', 'preorder': 1, 'variants': []},
+                              headers={'X-CSRFToken': 'test'})
+        item_id    = r.get_json()['item_id']
+        variant_id = self._create_variant(admin_client, item_id, 'M', stock=0)
+
+        r = self._place_order(client, variant_id)
+        assert r.status_code == 200
+        assert r.get_json()['ok'] is True
+
+        variants = admin_client.get('/api/admin/shop/items').get_json()
+        target_item = next(i for i in variants if i['id'] == item_id)
+        assert target_item['variants'][0]['stock'] == 0
+
+    def test_order_standard_still_blocked_if_stock_zero(self, app, client, admin_client):
+        """Commande article standard avec stock=0 → 400 (comportement inchangé)."""
+        self._enable_shop(admin_client)
+        item_id    = self._create_item(admin_client, 'Article Standard Épuisé')
+        variant_id = self._create_variant(admin_client, item_id, 'Unique', stock=0)
+
+        r = self._place_order(client, variant_id)
+        assert r.status_code == 400
+        assert r.get_json()['ok'] is False
+

@@ -228,6 +228,27 @@ function buildItemBlock(item) {
   });
   actions.appendChild(btnToggle);
 
+  // Toggle précommande
+  const btnPreorder      = document.createElement('button');
+  btnPreorder.type       = 'button';
+  btnPreorder.className  = 'btn btn-sm btn-outline-secondary';
+  if (item.preorder) btnPreorder.style.color = 'var(--mg-blush)';
+  btnPreorder.textContent = item.preorder ? 'PRÉCOMMANDE' : 'STANDARD';
+  btnPreorder.addEventListener('click', async function () {
+    const newPreorder = !item.preorder;
+    const [s, d] = await shopAction(this, () =>
+      apiPost(`/api/admin/shop/items/${item.id}/preorder`, {preorder: newPreorder})
+    );
+    if (s === 200 && d.ok) {
+      item.preorder = d.preorder;
+      btnPreorder.textContent = item.preorder ? 'PRÉCOMMANDE' : 'STANDARD';
+      btnPreorder.style.color = item.preorder ? 'var(--mg-blush)' : '';
+    } else {
+      showError('items-error', d && d.error ? d.error : 'Erreur précommande');
+    }
+  });
+  actions.appendChild(btnPreorder);
+
   // Supprimer article
   const btnDel      = document.createElement('button');
   btnDel.type       = 'button';
@@ -235,12 +256,22 @@ function buildItemBlock(item) {
   btnDel.textContent = '🗑';
   btnDel.disabled   = item.has_orders;
   btnDel.title      = item.has_orders ? 'Des commandes existent pour cet article' : 'Supprimer';
-  btnDel.addEventListener('click', async function () {
-    const [s, d] = await shopAction(this, () =>
-      apiPost(`/api/admin/shop/items/${item.id}/delete`)
-    );
-    if (s === 200 && d.ok) { await loadItems(); await loadOrders(); }
-    else showError('items-error', d && d.error ? d.error : 'Erreur suppression');
+  btnDel.addEventListener('click', function () {
+    document.getElementById('modal-confirm-delete-name').textContent = item.name;
+    pendingDeleteFn = async () => {
+      const [s, d] = await shopAction(
+        document.getElementById('btn-confirm-delete'),
+        () => apiPost(`/api/admin/shop/items/${item.id}/delete`)
+      );
+      if (s === 200 && d.ok) {
+        modalConfirmDelete.hide();
+        await loadItems();
+        await loadOrders();
+      } else {
+        showError('items-error', d && d.error ? d.error : 'Erreur suppression');
+      }
+    };
+    modalConfirmDelete.show();
   });
   actions.appendChild(btnDel);
 
@@ -455,6 +486,20 @@ document.getElementById('btn-submit-new-variant').addEventListener('click', asyn
 
   if (s === 200 && d.ok) { modalNewVariant.hide(); await loadItems(); }
   else { errEl.textContent = d && d.error ? d.error : 'Erreur création.'; errEl.style.display = ''; }
+});
+
+// ── Modal confirmation suppression article ───────────────────────────────────
+
+const modalConfirmDeleteEl = document.getElementById('modal-confirm-delete');
+const modalConfirmDelete   = new bootstrap.Modal(modalConfirmDeleteEl);
+let   pendingDeleteFn      = null;
+
+document.getElementById('btn-confirm-delete').addEventListener('click', async function () {
+  if (pendingDeleteFn) await pendingDeleteFn();
+});
+
+modalConfirmDeleteEl.addEventListener('hidden.bs.modal', () => {
+  pendingDeleteFn = null;
 });
 
 // ── Section 4 — Commandes ────────────────────────────────────────────────────

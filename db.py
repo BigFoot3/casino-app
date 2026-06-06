@@ -108,6 +108,18 @@ def _migrate_vote_schema(conn):
     conn.commit()
 
 
+def _migrate_shop_preorder():
+    """Add preorder column to shop_items if missing."""
+    with db_conn() as conn:
+        cols = [r[1] for r in conn.execute('PRAGMA table_info(shop_items)').fetchall()]
+        if 'preorder' in cols:
+            return
+        conn.execute('BEGIN IMMEDIATE')
+        conn.execute('ALTER TABLE shop_items ADD COLUMN preorder INTEGER NOT NULL DEFAULT 0')
+        conn.execute('COMMIT')
+        print('DB migration: shop_items.preorder added.', flush=True)
+
+
 def init_db():
     with db_conn() as conn:
         conn.executescript('''
@@ -190,6 +202,7 @@ def init_db():
                 price       REAL,
                 image_path  TEXT,
                 active      INTEGER NOT NULL DEFAULT 1,
+                preorder    INTEGER NOT NULL DEFAULT 0,
                 created_at  TEXT DEFAULT (datetime('now'))
             );
             CREATE TABLE IF NOT EXISTS shop_variants (
@@ -224,6 +237,7 @@ def init_db():
         conn.commit()
         _migrate_vote_schema(conn)
         _migrate_vote_boosts_amount()
+        _migrate_shop_preorder()
 
 
 def get_config(conn) -> dict:

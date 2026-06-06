@@ -71,6 +71,20 @@
   </div>
 </div>
 
+<!-- Modal confirmation suppression article -->
+<div class="modal fade" id="modal-confirm-delete" tabindex="-1">
+  <div class="modal-dialog modal-dialog-centered modal-sm">
+    <div class="modal-content p-4">
+      <h5 class="modal-title mb-3">Supprimer l'article</h5>
+      <p class="small mb-3">Confirmer la suppression de <span id="modal-confirm-delete-name" class="fw-bold"></span> ? Cette action est irréversible.</p>
+      <div class="d-flex gap-2">
+        <button type="button" class="btn btn-secondary btn-sm flex-fill" data-bs-dismiss="modal">Annuler</button>
+        <button type="button" class="btn btn-danger btn-sm flex-fill" id="btn-confirm-delete">Supprimer</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <div class="mg-page-head mb-4">
   <div>
     <span class="mg-eyebrow">Administration</span>

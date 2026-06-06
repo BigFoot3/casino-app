@@ -1,6 +1,40 @@
 {% extends 'base.html' %}
 {% block title %}Boutique — Casino{% endblock %}
 
+{% block head %}
+<style>
+  #screamer-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.75);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 9999;
+    animation: screamer-fade 1.6s forwards;
+  }
+  #screamer-img {
+    width: min(60vw, 400px);
+    animation: screamer-pop 1.6s forwards;
+  }
+  @keyframes screamer-fade {
+    0%   { opacity: 0 }
+    10%  { opacity: 1 }
+    80%  { opacity: 1 }
+    100% { opacity: 0; pointer-events: none }
+  }
+  @keyframes screamer-pop {
+    0%   { transform: scale(0.2) rotate(-5deg) }
+    15%  { transform: scale(1.15) rotate(3deg) }
+    25%  { transform: scale(0.95) rotate(-2deg) }
+    35%  { transform: scale(1.05) rotate(1deg) }
+    50%  { transform: scale(1) rotate(0deg) }
+    80%  { transform: scale(1) rotate(0deg) }
+    100% { transform: scale(1.3) rotate(0deg) }
+  }
+</style>
+{% endblock %}
+
 {% block content %}
 <div class="mg-page-head mb-4">
   <div>
@@ -69,13 +103,19 @@
   </div>
 </div>
 
+<!-- Screamer easter egg -->
+<div id="screamer-overlay" style="display:none">
+  <img id="screamer-img" src="{{ url_for('static', filename='shop/modo_serio_gratteur.webp') }}" alt="">
+</div>
+
 <!-- FAB panier (fixe) -->
 <button type="button" id="btn-cart" class="cart-fab" aria-label="Panier">
-  <svg width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true">
+  <svg width="22" height="22" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24" aria-hidden="true">
     <path d="M6 2L3 6v14a2 2 0 002 2h14a2 2 0 002-2V6l-3-4z"/>
     <line x1="3" y1="6" x2="21" y2="6"/>
     <path d="M16 10a4 4 0 01-8 0"/>
   </svg>
+  <span>PANIER</span>
   <span id="cart-badge" class="cart-fab__badge" style="display:none">0</span>
 </button>
 {% endif %}
@@ -85,6 +125,23 @@
 {% if shop_enabled %}
 <script>
 'use strict';
+
+let screamedOnce = false;
+
+function triggerScreamer() {
+  if (screamedOnce) return;
+  screamedOnce = true;
+  const overlay = document.getElementById('screamer-overlay');
+  const img     = document.getElementById('screamer-img');
+  overlay.style.display = 'flex';
+  overlay.style.animation = 'none';
+  overlay.offsetHeight;
+  overlay.style.animation = '';
+  img.style.animation = 'none';
+  img.offsetHeight;
+  img.style.animation = '';
+  setTimeout(() => { overlay.style.display = 'none'; }, 1650);
+}
 
 const items       = [];
 const cart        = [];
@@ -180,13 +237,22 @@ function renderGrid() {
       body.appendChild(descEl);
     }
 
+    if (item.preorder) {
+      const preorderBadge = document.createElement('span');
+      preorderBadge.className = 'badge mb-2';
+      preorderBadge.style.cssText = 'background:transparent;border:1px solid var(--mg-blush);color:var(--mg-blush);';
+      preorderBadge.textContent = 'Précommande';
+      body.appendChild(preorderBadge);
+    }
+
     const hasStock = item.variants.some(v => v.stock > 0);
+    const canBuy   = item.preorder || hasStock;
     const btn = document.createElement('button');
     btn.type = 'button';
-    btn.className = 'btn btn-sm shop-card__btn ' + (hasStock ? 'btn-primary' : 'btn-secondary');
-    btn.textContent = hasStock ? 'Ajouter au panier' : 'Épuisé';
-    btn.disabled = !hasStock;
-    if (hasStock) btn.addEventListener('click', () => openAddModal(item));
+    btn.className = 'btn btn-sm shop-card__btn ' + (canBuy ? 'btn-primary' : 'btn-secondary');
+    btn.textContent = canBuy ? 'Ajouter au panier' : 'Épuisé';
+    btn.disabled = !canBuy;
+    if (canBuy) btn.addEventListener('click', () => openAddModal(item));
     body.appendChild(btn);
 
     card.appendChild(body);
@@ -206,9 +272,13 @@ function openAddModal(item) {
   for (const v of item.variants) {
     const opt = document.createElement('option');
     opt.value = v.id;
-    opt.textContent = v.size_label + (v.stock > 0 ? ' (' + v.stock + ' dispo)' : ' (épuisé)');
-    opt.disabled = v.stock === 0;
-    if (v.stock > 0 && firstAvailId === null) firstAvailId = v.id;
+    if (item.preorder) {
+      opt.textContent = v.size_label + ' (Stock illimité)';
+    } else {
+      opt.textContent = v.size_label + (v.stock > 0 ? ' (' + v.stock + ' dispo)' : ' (épuisé)');
+    }
+    opt.disabled = !item.preorder && v.stock === 0;
+    if ((item.preorder || v.stock > 0) && firstAvailId === null) firstAvailId = v.id;
     cartSizeSelect.appendChild(opt);
   }
 
@@ -221,6 +291,10 @@ function openAddModal(item) {
 function updateQtyMax() {
   const variantId = parseInt(cartSizeSelect.value, 10);
   if (!currentItem) return;
+  if (currentItem.preorder) {
+    cartQtyInput.removeAttribute('max');
+    return;
+  }
   const v = currentItem.variants.find(x => x.id === variantId);
   cartQtyInput.max = v ? v.stock : 1;
 }
@@ -233,7 +307,7 @@ btnAddToCart.addEventListener('click', () => {
   const qty = parseInt(cartQtyInput.value, 10);
   const variant = currentItem && currentItem.variants.find(v => v.id === variantId);
 
-  if (!variant || variant.stock === 0) {
+  if (!variant || (!currentItem.preorder && variant.stock === 0)) {
     cartModalError.textContent = 'Variante non disponible.';
     cartModalError.style.display = '';
     return;
@@ -246,7 +320,7 @@ btnAddToCart.addEventListener('click', () => {
 
   const existing = cart.find(l => l.variantId === variantId);
   const alreadyInCart = existing ? existing.quantity : 0;
-  if (alreadyInCart + qty > variant.stock) {
+  if (!currentItem.preorder && alreadyInCart + qty > variant.stock) {
     cartModalError.textContent = 'Stock insuffisant (max ' + variant.stock + ').';
     cartModalError.style.display = '';
     return;
@@ -314,6 +388,7 @@ function renderCartLines() {
     del.setAttribute('aria-label', 'Supprimer');
     const idx = i;
     del.addEventListener('click', () => {
+      triggerScreamer();
       cart.splice(idx, 1);
       updateCartBadge();
       renderCartLines();

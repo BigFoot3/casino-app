@@ -26,7 +26,7 @@ def _require_admin():
 def shop_items():
     with db_conn() as conn:
         items = conn.execute(
-            "SELECT id, name, description, price, image_path FROM shop_items WHERE active=1 ORDER BY id"
+            "SELECT id, name, description, price, image_path, preorder FROM shop_items WHERE active=1 ORDER BY id"
         ).fetchall()
         result = []
         for item in items:
@@ -40,6 +40,7 @@ def shop_items():
                 'description': item['description'],
                 'price':       item['price'],
                 'image_path':  item['image_path'],
+                'preorder':    item['preorder'],
                 'variants':    [{'id': v['id'], 'size_label': v['size_label'], 'stock': v['stock']}
                                 for v in variants],
             })
@@ -79,6 +80,7 @@ def shop_order():
         if not cfg_row or cfg_row['value'] != '1':
             conn.execute('ROLLBACK')
             return jsonify({'ok': False, 'error': 'La boutique est fermée'}), 400
+        preorder_variants = set()
         for line in lines:
             variant_id = line.get('variant_id')
             quantity   = line.get('quantity')
@@ -86,7 +88,7 @@ def shop_order():
                 conn.execute('ROLLBACK')
                 return jsonify({'ok': False, 'error': 'Ligne invalide'}), 400
             row = conn.execute(
-                """SELECT sv.stock, sv.size_label, si.name AS item_name
+                """SELECT sv.stock, sv.size_label, si.name AS item_name, si.preorder AS item_preorder
                    FROM shop_variants sv
                    JOIN shop_items si ON si.id = sv.item_id
                    WHERE sv.id=?""",
@@ -95,7 +97,9 @@ def shop_order():
             if not row:
                 conn.execute('ROLLBACK')
                 return jsonify({'ok': False, 'error': f'Variante {variant_id} introuvable'}), 400
-            if row['stock'] < quantity:
+            if row['item_preorder']:
+                preorder_variants.add(variant_id)
+            elif row['stock'] < quantity:
                 conn.execute('ROLLBACK')
                 return jsonify({
                     'ok':         False,
@@ -116,10 +120,11 @@ def shop_order():
                 "INSERT INTO shop_order_lines(order_id, variant_id, quantity) VALUES (?,?,?)",
                 (order_id, variant_id, quantity)
             )
-            conn.execute(
-                "UPDATE shop_variants SET stock = stock - ? WHERE id=?",
-                (quantity, variant_id)
-            )
+            if variant_id not in preorder_variants:
+                conn.execute(
+                    "UPDATE shop_variants SET stock = stock - ? WHERE id=?",
+                    (quantity, variant_id)
+                )
 
         conn.execute('COMMIT')
 
@@ -133,7 +138,7 @@ def admin_list_items():
     _require_admin()
     with db_conn() as conn:
         rows = conn.execute(
-            "SELECT id, name, description, price, image_path, active FROM shop_items ORDER BY id"
+            "SELECT id, name, description, price, image_path, active, preorder FROM shop_items ORDER BY id"
         ).fetchall()
         result = []
         for item in rows:
@@ -169,6 +174,7 @@ def admin_list_items():
                 'price':       item['price'],
                 'image_path':  item['image_path'],
                 'active':      item['active'],
+                'preorder':    item['preorder'],
                 'has_orders':  has_orders,
                 'variants':    variant_list,
             })
@@ -181,6 +187,7 @@ def admin_create_item():
     name     = (data.get('name') or '').strip()
     desc     = (data.get('description') or '').strip()
     price    = data.get('price')
+    preorder = 1 if data.get('preorder') else 0
     variants = data.get('variants') or []
 
     if not name:
@@ -189,8 +196,8 @@ def admin_create_item():
     with db_conn() as conn:
         conn.execute('BEGIN IMMEDIATE')
         cur = conn.execute(
-            "INSERT INTO shop_items(name, description, price) VALUES (?,?,?)",
-            (name, desc or None, price)
+            "INSERT INTO shop_items(name, description, price, preorder) VALUES (?,?,?,?)",
+            (name, desc or None, price, preorder)
         )
         item_id = cur.lastrowid
         for v in variants:
@@ -206,6 +213,22 @@ def admin_create_item():
         conn.execute('COMMIT')
 
     return jsonify({'ok': True, 'item_id': item_id})
+
+
+@shop_bp.route('/api/admin/shop/items/<int:item_id>/preorder', methods=['POST'])
+def admin_update_item_preorder(item_id):
+    _require_admin()
+    data     = request.get_json(force=True) or {}
+    preorder = 1 if data.get('preorder') else 0
+    with db_conn() as conn:
+        conn.execute('BEGIN IMMEDIATE')
+        item = conn.execute("SELECT id FROM shop_items WHERE id=?", (item_id,)).fetchone()
+        if not item:
+            conn.execute('ROLLBACK')
+            return jsonify({'ok': False, 'error': 'Article introuvable'}), 404
+        conn.execute("UPDATE shop_items SET preorder=? WHERE id=?", (preorder, item_id))
+        conn.execute('COMMIT')
+    return jsonify({'ok': True, 'preorder': preorder})
 
 
 @shop_bp.route('/api/admin/shop/items/<int:item_id>/price', methods=['POST'])

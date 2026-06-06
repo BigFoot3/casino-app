@@ -85,7 +85,7 @@ logs/, casino.db, tests/, .github/workflows/tests.yml
 
 ---
 
-## Routes (42 endpoints)
+## Routes (44 endpoints)
 
 **Player routes (auth.py, player.py):**
 `GET /login` · `POST /login` · `GET /logout` · `GET /dashboard` · `GET /play` · `GET /rewards` · `GET /roulette/display`
@@ -104,6 +104,9 @@ logs/, casino.db, tests/, .github/workflows/tests.yml
 
 **Admin user API (api.py):**
 `POST /api/admin/users/create` · `POST /api/admin/users/<id>/delete` · `POST /api/admin/users/<id>/set-role` (super-admin only, protected from username='admin') · `POST /api/admin/users/<uid>/zero-tokens` · `POST /api/admin/users/<uid>/decrement-tokens` · `POST /api/admin/users/<uid>/reset-password`
+
+**Admin shop API (shop.py):**
+`GET /api/admin/shop/items` · `POST /api/admin/shop/items` · `POST /api/admin/shop/items/<id>/price` · `POST /api/admin/shop/items/<id>/preorder` · `POST /api/admin/shop/items/<id>/toggle` · `POST /api/admin/shop/items/<id>/delete` · `POST /api/admin/shop/items/<id>/image` · `POST /api/admin/shop/variants` · `POST /api/admin/shop/variants/<id>/stock` · `POST /api/admin/shop/variants/<id>/delete` · `GET /api/admin/shop/orders` · `POST /api/admin/shop/orders/<id>/status` · `POST /api/admin/shop/shop_enabled`
 
 **Admin vote API (api.py):**
 `GET /api/admin/vote/catalogue` · `POST /api/admin/vote/categories` · `POST /api/admin/vote/categories/<cid>/delete` · `POST /api/admin/vote/films` · `POST /api/admin/vote/films/<fid>/delete` (protected if status='open') · `POST /api/admin/vote/open` · `POST /api/admin/vote/close` · `POST /api/admin/vote/display-category` · `POST /api/admin/vote/palmares` · `POST /api/admin/vote/reset-mode` · `GET /api/admin/vote/sessions` · `GET /api/vote/results`
@@ -130,6 +133,8 @@ vote_films     (id, category_id, title, created_at) UNIQUE(category_id, title)
 vote_rankings  (id, session_id, user_id, film_id, rank, points, updated_at) UNIQUE(session_id, user_id, film_id)
                points = max(1, round(base × (0.55 ^ (rank-1)) × (1 + boost%)))
                base = max(10, n × 2.5) where n = num films in category
+shop_items     (id, name, description, price, image_path, active, preorder, created_at)
+               preorder=1 → stock non vérifié + non décrémenté à la commande
 ```
 
 ---
@@ -185,7 +190,7 @@ flask --app "app:create_app()" run
 **Tests:**
 ```bash
 cd /root/casino && source venv/bin/activate
-pytest tests/ -v --tb=short                  # 65 tests (64 passed + 1 xfail)
+pytest tests/ -v --tb=short                  # 93 tests (92 passed + 1 xfail)
 pytest tests/ --cov=. --cov-report=term-missing
 ```
 Suite: conftest.py (fixtures: app, client, admin_client, player_client, player2_client, open_session) · test_casino.py (12 test classes)
@@ -333,4 +338,21 @@ locust -f tests/locustfile.py --host=http://127.0.0.1:5000
 | 9 (2026-05-30) | `templates/play.html` | #result-panel enveloppé en card p-4 mt-3, titre "Dernier résultat", hr + bouton "Nouvelle partie" supprimés |
 | 9 (2026-05-30) | `static/js/play.js` | resultPanel retiré de showOnly() — s'affiche en dessous du contenu actif, masqué uniquement au spin suivant |
 | 9 (2026-05-30) | `static/js/display.js` | renderChips() : chips ancrés bottom/right (grille 2×n) — numéro de cellule toujours visible ; CHIP_SPREAD devient code mort |
+| 10 (2026-06-06) | `routes/shop.py` | Ajout route POST /api/admin/shop/items/<id>/price — validation >= 0, BEGIN IMMEDIATE, 404 si article introuvable |
+| 10 (2026-06-06) | `static/js/shop-admin.js` | buildItemBlock() : prix séparé des variantes, édition inline (input-group + OK) identique pattern stock, shopAction(), textContent only, pas de rechargement |
+| 10 (2026-06-06) | `tests/test_casino.py` | test_update_item_price + test_update_item_price_invalid (88 passed + 1 xfailed) |
+| 10 (2026-06-06) | `templates/admin/shop.html` | Modale #modal-confirm-delete avant suppression article — nom injecté textContent, btn Supprimer btn-danger |
+| 10 (2026-06-06) | `static/js/shop-admin.js` | btnDel → ouvre #modal-confirm-delete via pendingDeleteFn, shopAction() sur btn-confirm-delete, nettoyage hidden.bs.modal |
+| 10 (2026-06-06) | `db.py` | Colonne preorder INTEGER NOT NULL DEFAULT 0 dans shop_items + _migrate_shop_preorder() |
+| 10 (2026-06-06) | `routes/shop.py` | preorder dans GET items (public + admin), POST create item, nouvelle route POST /items/<id>/preorder, skip stock check/décrement si preorder dans POST /api/shop/order |
+| 10 (2026-06-06) | `static/js/shop-admin.js` | buildItemBlock() : toggle STANDARD/PRÉCOMMANDE (--mg-blush), shopAction(), textContent sans rechargement |
+| 10 (2026-06-06) | `templates/shop.html` | renderGrid() badge Précommande (outline --mg-blush), bouton actif si preorder ; openAddModal() Stock illimité, options jamais disabled ; updateQtyMax() removeAttribute max ; btnAddToCart bypass checks stock |
+| 10 (2026-06-06) | `tests/test_casino.py` | +4 tests preorder (92 passed + 1 xfailed) |
+| 10 (2026-06-06) | `scripts/seed_shop.py` | Script one-shot idempotent — 9 articles créés (5 standard + 4 précommande) |
+
+---
+
+## Instructions pour Claude Code
+
+À la fin de chaque session de travail, lance `/fin-session`.
 
