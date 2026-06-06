@@ -118,11 +118,74 @@ function buildItemBlock(item) {
   const info = document.createElement('div');
   info.style.flex = '1';
 
-  const nameEl = document.createElement('div');
-  nameEl.className   = 'fw-bold';
-  nameEl.style.color = 'var(--mg-ivory)';
-  nameEl.textContent = item.name;
-  info.appendChild(nameEl);
+  const nameRow = document.createElement('div');
+  nameRow.className = 'd-flex align-items-center gap-1';
+
+  const nameDisplay = document.createElement('span');
+  nameDisplay.className   = 'fw-bold';
+  nameDisplay.style.color = 'var(--mg-ivory)';
+  nameDisplay.textContent = item.name;
+
+  const btnEditName       = document.createElement('button');
+  btnEditName.type        = 'button';
+  btnEditName.className   = 'btn btn-sm btn-link p-0';
+  btnEditName.style.color = 'var(--mg-rosewood)';
+  btnEditName.textContent = '✏️';
+
+  const nameGroup = document.createElement('div');
+  nameGroup.className    = 'input-group input-group-sm';
+  nameGroup.style.maxWidth = '260px';
+  nameGroup.style.display  = 'none';
+
+  const nameInput       = document.createElement('input');
+  nameInput.type        = 'text';
+  nameInput.className   = 'form-control';
+  nameInput.value       = item.name;
+
+  const btnNameOk       = document.createElement('button');
+  btnNameOk.type        = 'button';
+  btnNameOk.className   = 'btn btn-outline-secondary';
+  btnNameOk.textContent = 'OK';
+
+  nameGroup.appendChild(nameInput);
+  nameGroup.appendChild(btnNameOk);
+
+  function showNameEdit() {
+    nameDisplay.style.display = 'none';
+    btnEditName.style.display = 'none';
+    nameGroup.style.display   = '';
+    nameInput.focus();
+    nameInput.select();
+  }
+
+  function showNameDisplay() {
+    nameDisplay.style.display = '';
+    btnEditName.style.display = '';
+    nameGroup.style.display   = 'none';
+  }
+
+  btnEditName.addEventListener('click', showNameEdit);
+
+  btnNameOk.addEventListener('click', async function () {
+    const newName = nameInput.value.trim();
+    if (!newName) return;
+    const [s, d] = await shopAction(this, () =>
+      apiPost(`/api/admin/shop/items/${item.id}/name`, {name: newName})
+    );
+    if (s === 200 && d.ok) {
+      item.name = d.name;
+      nameDisplay.textContent = d.name;
+      nameInput.value = d.name;
+    } else {
+      showError('items-error', d && d.error ? d.error : 'Erreur nom');
+    }
+    showNameDisplay();
+  });
+
+  nameRow.appendChild(nameDisplay);
+  nameRow.appendChild(btnEditName);
+  nameRow.appendChild(nameGroup);
+  info.appendChild(nameRow);
 
   const priceRow = document.createElement('div');
   priceRow.className = 'd-flex align-items-center gap-2 mt-1';

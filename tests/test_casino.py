@@ -1290,3 +1290,26 @@ class TestShop:
         assert r.status_code == 400
         assert r.get_json()['ok'] is False
 
+    def test_update_item_name(self, app, admin_client):
+        """POST /api/admin/shop/items/<id>/name — mise à jour nom persistée en DB."""
+        item_id = self._create_item(admin_client, 'Ancien nom')
+        r = admin_client.post(f'/api/admin/shop/items/{item_id}/name',
+                              json={'name': 'Nouveau nom'},
+                              headers={'X-CSRFToken': 'test'})
+        assert r.status_code == 200
+        data = r.get_json()
+        assert data['ok'] is True
+        assert data['name'] == 'Nouveau nom'
+        items = admin_client.get('/api/admin/shop/items').get_json()
+        target = next(i for i in items if i['id'] == item_id)
+        assert target['name'] == 'Nouveau nom'
+
+    def test_update_item_name_empty(self, app, admin_client):
+        """POST /api/admin/shop/items/<id>/name {name:'   '} → 400."""
+        item_id = self._create_item(admin_client, 'Article Nom Test')
+        r = admin_client.post(f'/api/admin/shop/items/{item_id}/name',
+                              json={'name': '   '},
+                              headers={'X-CSRFToken': 'test'})
+        assert r.status_code == 400
+        assert r.get_json()['ok'] is False
+

@@ -85,7 +85,7 @@ logs/, casino.db, tests/, .github/workflows/tests.yml
 
 ---
 
-## Routes (44 endpoints)
+## Routes (45 endpoints)
 
 **Player routes (auth.py, player.py):**
 `GET /login` · `POST /login` · `GET /logout` · `GET /dashboard` · `GET /play` · `GET /rewards` · `GET /roulette/display`
@@ -106,7 +106,7 @@ logs/, casino.db, tests/, .github/workflows/tests.yml
 `POST /api/admin/users/create` · `POST /api/admin/users/<id>/delete` · `POST /api/admin/users/<id>/set-role` (super-admin only, protected from username='admin') · `POST /api/admin/users/<uid>/zero-tokens` · `POST /api/admin/users/<uid>/decrement-tokens` · `POST /api/admin/users/<uid>/reset-password`
 
 **Admin shop API (shop.py):**
-`GET /api/admin/shop/items` · `POST /api/admin/shop/items` · `POST /api/admin/shop/items/<id>/price` · `POST /api/admin/shop/items/<id>/preorder` · `POST /api/admin/shop/items/<id>/toggle` · `POST /api/admin/shop/items/<id>/delete` · `POST /api/admin/shop/items/<id>/image` · `POST /api/admin/shop/variants` · `POST /api/admin/shop/variants/<id>/stock` · `POST /api/admin/shop/variants/<id>/delete` · `GET /api/admin/shop/orders` · `POST /api/admin/shop/orders/<id>/status` · `POST /api/admin/shop/shop_enabled`
+`GET /api/admin/shop/items` · `POST /api/admin/shop/items` · `POST /api/admin/shop/items/<id>/name` · `POST /api/admin/shop/items/<id>/price` · `POST /api/admin/shop/items/<id>/preorder` · `POST /api/admin/shop/items/<id>/toggle` · `POST /api/admin/shop/items/<id>/delete` · `POST /api/admin/shop/items/<id>/image` · `POST /api/admin/shop/variants` · `POST /api/admin/shop/variants/<id>/stock` · `POST /api/admin/shop/variants/<id>/delete` · `GET /api/admin/shop/orders` · `POST /api/admin/shop/orders/<id>/status` · `POST /api/admin/shop/shop_enabled`
 
 **Admin vote API (api.py):**
 `GET /api/admin/vote/catalogue` · `POST /api/admin/vote/categories` · `POST /api/admin/vote/categories/<cid>/delete` · `POST /api/admin/vote/films` · `POST /api/admin/vote/films/<fid>/delete` (protected if status='open') · `POST /api/admin/vote/open` · `POST /api/admin/vote/close` · `POST /api/admin/vote/display-category` · `POST /api/admin/vote/palmares` · `POST /api/admin/vote/reset-mode` · `GET /api/admin/vote/sessions` · `GET /api/vote/results`
@@ -190,7 +190,7 @@ flask --app "app:create_app()" run
 **Tests:**
 ```bash
 cd /root/casino && source venv/bin/activate
-pytest tests/ -v --tb=short                  # 93 tests (92 passed + 1 xfail)
+pytest tests/ -v --tb=short                  # 95 tests (94 passed + 1 xfail)
 pytest tests/ --cov=. --cov-report=term-missing
 ```
 Suite: conftest.py (fixtures: app, client, admin_client, player_client, player2_client, open_session) · test_casino.py (12 test classes)
@@ -349,6 +349,9 @@ locust -f tests/locustfile.py --host=http://127.0.0.1:5000
 | 10 (2026-06-06) | `templates/shop.html` | renderGrid() badge Précommande (outline --mg-blush), bouton actif si preorder ; openAddModal() Stock illimité, options jamais disabled ; updateQtyMax() removeAttribute max ; btnAddToCart bypass checks stock |
 | 10 (2026-06-06) | `tests/test_casino.py` | +4 tests preorder (92 passed + 1 xfailed) |
 | 10 (2026-06-06) | `scripts/seed_shop.py` | Script one-shot idempotent — 9 articles créés (5 standard + 4 précommande) |
+| 10 (2026-06-06) | `routes/shop.py` | Ajout route POST /api/admin/shop/items/<id>/name — strip + validation non vide (400), 404 si absent, 200 {ok, name} |
+| 10 (2026-06-06) | `static/js/shop-admin.js` | buildItemBlock() : nameEl → nameRow avec toggle ✏️ / input-group, showNameEdit/showNameDisplay, item.name sync, shopAction(), textContent only |
+| 10 (2026-06-06) | `tests/test_casino.py` | test_update_item_name + test_update_item_name_empty (94 passed + 1 xfailed) |
 
 ---
 
