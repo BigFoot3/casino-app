@@ -251,6 +251,22 @@ def admin_update_item_name(item_id):
     return jsonify({'ok': True, 'name': name})
 
 
+@shop_bp.route('/api/admin/shop/items/<int:item_id>/description', methods=['POST'])
+def admin_update_item_description(item_id):
+    _require_admin()
+    data = request.get_json(force=True) or {}
+    desc = (data.get('description') or '').strip()
+    with db_conn() as conn:
+        conn.execute('BEGIN IMMEDIATE')
+        item = conn.execute("SELECT id FROM shop_items WHERE id=?", (item_id,)).fetchone()
+        if not item:
+            conn.execute('ROLLBACK')
+            return jsonify({'ok': False, 'error': 'Article introuvable'}), 404
+        conn.execute("UPDATE shop_items SET description=? WHERE id=?", (desc or None, item_id))
+        conn.execute('COMMIT')
+    return jsonify({'ok': True, 'description': desc})
+
+
 @shop_bp.route('/api/admin/shop/items/<int:item_id>/preorder', methods=['POST'])
 def admin_update_item_preorder(item_id):
     _require_admin()

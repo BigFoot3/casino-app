@@ -106,7 +106,7 @@ logs/, casino.db, tests/, .github/workflows/tests.yml
 `POST /api/admin/users/create` · `POST /api/admin/users/<id>/delete` · `POST /api/admin/users/<id>/set-role` (super-admin only, protected from username='admin') · `POST /api/admin/users/<uid>/zero-tokens` · `POST /api/admin/users/<uid>/decrement-tokens` · `POST /api/admin/users/<uid>/reset-password`
 
 **Admin shop API (shop.py):**
-`GET /api/admin/shop/items` · `POST /api/admin/shop/items` · `POST /api/admin/shop/items/<id>/name` · `POST /api/admin/shop/items/<id>/price` · `POST /api/admin/shop/items/<id>/preorder` · `POST /api/admin/shop/items/<id>/toggle` · `POST /api/admin/shop/items/<id>/delete` · `POST /api/admin/shop/items/<id>/image` · `POST /api/admin/shop/variants` · `POST /api/admin/shop/variants/<id>/stock` · `POST /api/admin/shop/variants/<id>/delete` · `GET /api/admin/shop/orders` · `POST /api/admin/shop/orders/<id>/status` · `POST /api/admin/shop/shop_enabled`
+`GET /api/admin/shop/items` · `POST /api/admin/shop/items` · `POST /api/admin/shop/items/<id>/name` · `POST /api/admin/shop/items/<id>/price` · `POST /api/admin/shop/items/<id>/preorder` · `POST /api/admin/shop/items/<id>/toggle` · `POST /api/admin/shop/items/<id>/delete` · `POST /api/admin/shop/items/<id>/image` (limite 5, filename `{id}_{ts}.{ext}`) · `POST /api/admin/shop/images/<id>/delete` · `POST /api/admin/shop/images/<id>/set_primary` · `POST /api/admin/shop/variants` · `POST /api/admin/shop/variants/<id>/stock` · `POST /api/admin/shop/variants/<id>/delete` · `GET /api/admin/shop/orders` · `POST /api/admin/shop/orders/<id>/status` · `POST /api/admin/shop/shop_enabled`
 
 **Admin vote API (api.py):**
 `GET /api/admin/vote/catalogue` · `POST /api/admin/vote/categories` · `POST /api/admin/vote/categories/<cid>/delete` · `POST /api/admin/vote/films` · `POST /api/admin/vote/films/<fid>/delete` (protected if status='open') · `POST /api/admin/vote/open` · `POST /api/admin/vote/close` · `POST /api/admin/vote/display-category` · `POST /api/admin/vote/palmares` · `POST /api/admin/vote/reset-mode` · `GET /api/admin/vote/sessions` · `GET /api/vote/results`
@@ -135,6 +135,11 @@ vote_rankings  (id, session_id, user_id, film_id, rank, points, updated_at) UNIQ
                base = max(10, n × 2.5) where n = num films in category
 shop_items     (id, name, description, price, image_path, active, preorder, created_at)
                preorder=1 → stock non vérifié + non décrémenté à la commande
+               image_path = photo principale dénormalisée (sync auto avec shop_item_images)
+shop_item_images (id, item_id, image_path, is_primary, display_order, created_at)
+               REFERENCES shop_items(id) ON DELETE CASCADE — max 5 par article
+               is_primary=1 : photo principale (bordure --mg-flame côté admin)
+               _migrate_shop_item_images() : migration auto depuis shop_items.image_path au démarrage
 ```
 
 ---
@@ -190,7 +195,7 @@ flask --app "app:create_app()" run
 **Tests:**
 ```bash
 cd /root/casino && source venv/bin/activate
-pytest tests/ -v --tb=short                  # 95 tests (94 passed + 1 xfail)
+pytest tests/ -v --tb=short                  # 101 tests (100 passed + 1 xfail)
 pytest tests/ --cov=. --cov-report=term-missing
 ```
 Suite: conftest.py (fixtures: app, client, admin_client, player_client, player2_client, open_session) · test_casino.py (12 test classes)
@@ -281,6 +286,7 @@ locust -f tests/locustfile.py --host=http://127.0.0.1:5000
 - ⚠️ **admin users** — collapsible list (collapse show by default) + live filter + scroll 5 rows.
 - ⚠️ **admin rewards** — deletion cascades reward_claims via /api/admin/rewards/<id>/delete.
 - ⚠️ **vote tracking closed** — #vote-tracking-section visible when app_mode='closed' (admin can review results before palmares/reset-mode decision).
+- ⚠️ **shop td d-flex** — never set `display:flex` directly on a `<td>` (Bootstrap/browser vertical-align breaks). Always wrap buttons in an inner `<div class="d-flex …">` inside the td.
 
 **Roulette & Session State:**
 - ⚠️ **APScheduler** — game_tick() runs only in Gunicorn master (preload_app=True). Do NOT run in `flask run`.
@@ -352,6 +358,19 @@ locust -f tests/locustfile.py --host=http://127.0.0.1:5000
 | 10 (2026-06-06) | `routes/shop.py` | Ajout route POST /api/admin/shop/items/<id>/name — strip + validation non vide (400), 404 si absent, 200 {ok, name} |
 | 10 (2026-06-06) | `static/js/shop-admin.js` | buildItemBlock() : nameEl → nameRow avec toggle ✏️ / input-group, showNameEdit/showNameDisplay, item.name sync, shopAction(), textContent only |
 | 10 (2026-06-06) | `tests/test_casino.py` | test_update_item_name + test_update_item_name_empty (94 passed + 1 xfailed) |
+| 10 (2026-06-06) | `db.py` | Table shop_item_images (CASCADE, max 5/article) + _migrate_shop_item_images() (migration auto image_path existants) |
+| 10 (2026-06-06) | `routes/shop.py` | GET items : images[] inclus ; upload refactorisé (limite 5, timestamp, promotion principale, cohérence fichier/DB) ; DELETE item : supprime tous les fichiers images ; 2 nouvelles routes images/<id>/delete et images/<id>/set_primary |
+| 10 (2026-06-06) | `static/js/shop-admin.js` | buildImagesSection() : galerie 60×60, bordure --mg-flame/velvet, boutons ★/×, "+ Photo" contextuel — sans loadItems() |
+| 10 (2026-06-06) | `templates/shop.html` | renderGrid() : carrousel ‹ › par card (stopPropagation, démarrage sur is_primary), CSS .shop-carousel-btn dans <style> |
+| 10 (2026-06-06) | `tests/test_casino.py` | +6 tests images (100 passed + 1 xfailed) |
+| 10 (2026-06-06) | `static/js/shop-admin.js` | Refonte buildItemBlock() : cards repliables par défaut (grid-template-rows 0fr→1fr), `openItemIds` Set module-level, prix en toggle display/edit comme nom, badge passif Précommande synchronisé avec btnPreorder, stopPropagation sur zones interactives du header |
+| 10 (2026-06-06) | `static/css/midnight-gala.css` | Section ADMIN SHOP : .shop-item-card, .shop-item-header, .shop-item-chevron (rotate 180°), .shop-item-body (grid-template-rows transition), .shop-section-label |
+| 10 (2026-06-06) | `static/js/shop-admin.js` | Suppression éditions inline nom/prix (btnEditName, nameGroup, btnEditPrice, priceGroup, showNameEdit/Display, showPriceEdit/Display) → remplacées par modale unique `#modal-edit-item` ; `openEditItemModal(item, nameDisplay, priceDisplay)` pré-remplit et stocke les refs ; soumission séquentielle (nom échoue → prix non appelé) ; listener unique module-level sur btn-submit-edit-item |
+| 10 (2026-06-06) | `templates/admin/shop.html` | Ajout modale `#modal-edit-item` (Nom + Prix + erreur inline, pattern Bootstrap identique aux modales existantes) |
+| 11 (2026-06-06) | `routes/shop.py` | Route POST /api/admin/shop/items/<id>/description — strip, champ nullable, BEGIN IMMEDIATE |
+| 11 (2026-06-06) | `static/css/midnight-gala.css` | Section ADMIN SHOP : remplacement cards accordion par tableau catalogue + drawer éditeur (position:fixed) |
+| 11 (2026-06-06) | `templates/admin/shop.html` | Tableau remplace cards repliables ; drawer #shop-drawer hors de toute .card (overflow:hidden) ; modal-edit-item supprimée ; barre de filtres (search + tabs + état) |
+| 11 (2026-06-06) | `static/js/shop-admin.js` | buildItemBlock/buildImagesSection/buildVariantsSection/openEditItemModal supprimés → openDrawer/closeDrawer/submitDrawer/buildDrawerPhotos/buildDrawerVariants/renderRows/applyFilters/updateShopCounter ajoutés |
 
 ---
 

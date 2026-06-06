@@ -2,6 +2,78 @@
 {% block title %}Boutique — Administration{% endblock %}
 {% block content %}
 
+<!-- Drawer overlay (position:fixed — hors de toute .card) -->
+<div id="shop-drawer-overlay" class="shop-drawer__overlay"></div>
+
+<!-- Drawer édition article -->
+<div id="shop-drawer" class="shop-drawer">
+  <div class="shop-drawer__header">
+    <div class="shop-drawer__header-text">
+      <span class="shop-drawer__eyebrow">Modifier l'article</span>
+      <span id="drawer-title" class="shop-drawer__title"></span>
+    </div>
+    <button id="shop-drawer-close" class="shop-drawer__close" aria-label="Fermer">✕</button>
+  </div>
+  <div class="shop-drawer__body">
+
+    <div class="shop-drawer__section">
+      <div class="shop-section-label">Photos</div>
+      <div id="drawer-photos" class="shop-drawer__photo-grid"></div>
+      <button id="drawer-btn-add-photo" class="btn btn-sm btn-outline-light">+ Ajouter</button>
+      <input type="file" id="drawer-file-input" accept=".jpg,.jpeg,.png,.webp" style="display:none">
+    </div>
+
+    <div class="shop-drawer__section">
+      <div class="shop-section-label">Identité</div>
+      <label class="form-label mt-2" for="drawer-name">Nom de l'article</label>
+      <input type="text" id="drawer-name" class="form-control form-control-sm mb-2" placeholder="Nom de l'article">
+      <label class="form-label" for="drawer-desc">Description</label>
+      <textarea id="drawer-desc" class="form-control form-control-sm" rows="2" placeholder="Description courte…"></textarea>
+    </div>
+
+    <div class="shop-drawer__section">
+      <div class="d-flex gap-2">
+        <div class="flex-fill">
+          <label class="form-label" for="drawer-price">Prix (€)</label>
+          <input type="number" id="drawer-price" class="form-control form-control-sm" min="0" step="0.01" placeholder="0.00">
+        </div>
+        <div class="flex-fill">
+          <label class="form-label" for="drawer-type">Type</label>
+          <select id="drawer-type" class="form-select form-select-sm">
+            <option value="standard">Standard</option>
+            <option value="preorder">Précommande</option>
+          </select>
+        </div>
+      </div>
+    </div>
+
+    <div class="shop-drawer__section">
+      <div class="shop-section-label">Visibilité</div>
+      <div class="shop-toggle-row">
+        <div>
+          <div class="fw-bold" style="font-size:0.85rem">Article actif</div>
+          <div class="shop-toggle-sublabel">Visible dans la boutique publique</div>
+        </div>
+        <div class="form-check form-switch mb-0">
+          <input class="form-check-input" type="checkbox" id="drawer-active" role="switch">
+        </div>
+      </div>
+    </div>
+
+    <div class="shop-drawer__section">
+      <div class="shop-section-label">Tailles &amp; Stock</div>
+      <div id="drawer-variants"></div>
+      <button id="drawer-btn-add-variant" class="btn btn-sm btn-outline-light mt-1">+ Ajouter une taille</button>
+    </div>
+
+  </div>
+  <div id="drawer-error" class="small px-4 pb-2" style="display:none;color:var(--mg-ember)"></div>
+  <div class="shop-drawer__footer">
+    <button id="shop-drawer-cancel" class="btn btn-secondary btn-sm flex-fill">Annuler</button>
+    <button id="shop-drawer-submit" class="btn btn-primary btn-sm flex-fill">Enregistrer</button>
+  </div>
+</div>
+
 <!-- Modal confirmation générique -->
 <div class="modal fade" id="confirm-modal" tabindex="-1">
   <div class="modal-dialog modal-dialog-centered modal-sm">
@@ -31,9 +103,18 @@
         <label class="form-label" for="new-item-desc">Description</label>
         <textarea id="new-item-desc" class="form-control form-control-sm" rows="2" placeholder="Description courte…"></textarea>
       </div>
-      <div class="mb-3">
-        <label class="form-label" for="new-item-price">Prix (€)</label>
-        <input type="number" id="new-item-price" class="form-control form-control-sm" min="0" step="0.01" placeholder="0.00">
+      <div class="d-flex gap-2 mb-3">
+        <div class="flex-fill">
+          <label class="form-label" for="new-item-price">Prix (€)</label>
+          <input type="number" id="new-item-price" class="form-control form-control-sm" min="0" step="0.01" placeholder="0.00">
+        </div>
+        <div class="flex-fill">
+          <label class="form-label" for="new-item-type">Type</label>
+          <select id="new-item-type" class="form-select form-select-sm">
+            <option value="standard">Standard</option>
+            <option value="preorder">Précommande</option>
+          </select>
+        </div>
       </div>
       <div class="d-flex align-items-center justify-content-between mb-1">
         <label class="form-label mb-0">Tailles / variantes</label>
@@ -71,28 +152,6 @@
   </div>
 </div>
 
-<!-- Modal modifier article (nom + prix) -->
-<div class="modal fade" id="modal-edit-item" tabindex="-1">
-  <div class="modal-dialog modal-dialog-centered modal-sm">
-    <div class="modal-content p-4">
-      <h5 class="modal-title mb-3">Modifier l'article</h5>
-      <div class="mb-2">
-        <label class="form-label" for="edit-item-name">Nom *</label>
-        <input type="text" id="edit-item-name" class="form-control form-control-sm" placeholder="Nom de l'article">
-      </div>
-      <div class="mb-3">
-        <label class="form-label" for="edit-item-price">Prix (€)</label>
-        <input type="number" id="edit-item-price" class="form-control form-control-sm" min="0" step="0.01" placeholder="0.00">
-      </div>
-      <div id="edit-item-error" class="small mb-2" style="display:none;color:var(--mg-ember)"></div>
-      <div class="d-flex gap-2">
-        <button type="button" class="btn btn-secondary btn-sm flex-fill" data-bs-dismiss="modal">Annuler</button>
-        <button type="button" class="btn btn-primary btn-sm flex-fill" id="btn-submit-edit-item">Enregistrer</button>
-      </div>
-    </div>
-  </div>
-</div>
-
 <!-- Modal confirmation suppression article -->
 <div class="modal fade" id="modal-confirm-delete" tabindex="-1">
   <div class="modal-dialog modal-dialog-centered modal-sm">
@@ -107,36 +166,56 @@
   </div>
 </div>
 
-<div class="mg-page-head mb-4">
+<!-- Page header -->
+<div class="mg-page-head mb-3">
   <div>
     <span class="mg-eyebrow">Administration</span>
-    <h1 class="mg-page-title">Boutique</h1>
+    <h1 class="mg-page-title">Catalogue</h1>
   </div>
-  <a href="/admin" class="btn btn-sm btn-outline-secondary">← Admin</a>
-</div>
-
-<!-- Section 1 : Toggle boutique -->
-<div class="card p-4 mb-4">
-  <div class="d-flex align-items-center justify-content-between">
-    <div>
-      <h5 class="mb-1">État de la boutique</h5>
-      <span id="shop-status-text" class="small"></span>
-    </div>
+  <div class="d-flex align-items-center gap-2 flex-wrap">
+    <span id="shop-counter" class="shop-counter"></span>
+    <span id="shop-status-text" class="small"></span>
     <button id="btn-shop-toggle" class="btn btn-sm btn-outline-light">…</button>
-  </div>
-</div>
-
-<!-- Section 2+3 : Catalogue + Stock -->
-<div class="card p-4 mb-4">
-  <div class="d-flex justify-content-between align-items-center mb-3">
-    <h5 class="mb-0">Catalogue</h5>
     <button class="btn btn-sm btn-primary" data-bs-toggle="modal" data-bs-target="#modal-new-item">+ Nouvel article</button>
+    <a href="/admin" class="btn btn-sm btn-outline-secondary">← Admin</a>
   </div>
-  <div id="items-error" class="small mb-2" style="display:none;color:var(--mg-ember)"></div>
-  <div id="items-list"></div>
 </div>
 
-<!-- Section 4 : Commandes -->
+<!-- Barre de filtres -->
+<div class="shop-filter-bar mb-3">
+  <input type="text" id="filter-search" class="form-control form-control-sm" placeholder="Rechercher un article…" style="max-width:240px">
+  <div class="shop-filter-tabs">
+    <button class="shop-filter-tab is-active" data-type="all">Tous</button>
+    <button class="shop-filter-tab" data-type="standard">Standard</button>
+    <button class="shop-filter-tab" data-type="preorder">Précommande</button>
+  </div>
+  <select id="filter-state" class="form-select form-select-sm" style="max-width:180px">
+    <option value="">Tous les états</option>
+    <option value="active">Actifs</option>
+    <option value="inactive">Désactivés</option>
+  </select>
+</div>
+
+<!-- Tableau catalogue -->
+<div id="items-error" class="small mb-2" style="display:none;color:var(--mg-ember)"></div>
+<div class="table-responsive mb-4">
+  <table class="table table-sm align-middle">
+    <thead>
+      <tr>
+        <th style="width:64px"></th>
+        <th>Article</th>
+        <th>Type</th>
+        <th>Prix</th>
+        <th>Stock</th>
+        <th>État</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody id="items-tbody"></tbody>
+  </table>
+</div>
+
+<!-- Commandes -->
 <div class="card p-4 mb-4">
   <div class="d-flex justify-content-between align-items-center mb-3">
     <h5 class="mb-0">Commandes</h5>
