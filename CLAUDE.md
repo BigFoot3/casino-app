@@ -67,8 +67,7 @@ gunicorn.conf.py       # 1 worker, 12 gthread, preload_app=True, logs/
 casino.service         # Systemd unit
 routes/
   auth.py              # /login, /logout (redirects to /play)
-  player.py            # /dashboard, /play, /rewards, /roulette/display
-                       # /rewards returns claimed_ids (already-claimed reward IDs)
+  player.py            # /dashboard, /play, /roulette/display
   admin.py             # /admin
   api.py               # /api/session/*, /api/bet, /api/admin/*, /api/vote/*
 templates/             # Jinja2: base.html, login.html, dashboard.html, play.html, admin/index.html
@@ -88,7 +87,7 @@ logs/, casino.db, tests/, .github/workflows/tests.yml
 ## Routes (45 endpoints)
 
 **Player routes (auth.py, player.py):**
-`GET /login` · `POST /login` · `GET /logout` · `GET /dashboard` · `GET /play` · `GET /rewards` · `GET /roulette/display`
+`GET /login` · `POST /login` · `GET /logout` · `GET /dashboard` · `GET /play` · `GET /roulette/display`
 
 **Session API (api.py):**
 `GET /api/leaderboard` (top 5 winners/losers by net P&L) · `GET /api/session/status` (current state + app_mode + vote_session + tokens) · `GET /api/session/round_result` (winners/losers aggregated per player, GROUP BY u.id, u.username, SUM(payout-amount)) · `GET /api/session/result` · `GET /api/session/bets` · `GET /api/session/qr` · `GET /api/history` · `POST /api/bet`
@@ -265,7 +264,6 @@ locust -f tests/locustfile.py --host=http://127.0.0.1:5000
 - ⚠️ **gridLocked vs betPlaced** — gridLocked: UI lock (grid unclickable between submit and spin). betPlaced: routes to pollResult(). Independent. gridLocked=false when spinning starts; betPlaced remains true until result.
 - ⚠️ **auto-reload mode** — play.js lastKnownMode detects app_mode transitions (roulette↔vote↔palmares) → window.location.reload() on next pollStatus() (max 2s). First call silent (lastKnownMode=null → init). Do NOT remove showOnly() fallback.
 - ⚠️ **leaderboard cache** — display.js caches lastLeaderboardCache {top_winners, top_losers}. During isSpinning, empty payload does NOT clear tops (intended). top_holders removed (session 8, 2026-05-25).
-- ⚠️ **claimed_ids** — /rewards returns IDs of already-claimed rewards (used client-side to disable buttons).
 - ⚠️ **column/dozen/half display** — colBtn/ldoz/lhalf must have data-type and data-val attributes. Without them, renderChips() silently ignores these bets.
 - ⚠️ **play.js tokens polling** — pollStatus() updates balanceEl from data.tokens (every 2s). /api/session/status includes 'tokens' for authenticated Flask sessions (None for unauthenticated callers — display page unaffected).
 
@@ -284,7 +282,6 @@ locust -f tests/locustfile.py --host=http://127.0.0.1:5000
 - ⚠️ **admin mobile** — @media (max-width:768px): #users-table as flex cards, column 4 (Add Tokens) hidden, column 3 (Tokens) visible (padding:4px 0), thead hidden (labels via ::before), data-label="Player/Role/Tokens/Actions" on td 1/2/3/5. Buttons +150/+350 in column 5, NOT in column 4 (hidden). Double-tap confirmation on touch (window.matchMedia('hover:none')), timer 3s via quickBtnPendingMap. Desktop: immediate action, never alert().
 - ⚠️ **admin films** — deletion protected if status='open'. Rename protected similarly.
 - ⚠️ **admin users** — collapsible list (collapse show by default) + live filter + scroll 5 rows.
-- ⚠️ **admin rewards** — deletion cascades reward_claims via /api/admin/rewards/<id>/delete.
 - ⚠️ **vote tracking closed** — #vote-tracking-section visible when app_mode='closed' (admin can review results before palmares/reset-mode decision).
 - ⚠️ **shop td d-flex** — never set `display:flex` directly on a `<td>` (Bootstrap/browser vertical-align breaks). Always wrap buttons in an inner `<div class="d-flex …">` inside the td.
 
@@ -371,6 +368,19 @@ locust -f tests/locustfile.py --host=http://127.0.0.1:5000
 | 11 (2026-06-06) | `static/css/midnight-gala.css` | Section ADMIN SHOP : remplacement cards accordion par tableau catalogue + drawer éditeur (position:fixed) |
 | 11 (2026-06-06) | `templates/admin/shop.html` | Tableau remplace cards repliables ; drawer #shop-drawer hors de toute .card (overflow:hidden) ; modal-edit-item supprimée ; barre de filtres (search + tabs + état) |
 | 11 (2026-06-06) | `static/js/shop-admin.js` | buildItemBlock/buildImagesSection/buildVariantsSection/openEditItemModal supprimés → openDrawer/closeDrawer/submitDrawer/buildDrawerPhotos/buildDrawerVariants/renderRows/applyFilters/updateShopCounter ajoutés |
+| 11 (2026-06-07) | `routes/api.py` | vote_delete_film : garde session ouverte (BEGIN IMMEDIATE + ROLLBACK si status='open') |
+| 11 (2026-06-07) | `routes/shop.py` | admin_update_order_status : bug stock preorder — JOIN item_preorder, skip ajustement stock si preorder |
+| 11 (2026-06-07) | `routes/api.py` | vote_tracking : N+1 → 3 requêtes globales + reconstruction dict Python |
+| 11 (2026-06-07) | `routes/shop.py` | admin_upload_image : vérification magic bytes via PIL Image.open().verify() |
+| 11 (2026-06-07) | `/etc/nginx/sites-available/casino.kryptide.fr` | proxy_set_header X-Forwarded-Proto $scheme dans les deux location blocks |
+| 11 (2026-06-07) | `routes/api.py`, `tests/conftest.py` | @limiter.limit('30 per minute') sur /api/bet + routes vote ; RATELIMIT_ENABLED=False dans tests |
+| 11 (2026-06-07) | `routes/shop.py` | @limiter.limit('5 per minute') sur POST /api/shop/order (public) |
+| 11 (2026-06-07) | `routes/shop.py` | admin_list_items : N+1 → 4 requêtes globales + reconstruction dict Python |
+| 11 (2026-06-07) | `routes/api.py` | vote_close : prefetch boosts + film_counts + all_rankings en 3 requêtes avant la boucle |
+| 11 (2026-06-07) | `routes/api.py`, `routes/shop.py` | admin_create_user, vote_create_category, vote_create_film, admin_create_variant : BEGIN IMMEDIATE + COMMIT/ROLLBACK explicites |
+| 11 (2026-06-07) | `routes/api.py` | import json as _json déplacé en tête de fichier (était ligne 632) |
+| 11 (2026-06-07) | `static/js/shop-admin.js` | Suppression article : splice items[] + updateShopCounter() + applyFilters() sans loadItems()/loadOrders() |
+| 11 (2026-06-07) | `routes/api.py`, `CLAUDE.md` | Purge références /rewards et rewards.html obsolètes |
 
 ---
 

@@ -253,8 +253,10 @@ function buildTableRow(item) {
       );
       if (s === 200 && d.ok) {
         modalConfirmDelete.hide();
-        await loadItems();
-        await loadOrders();
+        const idx = items.findIndex(i => i.id === item.id);
+        if (idx !== -1) items.splice(idx, 1);
+        updateShopCounter();
+        applyFilters();
       } else {
         showError('items-error', d && d.error ? d.error : 'Erreur suppression');
       }

@@ -1,4 +1,5 @@
 import io
+import json as _json
 import os
 import random
 import string
@@ -10,6 +11,7 @@ from flask import (Blueprint, jsonify, request, session as flask_session,
                    abort, Response)
 
 from db import db_conn, get_active_session, get_config, resolve_spin
+from extensions import limiter
 
 api_bp = Blueprint('api', __name__)
 
@@ -30,7 +32,7 @@ def _parse_dt(s):
 
 def _require_login():
     if 'user_id' not in flask_session:
-        # Return JSON so JS callers (play.js, rewards.html) can parse resp.json() cleanly
+        # Return JSON so JS callers can parse resp.json() cleanly
         from flask import make_response
         abort(make_response(jsonify({'error': 'Non authentifié'}), 401))
 
@@ -297,6 +299,7 @@ def session_qr():
 # ─── Bet ─────────────────────────────────────────────────────────────────────
 
 @api_bp.route('/api/bet', methods=['POST'])
+@limiter.limit('30 per minute')
 def place_bet():
     _require_login()
     data      = request.get_json(force=True)
@@ -576,13 +579,15 @@ def admin_create_user():
     password = _gen_password()
     pw_hash  = bcrypt.hashpw(password.encode(), bcrypt.gensalt(rounds=10)).decode()
     with db_conn() as conn:
+        conn.execute('BEGIN IMMEDIATE')
         try:
             conn.execute(
                 'INSERT INTO users(username, password_hash, role, tokens) VALUES (?,?,?,?)',
                 (username, pw_hash, role, initial_tokens)
             )
-            conn.commit()
+            conn.execute('COMMIT')
         except Exception as e:
+            conn.execute('ROLLBACK')
             if 'UNIQUE' in str(e):
                 return jsonify({'error': 'Nom d\'utilisateur déjà pris'}), 409
             raise
@@ -629,8 +634,6 @@ def admin_reset_password(uid):
 
 # ─── Vote — Admin — Catalogue ─────────────────────────────────────────────────
 
-import json as _json
-
 @api_bp.route('/api/admin/vote/catalogue')
 def vote_catalogue():
     """Toutes les catégories + films — sans filtre display_category_id (usage admin)."""
@@ -662,10 +665,12 @@ def vote_create_category():
     if not name:
         return jsonify({'error': 'Nom requis'}), 400
     with db_conn() as conn:
+        conn.execute('BEGIN IMMEDIATE')
         existing = conn.execute(
             'SELECT id FROM vote_categories WHERE LOWER(name)=LOWER(?)', (name,)
         ).fetchone()
         if existing:
+            conn.execute('ROLLBACK')
             return jsonify({'error': 'Catégorie déjà existante'}), 409
         max_ord = conn.execute(
             'SELECT COALESCE(MAX(display_order),0) FROM vote_categories'
@@ -674,7 +679,7 @@ def vote_create_category():
             'INSERT INTO vote_categories(name, display_order) VALUES (?,?)',
             (name, max_ord + 1)
         )
-        conn.commit()
+        conn.execute('COMMIT')
     return jsonify({'ok': True, 'id': cur.lastrowid, 'name': name})
 
 
@@ -724,18 +729,21 @@ def vote_create_film():
     if not isinstance(category_id, int):
         return jsonify({'error': 'category_id requis'}), 400
     with db_conn() as conn:
+        conn.execute('BEGIN IMMEDIATE')
         cat = conn.execute(
             'SELECT id FROM vote_categories WHERE id=?', (category_id,)
         ).fetchone()
         if not cat:
+            conn.execute('ROLLBACK')
             return jsonify({'error': 'Catégorie introuvable'}), 404
         try:
             cur = conn.execute(
                 'INSERT INTO vote_films(category_id, title) VALUES (?,?)',
                 (category_id, title)
             )
-            conn.commit()
+            conn.execute('COMMIT')
         except Exception as e:
+            conn.execute('ROLLBACK')
             if 'UNIQUE' in str(e):
                 return jsonify({'error': 'Film déjà existant dans cette catégorie'}), 409
             raise
@@ -747,6 +755,12 @@ def vote_delete_film(fid):
     _require_admin()
     with db_conn() as conn:
         conn.execute('BEGIN IMMEDIATE')
+        open_session = conn.execute(
+            "SELECT id FROM vote_sessions WHERE status='open' LIMIT 1"
+        ).fetchone()
+        if open_session:
+            conn.execute('ROLLBACK')
+            return jsonify({'error': 'Impossible de supprimer pendant un vote ouvert'}), 400
         conn.execute('DELETE FROM vote_rankings WHERE film_id=?', (fid,))
         result = conn.execute('DELETE FROM vote_films WHERE id=?', (fid,))
         conn.execute('COMMIT')
@@ -805,34 +819,43 @@ def vote_close():
             conn.execute('ROLLBACK')
             return jsonify({'error': 'Aucune session de vote ouverte'}), 400
 
-        # Compute points for each ranking
+        # Compute points for each ranking — batch fetch boosts once
         categories = conn.execute(
             'SELECT id FROM vote_categories'
         ).fetchall()
+        # Prefetch all boosts for the session keyed by (user_id, category_id)
+        boosts_lookup = {
+            (r['user_id'], r['category_id']): r['amount']
+            for r in conn.execute(
+                'SELECT user_id, category_id, amount FROM vote_boosts WHERE session_id=?',
+                (int(vs_id),)
+            ).fetchall()
+        }
+        # Prefetch film counts per category
+        film_counts = {
+            r['category_id']: r['cnt']
+            for r in conn.execute(
+                'SELECT category_id, COUNT(*) AS cnt FROM vote_films GROUP BY category_id'
+            ).fetchall()
+        }
+        # Prefetch all rankings for the session with category info
+        all_rankings = conn.execute(
+            '''SELECT vr.id, vr.user_id, vr.rank, vf.category_id
+               FROM vote_rankings vr
+               JOIN vote_films vf ON vf.id = vr.film_id
+               WHERE vr.session_id=?''',
+            (int(vs_id),)
+        ).fetchall()
+
         for cat in categories:
             cat_id = cat['id']
-            films  = conn.execute(
-                'SELECT id FROM vote_films WHERE category_id=?', (cat_id,)
-            ).fetchall()
-            n = len(films)
+            n = film_counts.get(cat_id, 0)
             if n == 0:
                 continue
             base = max(10, n * 2.5)
-            rankings = conn.execute(
-                '''SELECT vr.id, vr.user_id, vr.rank
-                   FROM vote_rankings vr
-                   JOIN vote_films vf ON vf.id = vr.film_id
-                   WHERE vr.session_id=? AND vf.category_id=?''',
-                (int(vs_id), cat_id)
-            ).fetchall()
-            for rk in rankings:
-                raw_float = base * (0.55 ** (rk['rank'] - 1))
-                boost  = conn.execute(
-                    '''SELECT amount FROM vote_boosts
-                       WHERE session_id=? AND user_id=? AND category_id=?''',
-                    (int(vs_id), rk['user_id'], cat_id)
-                ).fetchone()
-                boost_amount = boost['amount'] if boost else 0
+            for rk in [r for r in all_rankings if r['category_id'] == cat_id]:
+                raw_float    = base * (0.55 ** (rk['rank'] - 1))
+                boost_amount = boosts_lookup.get((rk['user_id'], cat_id), 0)
                 multiplier   = 1 + (boost_amount / 100)
                 points       = max(1, round(raw_float * multiplier))
                 conn.execute(
@@ -1052,6 +1075,7 @@ def vote_state():
 
 
 @api_bp.route('/api/vote/rankings', methods=['POST'])
+@limiter.limit('30 per minute')
 def vote_rankings():
     _require_login()
     user_id = flask_session['user_id']
@@ -1103,6 +1127,7 @@ def vote_rankings():
 
 
 @api_bp.route('/api/vote/boost', methods=['POST'])
+@limiter.limit('30 per minute')
 def vote_boost():
     _require_login()
     user_id = flask_session['user_id']
@@ -1277,66 +1302,72 @@ def vote_tracking():
             return jsonify({'session_id': None, 'categories': []})
 
         vs_id = int(vs_id_str)
-        cats  = conn.execute(
+        cats = conn.execute(
             'SELECT id, name FROM vote_categories ORDER BY display_order'
         ).fetchall()
 
+        # Batch fetch: films, rankings, boosts — 3 queries instead of O(cats × voters)
+        all_films = conn.execute(
+            'SELECT id, title, category_id FROM vote_films ORDER BY id'
+        ).fetchall()
+        all_rankings = conn.execute(
+            '''SELECT vr.user_id, u.username, vr.film_id, vr.rank, vf.category_id
+               FROM vote_rankings vr
+               JOIN users u ON u.id = vr.user_id
+               JOIN vote_films vf ON vf.id = vr.film_id
+               WHERE vr.session_id=?
+               ORDER BY vf.category_id, u.username, vr.rank''',
+            (vs_id,)
+        ).fetchall()
+        all_boosts = conn.execute(
+            'SELECT user_id, category_id, amount FROM vote_boosts WHERE session_id=?',
+            (vs_id,)
+        ).fetchall()
+
+        # Build lookup structures
+        films_by_cat: dict = {}
+        film_titles:  dict = {}
+        for f in all_films:
+            films_by_cat.setdefault(f['category_id'], []).append(f)
+            film_titles[f['id']] = f['title']
+
+        # rankings_by_cat[cat_id][user_id] = [(film_id, rank), ...]
+        rankings_by_cat: dict = {}
+        usernames:       dict = {}
+        for r in all_rankings:
+            rankings_by_cat.setdefault(r['category_id'], {}).setdefault(
+                r['user_id'], []
+            ).append({'film_id': r['film_id'], 'rank': r['rank']})
+            usernames[r['user_id']] = r['username']
+
+        boosts_map:   dict = {}  # (user_id, cat_id) → amount
+        total_boosts: dict = {}  # cat_id → total
+        for b in all_boosts:
+            boosts_map[(b['user_id'], b['category_id'])] = b['amount']
+            total_boosts[b['category_id']] = total_boosts.get(b['category_id'], 0) + b['amount']
+
         result_cats = []
         for cat in cats:
-            cat_id = cat['id']
-            films  = conn.execute(
-                'SELECT id, title FROM vote_films WHERE category_id=? ORDER BY id',
-                (cat_id,)
-            ).fetchall()
-            film_map = {f['id']: f['title'] for f in films}
-
-            voter_rows = conn.execute(
-                '''SELECT DISTINCT vr.user_id, u.username
-                   FROM vote_rankings vr
-                   JOIN users u ON u.id = vr.user_id
-                   JOIN vote_films vf ON vf.id = vr.film_id
-                   WHERE vr.session_id=? AND vf.category_id=?
-                   ORDER BY u.username''',
-                (vs_id, cat_id)
-            ).fetchall()
-
-            total_boost = conn.execute(
-                'SELECT COALESCE(SUM(amount),0) AS total FROM vote_boosts'
-                ' WHERE session_id=? AND category_id=?',
-                (vs_id, cat_id)
-            ).fetchone()['total']
-
+            cat_id   = cat['id']
+            films    = films_by_cat.get(cat_id, [])
+            cat_rks  = rankings_by_cat.get(cat_id, {})
             voters = []
-            for vr in voter_rows:
-                uid    = vr['user_id']
-                rk_rows = conn.execute(
-                    '''SELECT vr2.film_id, vr2.rank FROM vote_rankings vr2
-                       JOIN vote_films vf ON vf.id = vr2.film_id
-                       WHERE vr2.session_id=? AND vr2.user_id=? AND vf.category_id=?
-                       ORDER BY vr2.rank ASC''',
-                    (vs_id, uid, cat_id)
-                ).fetchall()
-                boost_row = conn.execute(
-                    'SELECT amount FROM vote_boosts'
-                    ' WHERE session_id=? AND user_id=? AND category_id=?',
-                    (vs_id, uid, cat_id)
-                ).fetchone()
+            for uid, rk_list in sorted(cat_rks.items(), key=lambda kv: usernames.get(kv[0], '')):
                 voters.append({
-                    'username': vr['username'],
+                    'username': usernames.get(uid, '?'),
                     'rankings': [
-                        {'film_id': r['film_id'],
-                         'film_title': film_map.get(r['film_id'], '?'),
-                         'rank': r['rank']}
-                        for r in rk_rows
+                        {'film_id': rk['film_id'],
+                         'film_title': film_titles.get(rk['film_id'], '?'),
+                         'rank': rk['rank']}
+                        for rk in rk_list
                     ],
-                    'boost': boost_row['amount'] if boost_row else 0,
+                    'boost': boosts_map.get((uid, cat_id), 0),
                 })
-
             result_cats.append({
                 'id':          cat_id,
                 'name':        cat['name'],
-                'voter_count': len(voter_rows),
-                'total_boost': total_boost,
+                'voter_count': len(voters),
+                'total_boost': total_boosts.get(cat_id, 0),
                 'films':       [{'id': f['id'], 'title': f['title']} for f in films],
                 'voters':      voters,
             })

@@ -547,6 +547,15 @@ class TestVoteFilms:
             row = conn.execute('SELECT id FROM vote_films WHERE id=?', (fid,)).fetchone()
         assert row is None
 
+    def test_delete_film_blocked_when_vote_open(self, app, admin_client):
+        cid = _create_category(admin_client, 'Action')
+        fid = _add_film(admin_client, 'Mad Max', cid)
+        _open_vote(admin_client)
+        r = admin_client.post(f'/api/admin/vote/films/{fid}/delete',
+                              json={}, headers={'X-CSRFToken': 'test'})
+        assert r.status_code == 400
+        assert 'ouvert' in r.get_json()['error'].lower()
+
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # TestVoteSession
@@ -889,13 +898,21 @@ class TestShop:
                                'lines':      [{'variant_id': variant_id, 'quantity': quantity}],
                            })
 
-    def _upload_image(self, admin_client, item_id, filename='test.jpg'):
-        """Upload une image factice — patche _SHOP_DIR vers un dossier temporaire."""
+    @staticmethod
+    def _minimal_png() -> bytes:
+        """Génère un PNG 1×1 valide en mémoire (PIL déjà disponible via qrcode[pil])."""
+        from PIL import Image as _Img
+        buf = io.BytesIO()
+        _Img.new('RGB', (1, 1), color=(255, 0, 0)).save(buf, format='PNG')
+        return buf.getvalue()
+
+    def _upload_image(self, admin_client, item_id, filename='test.png'):
+        """Upload un PNG minimal valide — patche _SHOP_DIR vers un dossier temporaire."""
         with tempfile.TemporaryDirectory() as tmpdir:
             with patch('routes.shop._SHOP_DIR', tmpdir):
                 r = admin_client.post(
                     f'/api/admin/shop/items/{item_id}/image',
-                    data={'image': (io.BytesIO(b'fake-image-data'), filename)},
+                    data={'image': (io.BytesIO(self._minimal_png()), filename)},
                     content_type='multipart/form-data',
                     headers={'X-CSRFToken': 'test'}
                 )
@@ -1144,6 +1161,48 @@ class TestShop:
                              (variant_id,)).fetchone()['stock']
         assert s == 4  # 6 - 2
 
+    def test_cancel_preorder_order_does_not_change_stock(self, app, client, admin_client):
+        """Annuler une commande preorder ne doit PAS modifier le stock."""
+        self._enable_shop(admin_client)
+        item_id = admin_client.post('/api/admin/shop/items',
+                                    json={'name': 'Préco', 'price': 10, 'preorder': 1, 'variants': []},
+                                    headers={'X-CSRFToken': 'test'}).get_json()['item_id']
+        variant_id = self._create_variant(admin_client, item_id, 'Unique', stock=0)
+        order_id = self._place_order(client, variant_id, quantity=2).get_json()['order_id']
+
+        with db_conn() as conn:
+            stock_before = conn.execute('SELECT stock FROM shop_variants WHERE id=?',
+                                        (variant_id,)).fetchone()['stock']
+
+        admin_client.post(f'/api/admin/shop/orders/{order_id}/status',
+                          json={'status': 'cancelled'}, headers={'X-CSRFToken': 'test'})
+
+        with db_conn() as conn:
+            stock_after = conn.execute('SELECT stock FROM shop_variants WHERE id=?',
+                                       (variant_id,)).fetchone()['stock']
+        assert stock_after == stock_before  # stock inchangé pour preorder
+
+    def test_reconfirm_preorder_order_does_not_decrement_stock(self, app, client, admin_client):
+        """Reconfirmer une commande preorder annulée ne doit PAS décrémenter le stock."""
+        self._enable_shop(admin_client)
+        item_id = admin_client.post('/api/admin/shop/items',
+                                    json={'name': 'Préco2', 'price': 10, 'preorder': 1, 'variants': []},
+                                    headers={'X-CSRFToken': 'test'}).get_json()['item_id']
+        variant_id = self._create_variant(admin_client, item_id, 'Unique', stock=0)
+        order_id = self._place_order(client, variant_id, quantity=2).get_json()['order_id']
+
+        admin_client.post(f'/api/admin/shop/orders/{order_id}/status',
+                          json={'status': 'cancelled'}, headers={'X-CSRFToken': 'test'})
+        r = admin_client.post(f'/api/admin/shop/orders/{order_id}/status',
+                              json={'status': 'confirmed'}, headers={'X-CSRFToken': 'test'})
+        assert r.status_code == 200
+        assert r.get_json()['ok'] is True
+
+        with db_conn() as conn:
+            stock = conn.execute('SELECT stock FROM shop_variants WHERE id=?',
+                                 (variant_id,)).fetchone()['stock']
+        assert stock == 0  # stock inchangé pour preorder
+
     def test_order_phone_international_format(self, app, client, admin_client):
         """Téléphone +33XXXXXXXXX normalisé et accepté."""
         self._enable_shop(admin_client)
@@ -1324,6 +1383,20 @@ class TestShop:
         r = admin_client.post(f'/api/admin/shop/items/{item_id}/name',
                               json={'name': '   '},
                               headers={'X-CSRFToken': 'test'})
+        assert r.status_code == 400
+        assert r.get_json()['ok'] is False
+
+    def test_upload_invalid_image_rejected(self, app, admin_client):
+        """Upload d'un fichier non-image avec extension .png → 400 (magic bytes invalides)."""
+        item_id = self._create_item(admin_client, 'Article Fake')
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with patch('routes.shop._SHOP_DIR', tmpdir):
+                r = admin_client.post(
+                    f'/api/admin/shop/items/{item_id}/image',
+                    data={'image': (io.BytesIO(b'not-an-image-data'), 'fake.png')},
+                    content_type='multipart/form-data',
+                    headers={'X-CSRFToken': 'test'}
+                )
         assert r.status_code == 400
         assert r.get_json()['ok'] is False
 

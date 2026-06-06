@@ -73,6 +73,7 @@ def app():
         'TESTING': True,
         'WTF_CSRF_ENABLED': False,
         'SESSION_COOKIE_SECURE': False,
+        'RATELIMIT_ENABLED': False,
     })
 
     yield flask_app

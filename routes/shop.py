@@ -2,10 +2,11 @@ import os
 import re
 import time
 
+from PIL import Image as _PIL_Image
 from flask import (Blueprint, jsonify, request, session as flask_session, abort)
 
 from db import db_conn
-from extensions import csrf
+from extensions import csrf, limiter
 
 shop_bp = Blueprint('shop', __name__)
 
@@ -58,6 +59,7 @@ def shop_items():
 
 @shop_bp.route('/api/shop/order', methods=['POST'])
 @csrf.exempt
+@limiter.limit('5 per minute')
 def shop_order():
     data       = request.get_json(force=True) or {}
     first_name = (data.get('first_name') or '').strip()
@@ -149,52 +151,63 @@ def admin_list_items():
         rows = conn.execute(
             "SELECT id, name, description, price, image_path, active, preorder FROM shop_items ORDER BY id"
         ).fetchall()
+
+        # Batch fetch: 4 global queries instead of O(items × variants)
+        all_variants = conn.execute(
+            "SELECT id, item_id, size_label, stock FROM shop_variants ORDER BY item_id, id"
+        ).fetchall()
+        # items with at least one non-cancelled order
+        item_orders = {r['item_id'] for r in conn.execute(
+            """SELECT DISTINCT sv.item_id FROM shop_order_lines sol
+               JOIN shop_variants sv ON sv.id = sol.variant_id
+               JOIN shop_orders so ON so.id = sol.order_id
+               WHERE so.status != 'cancelled'"""
+        ).fetchall()}
+        # variants with at least one non-cancelled order
+        variant_orders = {r['variant_id'] for r in conn.execute(
+            """SELECT DISTINCT sol.variant_id FROM shop_order_lines sol
+               JOIN shop_orders so ON so.id = sol.order_id
+               WHERE so.status != 'cancelled'"""
+        ).fetchall()}
+        all_images = conn.execute(
+            "SELECT id, item_id, image_path, is_primary, display_order FROM shop_item_images"
+            " ORDER BY item_id, display_order ASC"
+        ).fetchall()
+
+        # Build lookup structures
+        variants_by_item: dict = {}
+        for v in all_variants:
+            variants_by_item.setdefault(v['item_id'], []).append(v)
+        images_by_item: dict = {}
+        for img in all_images:
+            images_by_item.setdefault(img['item_id'], []).append(img)
+
         result = []
         for item in rows:
-            variants = conn.execute(
-                "SELECT id, size_label, stock FROM shop_variants WHERE item_id=? ORDER BY id",
-                (item['id'],)
-            ).fetchall()
-            has_orders = conn.execute(
-                """SELECT COUNT(*) FROM shop_order_lines sol
-                   JOIN shop_variants sv ON sv.id = sol.variant_id
-                   JOIN shop_orders so ON so.id = sol.order_id
-                   WHERE sv.item_id = ? AND so.status != 'cancelled'""",
-                (item['id'],)
-            ).fetchone()[0] > 0
-            variant_list = []
-            for v in variants:
-                v_has_orders = conn.execute(
-                    """SELECT COUNT(*) FROM shop_order_lines sol
-                       JOIN shop_orders so ON so.id = sol.order_id
-                       WHERE sol.variant_id = ? AND so.status != 'cancelled'""",
-                    (v['id'],)
-                ).fetchone()[0] > 0
-                variant_list.append({
+            iid = item['id']
+            variant_list = [
+                {
                     'id':         v['id'],
                     'size_label': v['size_label'],
                     'stock':      v['stock'],
-                    'has_orders': v_has_orders,
-                })
-            images = conn.execute(
-                "SELECT id, image_path, is_primary, display_order FROM shop_item_images"
-                " WHERE item_id=? ORDER BY display_order ASC",
-                (item['id'],)
-            ).fetchall()
+                    'has_orders': v['id'] in variant_orders,
+                }
+                for v in variants_by_item.get(iid, [])
+            ]
             result.append({
-                'id':          item['id'],
+                'id':          iid,
                 'name':        item['name'],
                 'description': item['description'],
                 'price':       item['price'],
                 'image_path':  item['image_path'],
                 'active':      item['active'],
                 'preorder':    item['preorder'],
-                'has_orders':  has_orders,
+                'has_orders':  iid in item_orders,
                 'variants':    variant_list,
                 'images':      [{'id': img['id'], 'image_path': img['image_path'],
                                  'is_primary': img['is_primary'],
                                  'display_order': img['display_order']}
-                                for img in images],
+                                for img in images_by_item.get(iid, [])],
             })
     return jsonify(result)
 
@@ -371,6 +384,13 @@ def admin_upload_image(item_id):
     if ext not in _ALLOWED_EXT:
         return jsonify({'ok': False, 'error': 'Extension non autorisée (jpg/jpeg/png/webp)'}), 400
 
+    # Verify actual image content via magic bytes (catches extension spoofing)
+    try:
+        _PIL_Image.open(f.stream).verify()
+        f.stream.seek(0)
+    except Exception:
+        return jsonify({'ok': False, 'error': 'Fichier image invalide ou corrompu'}), 400
+
     # Pre-flight check (non-transactional read)
     with db_conn() as conn:
         item = conn.execute("SELECT id FROM shop_items WHERE id=?", (item_id,)).fetchone()
@@ -520,14 +540,16 @@ def admin_create_variant():
         return jsonify({'ok': False, 'error': 'stock invalide (entier >= 0)'}), 400
 
     with db_conn() as conn:
+        conn.execute('BEGIN IMMEDIATE')
         item = conn.execute("SELECT id FROM shop_items WHERE id=?", (item_id,)).fetchone()
         if not item:
+            conn.execute('ROLLBACK')
             return jsonify({'ok': False, 'error': 'Article introuvable'}), 404
         cur = conn.execute(
             "INSERT INTO shop_variants(item_id, size_label, stock) VALUES (?,?,?)",
             (item_id, size_label, stock)
         )
-        conn.commit()
+        conn.execute('COMMIT')
     return jsonify({'ok': True, 'variant_id': cur.lastrowid})
 
 
@@ -648,37 +670,44 @@ def admin_update_order_status(order_id):
             return jsonify({'ok': True})
 
         lines = conn.execute(
-            "SELECT variant_id, quantity FROM shop_order_lines WHERE order_id=?",
+            """SELECT sol.variant_id, sol.quantity, si.preorder AS item_preorder
+               FROM shop_order_lines sol
+               JOIN shop_variants sv ON sv.id = sol.variant_id
+               JOIN shop_items si ON si.id = sv.item_id
+               WHERE sol.order_id=?""",
             (order_id,)
         ).fetchall()
 
         if new_status == 'cancelled' and cur_status in ('pending', 'confirmed'):
-            # Restituer le stock
+            # Restituer le stock — uniquement pour les articles non-preorder
             for line in lines:
-                conn.execute(
-                    "UPDATE shop_variants SET stock = stock + ? WHERE id=?",
-                    (line['quantity'], line['variant_id'])
-                )
+                if not line['item_preorder']:
+                    conn.execute(
+                        "UPDATE shop_variants SET stock = stock + ? WHERE id=?",
+                        (line['quantity'], line['variant_id'])
+                    )
 
         elif new_status == 'confirmed' and cur_status == 'cancelled':
-            # Vérifier le stock disponible avant de décrémenter
+            # Vérifier le stock disponible avant de décrémenter (non-preorder seulement)
             for line in lines:
-                v = conn.execute(
-                    "SELECT stock, size_label FROM shop_variants WHERE id=?",
-                    (line['variant_id'],)
-                ).fetchone()
-                if not v or v['stock'] < line['quantity']:
-                    conn.execute('ROLLBACK')
-                    label = v['size_label'] if v else str(line['variant_id'])
-                    return jsonify({
-                        'ok':    False,
-                        'error': f'Stock insuffisant pour {label}',
-                    }), 400
+                if not line['item_preorder']:
+                    v = conn.execute(
+                        "SELECT stock, size_label FROM shop_variants WHERE id=?",
+                        (line['variant_id'],)
+                    ).fetchone()
+                    if not v or v['stock'] < line['quantity']:
+                        conn.execute('ROLLBACK')
+                        label = v['size_label'] if v else str(line['variant_id'])
+                        return jsonify({
+                            'ok':    False,
+                            'error': f'Stock insuffisant pour {label}',
+                        }), 400
             for line in lines:
-                conn.execute(
-                    "UPDATE shop_variants SET stock = stock - ? WHERE id=?",
-                    (line['quantity'], line['variant_id'])
-                )
+                if not line['item_preorder']:
+                    conn.execute(
+                        "UPDATE shop_variants SET stock = stock - ? WHERE id=?",
+                        (line['quantity'], line['variant_id'])
+                    )
 
         conn.execute("UPDATE shop_orders SET status=? WHERE id=?", (new_status, order_id))
         conn.execute('COMMIT')
