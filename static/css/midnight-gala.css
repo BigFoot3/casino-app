@@ -1126,19 +1126,24 @@ a:hover { color: var(--mg-ivory); }
   bottom: 28px;
   right: 28px;
   z-index: 1040;
-  width: 56px;
-  height: 56px;
-  border-radius: 50%;
+  height: 54px;
+  padding: 0 22px 0 18px;
+  gap: 10px;
+  border-radius: 999px;
   background: var(--mg-flame);
   border: 2px solid var(--mg-ember);
   color: var(--mg-ivory);
   display: flex;
   align-items: center;
   justify-content: center;
-  box-shadow: 0 4px 16px rgba(0,0,0,0.5), inset 0 -2px 0 rgba(0,0,0,0.25);
+  white-space: nowrap;
+  font-family: var(--mg-font-display);
+  font-size: 0.9rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.55), inset 0 -2px 0 rgba(0,0,0,0.25);
   cursor: pointer;
   transition: transform .1s ease, background .15s ease;
-  padding: 0;
 }
 
 .cart-fab:hover {
@@ -1271,4 +1276,63 @@ a:hover { color: var(--mg-ivory); }
   padding: 16px 20px;
   border-top: 1px solid var(--mg-border-strong);
   flex-shrink: 0;
+}
+
+/* ============================================================================
+   ADMIN SHOP — Catalogue articles repliables
+   ============================================================================ */
+
+.shop-item-card {
+  border-bottom: 1px solid var(--mg-border-strong);
+}
+
+.shop-item-card:last-child {
+  border-bottom: none;
+}
+
+.shop-item-header {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 0;
+  cursor: pointer;
+  user-select: none;
+}
+
+.shop-item-chevron {
+  flex-shrink: 0;
+  align-self: center;
+  color: var(--mg-rosewood);
+  font-size: 0.9rem;
+  line-height: 1;
+  transition: transform .22s ease;
+}
+
+.shop-item-chevron.is-open {
+  transform: rotate(180deg);
+}
+
+.shop-item-body {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows .22s ease;
+}
+
+.shop-item-body.is-open {
+  grid-template-rows: 1fr;
+}
+
+.shop-item-body > div {
+  overflow: hidden;
+}
+
+.shop-section-label {
+  font-family: var(--mg-font-mono);
+  font-size: 0.65rem;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--mg-rosewood);
+  border-top: 1px solid var(--mg-velvet);
+  padding: 10px 0 6px;
+  margin-top: 4px;
 }

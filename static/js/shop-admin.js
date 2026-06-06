@@ -3,6 +3,7 @@
 const CSRF = document.querySelector('meta[name="csrf-token"]').content;
 let shopEnabled = INITIAL_SHOP_ENABLED;
 let items = [];
+const openItemIds = new Set();
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -87,14 +88,13 @@ function renderItems() {
 }
 
 function buildItemBlock(item) {
-  const wrap = document.createElement('div');
-  wrap.className            = 'mb-3 pb-3';
-  wrap.style.borderBottom   = '1px solid var(--mg-border-strong)';
-  wrap.dataset.itemId       = item.id;
+  const card = document.createElement('div');
+  card.className      = 'shop-item-card';
+  card.dataset.itemId = item.id;
 
-  // ── Ligne principale ──
-  const row = document.createElement('div');
-  row.className = 'd-flex align-items-start gap-3 flex-wrap';
+  // ── HEADER (toujours visible) ───────────────────────────────────────────────
+  const header = document.createElement('div');
+  header.className = 'shop-item-header';
 
   // Thumbnail
   const thumb = document.createElement('div');
@@ -102,9 +102,9 @@ function buildItemBlock(item) {
                         'background:var(--mg-velvet);display:flex;align-items:center;justify-content:center;';
   if (item.image_path) {
     const img = document.createElement('img');
-    img.src             = item.image_path;
-    img.alt             = '';
-    img.style.cssText   = 'width:100%;height:100%;object-fit:cover;';
+    img.src           = item.image_path;
+    img.alt           = '';
+    img.style.cssText = 'width:100%;height:100%;object-fit:cover;';
     thumb.appendChild(img);
   } else {
     const ph = document.createElement('span');
@@ -112,16 +112,16 @@ function buildItemBlock(item) {
     ph.textContent    = '🛍';
     thumb.appendChild(ph);
   }
-  row.appendChild(thumb);
 
-  // Infos
+  // Colonne info
   const info = document.createElement('div');
-  info.style.flex = '1';
+  info.style.cssText = 'flex:1;min-width:0;';
 
+  // Nom — toggle display/edit
   const nameRow = document.createElement('div');
   nameRow.className = 'd-flex align-items-center gap-1';
 
-  const nameDisplay = document.createElement('span');
+  const nameDisplay       = document.createElement('span');
   nameDisplay.className   = 'fw-bold';
   nameDisplay.style.color = 'var(--mg-ivory)';
   nameDisplay.textContent = item.name;
@@ -132,10 +132,9 @@ function buildItemBlock(item) {
   btnEditName.style.color = 'var(--mg-rosewood)';
   btnEditName.textContent = '✏️';
 
-  const nameGroup = document.createElement('div');
-  nameGroup.className    = 'input-group input-group-sm';
-  nameGroup.style.maxWidth = '260px';
-  nameGroup.style.display  = 'none';
+  const nameGroup         = document.createElement('div');
+  nameGroup.className     = 'input-group input-group-sm';
+  nameGroup.style.cssText = 'max-width:260px;display:none;';
 
   const nameInput       = document.createElement('input');
   nameInput.type        = 'text';
@@ -157,7 +156,6 @@ function buildItemBlock(item) {
     nameInput.focus();
     nameInput.select();
   }
-
   function showNameDisplay() {
     nameDisplay.style.display = '';
     btnEditName.style.display = '';
@@ -165,7 +163,6 @@ function buildItemBlock(item) {
   }
 
   btnEditName.addEventListener('click', showNameEdit);
-
   btnNameOk.addEventListener('click', async function () {
     const newName = nameInput.value.trim();
     if (!newName) return;
@@ -175,7 +172,7 @@ function buildItemBlock(item) {
     if (s === 200 && d.ok) {
       item.name = d.name;
       nameDisplay.textContent = d.name;
-      nameInput.value = d.name;
+      nameInput.value         = d.name;
     } else {
       showError('items-error', d && d.error ? d.error : 'Erreur nom');
     }
@@ -187,19 +184,24 @@ function buildItemBlock(item) {
   nameRow.appendChild(nameGroup);
   info.appendChild(nameRow);
 
+  // Prix — toggle display/edit (même pattern que nom)
   const priceRow = document.createElement('div');
-  priceRow.className = 'd-flex align-items-center gap-2 mt-1';
+  priceRow.className = 'd-flex align-items-center gap-1 mt-1';
 
-  const priceDisplay = document.createElement('span');
-  priceDisplay.className    = 'small';
-  priceDisplay.style.color  = 'var(--mg-rosewood)';
-  priceDisplay.style.minWidth = '60px';
-  priceDisplay.textContent  = item.price != null ? Number(item.price).toFixed(2) + ' €' : '—';
-  priceRow.appendChild(priceDisplay);
+  const priceDisplay       = document.createElement('span');
+  priceDisplay.className   = 'small';
+  priceDisplay.style.color = 'var(--mg-rosewood)';
+  priceDisplay.textContent = item.price != null ? Number(item.price).toFixed(2) + ' €' : '—';
 
-  const priceGroup = document.createElement('div');
-  priceGroup.className    = 'input-group input-group-sm';
-  priceGroup.style.maxWidth = '150px';
+  const btnEditPrice       = document.createElement('button');
+  btnEditPrice.type        = 'button';
+  btnEditPrice.className   = 'btn btn-sm btn-link p-0';
+  btnEditPrice.style.color = 'var(--mg-rosewood)';
+  btnEditPrice.textContent = '✏️';
+
+  const priceGroup         = document.createElement('div');
+  priceGroup.className     = 'input-group input-group-sm';
+  priceGroup.style.cssText = 'max-width:150px;display:none;';
 
   const priceInput       = document.createElement('input');
   priceInput.type        = 'number';
@@ -213,6 +215,24 @@ function buildItemBlock(item) {
   btnPriceOk.type        = 'button';
   btnPriceOk.className   = 'btn btn-outline-secondary';
   btnPriceOk.textContent = 'OK';
+
+  priceGroup.appendChild(priceInput);
+  priceGroup.appendChild(btnPriceOk);
+
+  function showPriceEdit() {
+    priceDisplay.style.display  = 'none';
+    btnEditPrice.style.display  = 'none';
+    priceGroup.style.display    = '';
+    priceInput.focus();
+    priceInput.select();
+  }
+  function showPriceDisplay() {
+    priceDisplay.style.display  = '';
+    btnEditPrice.style.display  = '';
+    priceGroup.style.display    = 'none';
+  }
+
+  btnEditPrice.addEventListener('click', showPriceEdit);
   btnPriceOk.addEventListener('click', async function () {
     const newPrice = parseFloat(priceInput.value);
     if (isNaN(newPrice) || newPrice < 0) return;
@@ -224,33 +244,47 @@ function buildItemBlock(item) {
     } else {
       showError('items-error', d && d.error ? d.error : 'Erreur prix');
     }
+    showPriceDisplay();
   });
 
-  priceGroup.appendChild(priceInput);
-  priceGroup.appendChild(btnPriceOk);
+  priceRow.appendChild(priceDisplay);
+  priceRow.appendChild(btnEditPrice);
   priceRow.appendChild(priceGroup);
   info.appendChild(priceRow);
 
+  // Meta
   const metaEl = document.createElement('div');
   metaEl.className   = 'small mt-1';
   metaEl.style.color = 'var(--mg-rosewood)';
   metaEl.textContent = item.variants.length + ' taille(s)';
   info.appendChild(metaEl);
 
-  const badge = document.createElement('span');
-  badge.className   = 'badge mt-1 ' + (item.active ? 'bg-success' : 'bg-secondary');
-  badge.textContent = item.active ? 'Actif' : 'Inactif';
-  info.appendChild(badge);
-  row.appendChild(info);
+  // Badges passifs : état actif + précommande (distincts des boutons d'action)
+  const badgesRow = document.createElement('div');
+  badgesRow.className = 'd-flex gap-1 flex-wrap mt-1';
 
-  // Actions
-  const actions = document.createElement('div');
+  const badge       = document.createElement('span');
+  badge.className   = 'badge ' + (item.active ? 'bg-success' : 'bg-secondary');
+  badge.textContent = item.active ? 'Actif' : 'Inactif';
+  badgesRow.appendChild(badge);
+
+  const preorderBadge             = document.createElement('span');
+  preorderBadge.className         = 'badge';
+  preorderBadge.style.color       = 'var(--mg-blush)';
+  preorderBadge.style.borderColor = 'var(--mg-blush)';
+  preorderBadge.textContent       = 'Précommande';
+  preorderBadge.style.display     = item.preorder ? '' : 'none';
+  badgesRow.appendChild(preorderBadge);
+
+  info.appendChild(badgesRow);
+
+  // Boutons d'action
+  const actions     = document.createElement('div');
   actions.className = 'd-flex gap-1 flex-wrap align-items-center';
 
-  // Toggle actif/inactif
-  const btnToggle      = document.createElement('button');
-  btnToggle.type       = 'button';
-  btnToggle.className  = 'btn btn-sm btn-outline-secondary';
+  const btnToggle       = document.createElement('button');
+  btnToggle.type        = 'button';
+  btnToggle.className   = 'btn btn-sm btn-outline-secondary';
   btnToggle.textContent = item.active ? 'Désactiver' : 'Activer';
   btnToggle.addEventListener('click', async function () {
     const [s, d] = await shopAction(this, () =>
@@ -261,10 +295,9 @@ function buildItemBlock(item) {
   });
   actions.appendChild(btnToggle);
 
-  // Toggle précommande
-  const btnPreorder      = document.createElement('button');
-  btnPreorder.type       = 'button';
-  btnPreorder.className  = 'btn btn-sm btn-outline-secondary';
+  const btnPreorder       = document.createElement('button');
+  btnPreorder.type        = 'button';
+  btnPreorder.className   = 'btn btn-sm btn-outline-secondary';
   if (item.preorder) btnPreorder.style.color = 'var(--mg-blush)';
   btnPreorder.textContent = item.preorder ? 'PRÉCOMMANDE' : 'STANDARD';
   btnPreorder.addEventListener('click', async function () {
@@ -273,22 +306,22 @@ function buildItemBlock(item) {
       apiPost(`/api/admin/shop/items/${item.id}/preorder`, {preorder: newPreorder})
     );
     if (s === 200 && d.ok) {
-      item.preorder = d.preorder;
-      btnPreorder.textContent = item.preorder ? 'PRÉCOMMANDE' : 'STANDARD';
-      btnPreorder.style.color = item.preorder ? 'var(--mg-blush)' : '';
+      item.preorder               = d.preorder;
+      btnPreorder.textContent     = item.preorder ? 'PRÉCOMMANDE' : 'STANDARD';
+      btnPreorder.style.color     = item.preorder ? 'var(--mg-blush)' : '';
+      preorderBadge.style.display = item.preorder ? '' : 'none';
     } else {
       showError('items-error', d && d.error ? d.error : 'Erreur précommande');
     }
   });
   actions.appendChild(btnPreorder);
 
-  // Supprimer article
-  const btnDel      = document.createElement('button');
-  btnDel.type       = 'button';
-  btnDel.className  = 'btn btn-sm btn-outline-danger';
+  const btnDel       = document.createElement('button');
+  btnDel.type        = 'button';
+  btnDel.className   = 'btn btn-sm btn-outline-danger';
   btnDel.textContent = '🗑';
-  btnDel.disabled   = item.has_orders;
-  btnDel.title      = item.has_orders ? 'Des commandes existent pour cet article' : 'Supprimer';
+  btnDel.disabled    = item.has_orders;
+  btnDel.title       = item.has_orders ? 'Des commandes existent pour cet article' : 'Supprimer';
   btnDel.addEventListener('click', function () {
     document.getElementById('modal-confirm-delete-name').textContent = item.name;
     pendingDeleteFn = async () => {
@@ -308,16 +341,59 @@ function buildItemBlock(item) {
   });
   actions.appendChild(btnDel);
 
-  row.appendChild(actions);
-  wrap.appendChild(row);
+  // Chevron
+  const chevron       = document.createElement('span');
+  chevron.className   = 'shop-item-chevron';
+  chevron.textContent = '▾';
 
-  // ── Images ──
-  wrap.appendChild(buildImagesSection(item));
+  // StopPropagation sur toutes les zones interactives du header
+  // pour éviter que leurs clics ne déclenchent le toggle collapse
+  for (const el of [actions, btnEditName, nameGroup, btnEditPrice, priceGroup]) {
+    el.addEventListener('click', e => e.stopPropagation());
+  }
 
-  // ── Variantes ──
-  wrap.appendChild(buildVariantsSection(item));
+  // Toggle collapse
+  const isOpen = openItemIds.has(item.id);
+  header.addEventListener('click', () => {
+    const nowOpen = bodyOuter.classList.toggle('is-open');
+    chevron.classList.toggle('is-open', nowOpen);
+    if (nowOpen) openItemIds.add(item.id);
+    else         openItemIds.delete(item.id);
+  });
 
-  return wrap;
+  header.appendChild(thumb);
+  header.appendChild(info);
+  header.appendChild(actions);
+  header.appendChild(chevron);
+  card.appendChild(header);
+
+  // ── BODY (repliable) ────────────────────────────────────────────────────────
+  const bodyOuter = document.createElement('div');
+  bodyOuter.className = 'shop-item-body' + (isOpen ? ' is-open' : '');
+  if (isOpen) chevron.classList.add('is-open');
+
+  const bodyInner = document.createElement('div');
+
+  const photosLabel       = document.createElement('div');
+  photosLabel.className   = 'shop-section-label';
+  photosLabel.textContent = 'Photos';
+  bodyInner.appendChild(photosLabel);
+  bodyInner.appendChild(buildImagesSection(item));
+
+  const variantsLabel       = document.createElement('div');
+  variantsLabel.className   = 'shop-section-label';
+  variantsLabel.textContent = 'Tailles & Stock';
+  bodyInner.appendChild(variantsLabel);
+  bodyInner.appendChild(buildVariantsSection(item));
+
+  const pad        = document.createElement('div');
+  pad.style.height = '12px';
+  bodyInner.appendChild(pad);
+
+  bodyOuter.appendChild(bodyInner);
+  card.appendChild(bodyOuter);
+
+  return card;
 }
 
 function buildImagesSection(item) {
