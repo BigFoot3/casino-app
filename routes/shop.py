@@ -208,6 +208,24 @@ def admin_create_item():
     return jsonify({'ok': True, 'item_id': item_id})
 
 
+@shop_bp.route('/api/admin/shop/items/<int:item_id>/price', methods=['POST'])
+def admin_update_item_price(item_id):
+    _require_admin()
+    data  = request.get_json(force=True) or {}
+    price = data.get('price')
+    if price is None or not isinstance(price, (int, float)) or float(price) < 0:
+        return jsonify({'ok': False, 'error': 'Prix invalide (nombre >= 0)'}), 400
+    with db_conn() as conn:
+        conn.execute('BEGIN IMMEDIATE')
+        item = conn.execute("SELECT id FROM shop_items WHERE id=?", (item_id,)).fetchone()
+        if not item:
+            conn.execute('ROLLBACK')
+            return jsonify({'ok': False, 'error': 'Article introuvable'}), 404
+        conn.execute("UPDATE shop_items SET price=? WHERE id=?", (float(price), item_id))
+        conn.execute('COMMIT')
+    return jsonify({'ok': True})
+
+
 @shop_bp.route('/api/admin/shop/items/<int:item_id>/toggle', methods=['POST'])
 def admin_toggle_item(item_id):
     _require_admin()

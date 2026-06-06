@@ -124,11 +124,54 @@ function buildItemBlock(item) {
   nameEl.textContent = item.name;
   info.appendChild(nameEl);
 
+  const priceRow = document.createElement('div');
+  priceRow.className = 'd-flex align-items-center gap-2 mt-1';
+
+  const priceDisplay = document.createElement('span');
+  priceDisplay.className    = 'small';
+  priceDisplay.style.color  = 'var(--mg-rosewood)';
+  priceDisplay.style.minWidth = '60px';
+  priceDisplay.textContent  = item.price != null ? Number(item.price).toFixed(2) + ' €' : '—';
+  priceRow.appendChild(priceDisplay);
+
+  const priceGroup = document.createElement('div');
+  priceGroup.className    = 'input-group input-group-sm';
+  priceGroup.style.maxWidth = '150px';
+
+  const priceInput       = document.createElement('input');
+  priceInput.type        = 'number';
+  priceInput.className   = 'form-control';
+  priceInput.min         = '0';
+  priceInput.step        = '0.01';
+  priceInput.value       = item.price != null ? Number(item.price).toFixed(2) : '';
+  priceInput.placeholder = '0.00';
+
+  const btnPriceOk       = document.createElement('button');
+  btnPriceOk.type        = 'button';
+  btnPriceOk.className   = 'btn btn-outline-secondary';
+  btnPriceOk.textContent = 'OK';
+  btnPriceOk.addEventListener('click', async function () {
+    const newPrice = parseFloat(priceInput.value);
+    if (isNaN(newPrice) || newPrice < 0) return;
+    const [s, d] = await shopAction(this, () =>
+      apiPost(`/api/admin/shop/items/${item.id}/price`, {price: newPrice})
+    );
+    if (s === 200 && d.ok) {
+      priceDisplay.textContent = newPrice.toFixed(2) + ' €';
+    } else {
+      showError('items-error', d && d.error ? d.error : 'Erreur prix');
+    }
+  });
+
+  priceGroup.appendChild(priceInput);
+  priceGroup.appendChild(btnPriceOk);
+  priceRow.appendChild(priceGroup);
+  info.appendChild(priceRow);
+
   const metaEl = document.createElement('div');
-  metaEl.className   = 'small';
+  metaEl.className   = 'small mt-1';
   metaEl.style.color = 'var(--mg-rosewood)';
-  const pricePart = item.price != null ? Number(item.price).toFixed(2) + ' € · ' : '';
-  metaEl.textContent = pricePart + item.variants.length + ' taille(s)';
+  metaEl.textContent = item.variants.length + ' taille(s)';
   info.appendChild(metaEl);
 
   const badge = document.createElement('span');

@@ -1216,3 +1216,24 @@ class TestShop:
         assert target['has_orders'] is False
         assert target['variants'][0]['has_orders'] is False
 
+    def test_update_item_price(self, app, admin_client):
+        """POST /api/admin/shop/items/<id>/price — mise à jour prix persistée en DB."""
+        item_id = self._create_item(admin_client, 'Article Prix', price=25.0)
+        r = admin_client.post(f'/api/admin/shop/items/{item_id}/price',
+                              json={'price': 30.0},
+                              headers={'X-CSRFToken': 'test'})
+        assert r.status_code == 200
+        assert r.get_json()['ok'] is True
+        items = admin_client.get('/api/admin/shop/items').get_json()
+        target = next(i for i in items if i['id'] == item_id)
+        assert target['price'] == 30.0
+
+    def test_update_item_price_invalid(self, app, admin_client):
+        """POST /api/admin/shop/items/<id>/price — prix négatif → 400."""
+        item_id = self._create_item(admin_client, 'Article Prix 2', price=25.0)
+        r = admin_client.post(f'/api/admin/shop/items/{item_id}/price',
+                              json={'price': -5},
+                              headers={'X-CSRFToken': 'test'})
+        assert r.status_code == 400
+        assert r.get_json()['ok'] is False
+
