@@ -117,7 +117,7 @@ function buildItemBlock(item) {
   const info = document.createElement('div');
   info.style.cssText = 'flex:1;min-width:0;';
 
-  // Nom — toggle display/edit
+  // Nom — affichage seul (édition via modale)
   const nameRow = document.createElement('div');
   nameRow.className = 'd-flex align-items-center gap-1';
 
@@ -126,65 +126,10 @@ function buildItemBlock(item) {
   nameDisplay.style.color = 'var(--mg-ivory)';
   nameDisplay.textContent = item.name;
 
-  const btnEditName       = document.createElement('button');
-  btnEditName.type        = 'button';
-  btnEditName.className   = 'btn btn-sm btn-link p-0';
-  btnEditName.style.color = 'var(--mg-rosewood)';
-  btnEditName.textContent = '✏️';
-
-  const nameGroup         = document.createElement('div');
-  nameGroup.className     = 'input-group input-group-sm';
-  nameGroup.style.cssText = 'max-width:260px;display:none;';
-
-  const nameInput       = document.createElement('input');
-  nameInput.type        = 'text';
-  nameInput.className   = 'form-control';
-  nameInput.value       = item.name;
-
-  const btnNameOk       = document.createElement('button');
-  btnNameOk.type        = 'button';
-  btnNameOk.className   = 'btn btn-outline-secondary';
-  btnNameOk.textContent = 'OK';
-
-  nameGroup.appendChild(nameInput);
-  nameGroup.appendChild(btnNameOk);
-
-  function showNameEdit() {
-    nameDisplay.style.display = 'none';
-    btnEditName.style.display = 'none';
-    nameGroup.style.display   = '';
-    nameInput.focus();
-    nameInput.select();
-  }
-  function showNameDisplay() {
-    nameDisplay.style.display = '';
-    btnEditName.style.display = '';
-    nameGroup.style.display   = 'none';
-  }
-
-  btnEditName.addEventListener('click', showNameEdit);
-  btnNameOk.addEventListener('click', async function () {
-    const newName = nameInput.value.trim();
-    if (!newName) return;
-    const [s, d] = await shopAction(this, () =>
-      apiPost(`/api/admin/shop/items/${item.id}/name`, {name: newName})
-    );
-    if (s === 200 && d.ok) {
-      item.name = d.name;
-      nameDisplay.textContent = d.name;
-      nameInput.value         = d.name;
-    } else {
-      showError('items-error', d && d.error ? d.error : 'Erreur nom');
-    }
-    showNameDisplay();
-  });
-
   nameRow.appendChild(nameDisplay);
-  nameRow.appendChild(btnEditName);
-  nameRow.appendChild(nameGroup);
   info.appendChild(nameRow);
 
-  // Prix — toggle display/edit (même pattern que nom)
+  // Prix — affichage seul (édition via modale)
   const priceRow = document.createElement('div');
   priceRow.className = 'd-flex align-items-center gap-1 mt-1';
 
@@ -193,64 +138,19 @@ function buildItemBlock(item) {
   priceDisplay.style.color = 'var(--mg-rosewood)';
   priceDisplay.textContent = item.price != null ? Number(item.price).toFixed(2) + ' €' : '—';
 
-  const btnEditPrice       = document.createElement('button');
-  btnEditPrice.type        = 'button';
-  btnEditPrice.className   = 'btn btn-sm btn-link p-0';
-  btnEditPrice.style.color = 'var(--mg-rosewood)';
-  btnEditPrice.textContent = '✏️';
-
-  const priceGroup         = document.createElement('div');
-  priceGroup.className     = 'input-group input-group-sm';
-  priceGroup.style.cssText = 'max-width:150px;display:none;';
-
-  const priceInput       = document.createElement('input');
-  priceInput.type        = 'number';
-  priceInput.className   = 'form-control';
-  priceInput.min         = '0';
-  priceInput.step        = '0.01';
-  priceInput.value       = item.price != null ? Number(item.price).toFixed(2) : '';
-  priceInput.placeholder = '0.00';
-
-  const btnPriceOk       = document.createElement('button');
-  btnPriceOk.type        = 'button';
-  btnPriceOk.className   = 'btn btn-outline-secondary';
-  btnPriceOk.textContent = 'OK';
-
-  priceGroup.appendChild(priceInput);
-  priceGroup.appendChild(btnPriceOk);
-
-  function showPriceEdit() {
-    priceDisplay.style.display  = 'none';
-    btnEditPrice.style.display  = 'none';
-    priceGroup.style.display    = '';
-    priceInput.focus();
-    priceInput.select();
-  }
-  function showPriceDisplay() {
-    priceDisplay.style.display  = '';
-    btnEditPrice.style.display  = '';
-    priceGroup.style.display    = 'none';
-  }
-
-  btnEditPrice.addEventListener('click', showPriceEdit);
-  btnPriceOk.addEventListener('click', async function () {
-    const newPrice = parseFloat(priceInput.value);
-    if (isNaN(newPrice) || newPrice < 0) return;
-    const [s, d] = await shopAction(this, () =>
-      apiPost(`/api/admin/shop/items/${item.id}/price`, {price: newPrice})
-    );
-    if (s === 200 && d.ok) {
-      priceDisplay.textContent = newPrice.toFixed(2) + ' €';
-    } else {
-      showError('items-error', d && d.error ? d.error : 'Erreur prix');
-    }
-    showPriceDisplay();
-  });
-
   priceRow.appendChild(priceDisplay);
-  priceRow.appendChild(btnEditPrice);
-  priceRow.appendChild(priceGroup);
   info.appendChild(priceRow);
+
+  // Bouton ✏️ unique — ouvre la modale d'édition nom+prix
+  const btnEdit       = document.createElement('button');
+  btnEdit.type        = 'button';
+  btnEdit.className   = 'btn btn-sm btn-link p-0';
+  btnEdit.style.color = 'var(--mg-rosewood)';
+  btnEdit.textContent = '✏️';
+  btnEdit.addEventListener('click', () =>
+    openEditItemModal(item, nameDisplay, priceDisplay)
+  );
+  info.appendChild(btnEdit);
 
   // Meta
   const metaEl = document.createElement('div');
@@ -346,9 +246,8 @@ function buildItemBlock(item) {
   chevron.className   = 'shop-item-chevron';
   chevron.textContent = '▾';
 
-  // StopPropagation sur toutes les zones interactives du header
-  // pour éviter que leurs clics ne déclenchent le toggle collapse
-  for (const el of [actions, btnEditName, nameGroup, btnEditPrice, priceGroup]) {
+  // StopPropagation sur les zones interactives du header
+  for (const el of [actions, btnEdit]) {
     el.addEventListener('click', e => e.stopPropagation());
   }
 
@@ -626,6 +525,83 @@ function buildVariantsSection(item) {
 
   return section;
 }
+
+// ── Modal modifier article (nom + prix) ─────────────────────────────────────
+
+const modalEditItemEl = document.getElementById('modal-edit-item');
+const modalEditItem   = new bootstrap.Modal(modalEditItemEl);
+let   currentEditItem         = null;
+let   currentEditNameDisplay  = null;
+let   currentEditPriceDisplay = null;
+
+function openEditItemModal(item, nameDisplay, priceDisplay) {
+  currentEditItem         = item;
+  currentEditNameDisplay  = nameDisplay;
+  currentEditPriceDisplay = priceDisplay;
+  document.getElementById('edit-item-name').value  = item.name;
+  document.getElementById('edit-item-price').value =
+    item.price != null ? Number(item.price).toFixed(2) : '';
+  document.getElementById('edit-item-error').style.display = 'none';
+  modalEditItem.show();
+}
+
+modalEditItemEl.addEventListener('hidden.bs.modal', () => {
+  document.getElementById('edit-item-error').style.display = 'none';
+});
+
+document.getElementById('btn-submit-edit-item').addEventListener('click', async function () {
+  const errEl    = document.getElementById('edit-item-error');
+  errEl.style.display = 'none';
+
+  const newName  = document.getElementById('edit-item-name').value.trim();
+  const rawPrice = document.getElementById('edit-item-price').value;
+
+  if (!newName) {
+    errEl.textContent   = 'Le nom est requis.';
+    errEl.style.display = '';
+    return;
+  }
+
+  const nameChanged  = newName !== currentEditItem.name;
+  const parsedPrice  = rawPrice !== '' ? parseFloat(rawPrice) : null;
+  const origPrice    = currentEditItem.price != null ? Number(currentEditItem.price) : null;
+  const priceChanged = parsedPrice !== null && parsedPrice !== origPrice;
+
+  if (!nameChanged && !priceChanged) { modalEditItem.hide(); return; }
+
+  await shopAction(this, async () => {
+    if (nameChanged) {
+      const [s, d] = await apiPost(
+        `/api/admin/shop/items/${currentEditItem.id}/name`, {name: newName}
+      );
+      if (s !== 200 || !d.ok) {
+        errEl.textContent   = d && d.error ? d.error : 'Erreur nom';
+        errEl.style.display = '';
+        return;
+      }
+      currentEditItem.name               = d.name;
+      currentEditNameDisplay.textContent = d.name;
+    }
+    if (priceChanged) {
+      if (isNaN(parsedPrice) || parsedPrice < 0) {
+        errEl.textContent   = 'Prix invalide.';
+        errEl.style.display = '';
+        return;
+      }
+      const [s, d] = await apiPost(
+        `/api/admin/shop/items/${currentEditItem.id}/price`, {price: parsedPrice}
+      );
+      if (s !== 200 || !d.ok) {
+        errEl.textContent   = d && d.error ? d.error : 'Erreur prix';
+        errEl.style.display = '';
+        return;
+      }
+      currentEditItem.price               = parsedPrice;
+      currentEditPriceDisplay.textContent = parsedPrice.toFixed(2) + ' €';
+    }
+    modalEditItem.hide();
+  });
+});
 
 // ── Modal nouvel article ─────────────────────────────────────────────────────
 
