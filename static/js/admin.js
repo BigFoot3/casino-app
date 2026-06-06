@@ -3,6 +3,13 @@
 const CSRF = document.querySelector('meta[name="csrf-token"]').content;
 const $ = id => document.getElementById(id);
 
+// HTML escape helper — prevents stored XSS when injecting server data into innerHTML
+function esc(s) {
+  const d = document.createElement('div');
+  d.textContent = String(s == null ? '' : s);
+  return d.innerHTML;
+}
+
 // ── Password modal ────────────────────────────────────────────────────────────
 let pwTimer = null;
 let pendingReloadAfterPw = false;
@@ -430,7 +437,7 @@ function renderCatalogue() {
     const header = document.createElement('div');
     header.className = 'd-flex align-items-center gap-2 mb-2';
     header.innerHTML = `
-      <strong class="flex-grow-1">${cat.name}</strong>
+      <strong class="flex-grow-1">${esc(cat.name)}</strong>
       <button class="btn btn-sm btn-outline-danger del-cat-btn" data-id="${cat.id}">🗑</button>
     `;
     catDiv.appendChild(header);
@@ -445,7 +452,7 @@ function renderCatalogue() {
       li.style.color = 'var(--mg-ivory)';
       li.style.borderColor = 'var(--mg-oxblood)';
       li.innerHTML = `
-        <span>${f.title}</span>
+        <span>${esc(f.title)}</span>
         <button class="btn btn-sm btn-outline-danger del-film-btn" data-id="${f.id}">🗑</button>
       `;
       filmList.appendChild(li);
@@ -604,7 +611,7 @@ function renderVoteTracking(data) {
 
     const header = `<th>Joueur</th>` +
       cat.films.map(f =>
-        `<th style="font-size:0.75rem">${f.title}</th>`
+        `<th style="font-size:0.75rem">${esc(f.title)}</th>`
       ).join('') +
       `<th>Boost</th>`;
 
@@ -615,7 +622,7 @@ function renderVoteTracking(data) {
           const rankMap = {};
           v.rankings.forEach(r => { rankMap[r.film_id] = r.rank; });
           return `<tr>
-            <td>${v.username}</td>
+            <td>${esc(v.username)}</td>
             ${cat.films.map(f =>
               `<td>${rankMap[f.id] ?? '—'}</td>`
             ).join('')}
@@ -626,7 +633,7 @@ function renderVoteTracking(data) {
     return `
       <div class="mb-4">
         <div class="small fw-bold mb-1" style="color:var(--mg-blush)">
-          ${cat.name} — ${cat.voter_count} votant(s) — ${cat.total_boost} jetons misés
+          ${esc(cat.name)} — ${cat.voter_count} votant(s) — ${cat.total_boost} jetons misés
         </div>
         <div style="overflow-x:auto">
           <table class="table table-sm mb-0" style="font-size:0.8rem">
@@ -700,7 +707,7 @@ async function updateVoteStatus() {
     if (mode === 'vote' && catBtnsWrap) {
       catBtnsWrap.innerHTML = cats.map(c =>
         `<button class="btn btn-sm ${dispCat === c.id ? 'btn-primary' : 'btn-outline-light'}"
-                 data-cat-id="${c.id}">▶ ${c.name}</button>`
+                 data-cat-id="${c.id}">▶ ${esc(c.name)}</button>`
       ).join('');
     }
 
@@ -716,7 +723,7 @@ async function updateVoteStatus() {
       palmaresGatsBtnsWrap.innerHTML = cats.map(c => {
         const isRevealed = revealed.includes(c.id);
         return `<button class="btn btn-sm ${isRevealed ? 'btn-primary' : 'btn-outline-secondary'}"
-                        data-palmares-cat-id="${c.id}">▶ ${c.name}${isRevealed ? ' ✓' : ''}</button>`;
+                        data-palmares-cat-id="${c.id}">▶ ${esc(c.name)}${isRevealed ? ' ✓' : ''}</button>`;
       }).join('');
       if (voteRevealCounter) {
         voteRevealCounter.textContent = allRevealed

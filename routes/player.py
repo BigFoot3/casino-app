@@ -75,3 +75,10 @@ def roulette_display():
 def shop():
     """Public shop page — no auth required."""
     return render_template('shop.html')
+
+
+@player_bp.route('/health')
+def health():
+    """Lightweight health check — no auth, no DB query."""
+    from flask import jsonify
+    return jsonify({'status': 'ok'})

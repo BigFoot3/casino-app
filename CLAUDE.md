@@ -315,6 +315,7 @@ locust -f tests/locustfile.py --host=http://127.0.0.1:5000
 - ⚠️ **admin delete user** — super-admin can delete admins (except username='admin'). Regular admin → 403 on any admin account.
 - ⚠️ **/api/claim** — endpoint removed (2026-05-08). Rewards distributed exclusively via /api/admin/reward/give (admin).
 - ⚠️ **Roles** — 'admin' | 'player' — SQLite CHECK constraint.
+- ⚠️ **username charset** — `re.match(r'^[a-zA-Z0-9_-]{1,32}$')` enforced in admin_create_user() and cli.py. Do NOT relax this constraint (XSS vector via innerHTML in vote tracking table).
 
 **Load Tests:**
 - ⚠️ **RATELIMIT_ENABLED=false** — required for Locust. Set before pytest or locust commands.
@@ -381,6 +382,12 @@ locust -f tests/locustfile.py --host=http://127.0.0.1:5000
 | 11 (2026-06-07) | `routes/api.py` | import json as _json déplacé en tête de fichier (était ligne 632) |
 | 11 (2026-06-07) | `static/js/shop-admin.js` | Suppression article : splice items[] + updateShopCounter() + applyFilters() sans loadItems()/loadOrders() |
 | 11 (2026-06-07) | `routes/api.py`, `CLAUDE.md` | Purge références /rewards et rewards.html obsolètes |
+| 12 (2026-06-07) | `static/js/admin.js` | Sécurité XSS : helper `esc()` en tête de fichier ; tous les `${cat.name}`, `${f.title}`, `${v.username}`, `${c.name}` dans innerHTML remplacés par `${esc(...)}` |
+| 12 (2026-06-07) | `routes/api.py`, `cli.py` | Restriction charset username : `re.match(r'^[a-zA-Z0-9_-]{1,32}$')` dans admin_create_user() et cli.py create-user |
+| 12 (2026-06-07) | `app.py` | inject_shop_config context_processor : cache Flask `g._shop_enabled` — 1 seule connexion DB par requête HTML au lieu d'une par appel |
+| 12 (2026-06-07) | `routes/api.py` | leaderboard() : sous-requête corélée soustrait `SUM(vote_boosts.amount)` du net P&L pour chaque joueur — cohérence avec docstring et CLAUDE.md |
+| 12 (2026-06-07) | `routes/player.py` | Ajout endpoint `GET /health` → `{"status": "ok"}` sans auth, sans DB, pour monitoring uptime |
+| 12 (2026-06-07) | `routes/api.py` | `@limiter.limit('60 per minute')` sur `/api/leaderboard`, `/api/history`, `/api/session/status`, `/api/session/bets` |
 
 ---
 

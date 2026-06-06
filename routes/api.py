@@ -1,6 +1,7 @@
 import io
 import json as _json
 import os
+import re
 import random
 import string
 import bcrypt
@@ -51,6 +52,7 @@ def _gen_password(n=8):
 # ─── Leaderboard ─────────────────────────────────────────────────────────────
 
 @api_bp.route('/api/leaderboard')
+@limiter.limit('60 per minute')
 def leaderboard():
     """Top 3 winners / top 3 losers by net P&L over closed sessions.
     Net = SUM(payout - amount) from closed sessions minus vote boost spend.
@@ -59,7 +61,9 @@ def leaderboard():
     """
     _Q = '''
         SELECT u.username,
-               COALESCE(SUM(b.payout - b.amount), 0) AS net
+               COALESCE(SUM(b.payout - b.amount), 0)
+               - COALESCE((SELECT SUM(vb.amount) FROM vote_boosts vb WHERE vb.user_id = u.id), 0)
+               AS net
         FROM users u
         LEFT JOIN bets b          ON b.user_id    = u.id
         LEFT JOIN game_sessions gs ON b.session_id = gs.id
@@ -112,6 +116,7 @@ def session_round_result():
 # ─── Draw history ────────────────────────────────────────────────────────────
 
 @api_bp.route('/api/history')
+@limiter.limit('60 per minute')
 def draw_history():
     with db_conn() as conn:
         rows = conn.execute(
@@ -125,6 +130,7 @@ def draw_history():
 # ─── Session status ──────────────────────────────────────────────────────────
 
 @api_bp.route('/api/session/status')
+@limiter.limit('60 per minute')
 def session_status():
     with db_conn() as conn:
         active = get_active_session(conn)
@@ -252,6 +258,7 @@ def session_result():
 # ─── Session bets (public — used by /roulette/display and /play) ─────────────
 
 @api_bp.route('/api/session/bets')
+@limiter.limit('60 per minute')
 def session_bets():
     """Returns bets for the current open session. No auth required (display page is public)."""
     with db_conn() as conn:
@@ -572,6 +579,8 @@ def admin_create_user():
         initial_tokens = 0
     if not username:
         return jsonify({'error': 'Nom requis'}), 400
+    if not re.match(r'^[a-zA-Z0-9_-]{1,32}$', username):
+        return jsonify({'error': 'Nom invalide (1–32 caractères : lettres, chiffres, _ ou -)'}), 400
     if role not in ('admin', 'player'):
         return jsonify({'error': 'Role invalide'}), 400
     if role == 'admin' and flask_session.get('username') != 'admin':

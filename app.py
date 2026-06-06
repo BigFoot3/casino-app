@@ -57,15 +57,18 @@ def create_app():
 
     @app.context_processor
     def inject_shop_config():
-        try:
-            from db import db_conn
-            with db_conn() as conn:
-                row = conn.execute(
-                    "SELECT value FROM app_config WHERE key='shop_enabled'"
-                ).fetchone()
-                return {'shop_enabled': row is not None and row['value'] == '1'}
-        except Exception:
-            return {'shop_enabled': False}
+        from flask import g
+        if not hasattr(g, '_shop_enabled'):
+            try:
+                from db import db_conn
+                with db_conn() as conn:
+                    row = conn.execute(
+                        "SELECT value FROM app_config WHERE key='shop_enabled'"
+                    ).fetchone()
+                    g._shop_enabled = row is not None and row['value'] == '1'
+            except Exception:
+                g._shop_enabled = False
+        return {'shop_enabled': g._shop_enabled}
 
     @app.route('/')
     def index():
