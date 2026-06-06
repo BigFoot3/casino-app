@@ -1,5 +1,6 @@
 import os
 import re
+import time
 
 from flask import (Blueprint, jsonify, request, session as flask_session, abort)
 
@@ -34,6 +35,11 @@ def shop_items():
                 "SELECT id, size_label, stock FROM shop_variants WHERE item_id=? ORDER BY id",
                 (item['id'],)
             ).fetchall()
+            images = conn.execute(
+                "SELECT id, image_path, is_primary FROM shop_item_images"
+                " WHERE item_id=? ORDER BY display_order ASC",
+                (item['id'],)
+            ).fetchall()
             result.append({
                 'id':          item['id'],
                 'name':        item['name'],
@@ -43,6 +49,9 @@ def shop_items():
                 'preorder':    item['preorder'],
                 'variants':    [{'id': v['id'], 'size_label': v['size_label'], 'stock': v['stock']}
                                 for v in variants],
+                'images':      [{'id': img['id'], 'image_path': img['image_path'],
+                                 'is_primary': img['is_primary']}
+                                for img in images],
             })
     return jsonify(result)
 
@@ -167,6 +176,11 @@ def admin_list_items():
                     'stock':      v['stock'],
                     'has_orders': v_has_orders,
                 })
+            images = conn.execute(
+                "SELECT id, image_path, is_primary, display_order FROM shop_item_images"
+                " WHERE item_id=? ORDER BY display_order ASC",
+                (item['id'],)
+            ).fetchall()
             result.append({
                 'id':          item['id'],
                 'name':        item['name'],
@@ -177,6 +191,10 @@ def admin_list_items():
                 'preorder':    item['preorder'],
                 'has_orders':  has_orders,
                 'variants':    variant_list,
+                'images':      [{'id': img['id'], 'image_path': img['image_path'],
+                                 'is_primary': img['is_primary'],
+                                 'display_order': img['display_order']}
+                                for img in images],
             })
     return jsonify(result)
 
@@ -301,7 +319,12 @@ def admin_delete_item(item_id):
         if orders_exist:
             conn.execute('ROLLBACK')
             return jsonify({'ok': False, 'error': 'Des commandes existent pour cet article'}), 400
-        image_path = item['image_path']
+        # Collect all image paths before cascade-delete removes them from DB
+        image_paths = {r['image_path'] for r in conn.execute(
+            "SELECT image_path FROM shop_item_images WHERE item_id=?", (item_id,)
+        ).fetchall()}
+        if item['image_path']:
+            image_paths.add(item['image_path'])
         # Supprimer les lignes de commandes (toutes annulées — vérifié ci-dessus)
         # avant la suppression de l'article pour éviter la contrainte FK sur variant_id
         conn.execute(
@@ -312,11 +335,10 @@ def admin_delete_item(item_id):
         conn.execute("DELETE FROM shop_items WHERE id=?", (item_id,))
         conn.execute('COMMIT')
 
-    if image_path:
-        full = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-                            image_path.lstrip('/'))
+    base = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    for path in image_paths:
         try:
-            os.remove(full)
+            os.remove(os.path.join(base, path.lstrip('/')))
         except OSError:
             pass
 
@@ -328,28 +350,142 @@ def admin_upload_image(item_id):
     _require_admin()
     if 'image' not in request.files:
         return jsonify({'ok': False, 'error': 'Champ image manquant'}), 400
-    f    = request.files['image']
-    ext  = (f.filename or '').rsplit('.', 1)[-1].lower()
+    f   = request.files['image']
+    ext = (f.filename or '').rsplit('.', 1)[-1].lower()
     if ext not in _ALLOWED_EXT:
         return jsonify({'ok': False, 'error': 'Extension non autorisée (jpg/jpeg/png/webp)'}), 400
 
+    # Pre-flight check (non-transactional read)
     with db_conn() as conn:
         item = conn.execute("SELECT id FROM shop_items WHERE id=?", (item_id,)).fetchone()
         if not item:
             return jsonify({'ok': False, 'error': 'Article introuvable'}), 404
+        if conn.execute(
+            "SELECT COUNT(*) FROM shop_item_images WHERE item_id=?", (item_id,)
+        ).fetchone()[0] >= 5:
+            return jsonify({'ok': False, 'error': 'Maximum 5 photos par article'}), 400
 
     os.makedirs(_SHOP_DIR, exist_ok=True)
-    filename    = f"{item_id}.{ext}"
-    dest        = os.path.join(_SHOP_DIR, filename)
-    image_path  = f"/static/shop/{filename}"
-
+    filename   = f"{item_id}_{int(time.time())}.{ext}"
+    dest       = os.path.join(_SHOP_DIR, filename)
+    image_path = f"/static/shop/{filename}"
     f.save(dest)
 
-    with db_conn() as conn:
-        conn.execute("UPDATE shop_items SET image_path=? WHERE id=?", (image_path, item_id))
-        conn.commit()
+    try:
+        with db_conn() as conn:
+            conn.execute('BEGIN IMMEDIATE')
+            count = conn.execute(
+                "SELECT COUNT(*) FROM shop_item_images WHERE item_id=?", (item_id,)
+            ).fetchone()[0]
+            if count >= 5:
+                conn.execute('ROLLBACK')
+                os.remove(dest)
+                return jsonify({'ok': False, 'error': 'Maximum 5 photos par article'}), 400
+            order = conn.execute(
+                "SELECT COALESCE(MAX(display_order), -1) + 1 FROM shop_item_images WHERE item_id=?",
+                (item_id,)
+            ).fetchone()[0]
+            is_primary = 1 if count == 0 else 0
+            cur = conn.execute(
+                "INSERT INTO shop_item_images(item_id, image_path, is_primary, display_order)"
+                " VALUES(?, ?, ?, ?)",
+                (item_id, image_path, is_primary, order)
+            )
+            image_id = cur.lastrowid
+            if is_primary:
+                conn.execute(
+                    "UPDATE shop_items SET image_path=? WHERE id=?", (image_path, item_id)
+                )
+            conn.execute('COMMIT')
+    except Exception:
+        try:
+            os.remove(dest)
+        except OSError:
+            pass
+        raise
 
-    return jsonify({'ok': True, 'image_path': image_path})
+    return jsonify({'ok': True, 'image': {
+        'id':         image_id,
+        'image_path': image_path,
+        'is_primary': is_primary,
+    }})
+
+
+@shop_bp.route('/api/admin/shop/images/<int:image_id>/delete', methods=['POST'])
+def admin_delete_image(image_id):
+    _require_admin()
+    with db_conn() as conn:
+        conn.execute('BEGIN IMMEDIATE')
+        img = conn.execute(
+            "SELECT id, item_id, image_path, is_primary FROM shop_item_images WHERE id=?",
+            (image_id,)
+        ).fetchone()
+        if not img:
+            conn.execute('ROLLBACK')
+            return jsonify({'ok': False, 'error': 'Image introuvable'}), 404
+
+        item_id    = img['item_id']
+        image_path = img['image_path']
+        was_primary = img['is_primary'] == 1
+
+        conn.execute("DELETE FROM shop_item_images WHERE id=?", (image_id,))
+
+        new_primary_id = None
+        if was_primary:
+            next_img = conn.execute(
+                "SELECT id, image_path FROM shop_item_images"
+                " WHERE item_id=? ORDER BY display_order ASC LIMIT 1",
+                (item_id,)
+            ).fetchone()
+            if next_img:
+                conn.execute(
+                    "UPDATE shop_item_images SET is_primary=1 WHERE id=?", (next_img['id'],)
+                )
+                conn.execute(
+                    "UPDATE shop_items SET image_path=? WHERE id=?",
+                    (next_img['image_path'], item_id)
+                )
+                new_primary_id = next_img['id']
+            else:
+                conn.execute(
+                    "UPDATE shop_items SET image_path=NULL WHERE id=?", (item_id,)
+                )
+        conn.execute('COMMIT')
+
+    base = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    try:
+        os.remove(os.path.join(base, image_path.lstrip('/')))
+    except OSError:
+        pass
+
+    return jsonify({'ok': True, 'new_primary_id': new_primary_id})
+
+
+@shop_bp.route('/api/admin/shop/images/<int:image_id>/set_primary', methods=['POST'])
+def admin_set_primary_image(image_id):
+    _require_admin()
+    with db_conn() as conn:
+        conn.execute('BEGIN IMMEDIATE')
+        img = conn.execute(
+            "SELECT id, item_id, image_path FROM shop_item_images WHERE id=?", (image_id,)
+        ).fetchone()
+        if not img:
+            conn.execute('ROLLBACK')
+            return jsonify({'ok': False, 'error': 'Image introuvable'}), 404
+
+        item_id = img['item_id']
+        conn.execute(
+            "UPDATE shop_item_images SET is_primary=0 WHERE item_id=?", (item_id,)
+        )
+        conn.execute(
+            "UPDATE shop_item_images SET is_primary=1 WHERE id=?", (image_id,)
+        )
+        conn.execute(
+            "UPDATE shop_items SET image_path=? WHERE id=?", (img['image_path'], item_id)
+        )
+        conn.execute('COMMIT')
+
+    return jsonify({'ok': True})
 
 
 @shop_bp.route('/api/admin/shop/variants', methods=['POST'])

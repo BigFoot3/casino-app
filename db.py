@@ -108,6 +108,38 @@ def _migrate_vote_schema(conn):
     conn.commit()
 
 
+def _migrate_shop_item_images():
+    """Create shop_item_images table and migrate existing image_path entries if absent."""
+    with db_conn() as conn:
+        exists = conn.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name='shop_item_images'"
+        ).fetchone()
+        if exists:
+            return
+        conn.execute('BEGIN IMMEDIATE')
+        conn.execute('''
+            CREATE TABLE shop_item_images (
+                id            INTEGER PRIMARY KEY AUTOINCREMENT,
+                item_id       INTEGER NOT NULL REFERENCES shop_items(id) ON DELETE CASCADE,
+                image_path    TEXT NOT NULL,
+                is_primary    INTEGER NOT NULL DEFAULT 0,
+                display_order INTEGER NOT NULL DEFAULT 0,
+                created_at    TEXT DEFAULT (datetime('now'))
+            )
+        ''')
+        rows = conn.execute(
+            "SELECT id, image_path FROM shop_items WHERE image_path IS NOT NULL"
+        ).fetchall()
+        for row in rows:
+            conn.execute(
+                "INSERT INTO shop_item_images(item_id, image_path, is_primary, display_order)"
+                " VALUES(?, ?, 1, 0)",
+                (row['id'], row['image_path'])
+            )
+        conn.execute('COMMIT')
+        print('DB migration: shop_item_images created.', flush=True)
+
+
 def _migrate_shop_preorder():
     """Add preorder column to shop_items if missing."""
     with db_conn() as conn:
@@ -226,6 +258,14 @@ def init_db():
                 variant_id INTEGER NOT NULL REFERENCES shop_variants(id),
                 quantity   INTEGER NOT NULL DEFAULT 1
             );
+            CREATE TABLE IF NOT EXISTS shop_item_images (
+                id            INTEGER PRIMARY KEY AUTOINCREMENT,
+                item_id       INTEGER NOT NULL REFERENCES shop_items(id) ON DELETE CASCADE,
+                image_path    TEXT NOT NULL,
+                is_primary    INTEGER NOT NULL DEFAULT 0,
+                display_order INTEGER NOT NULL DEFAULT 0,
+                created_at    TEXT DEFAULT (datetime('now'))
+            );
         ''')
         conn.execute("INSERT OR IGNORE INTO app_config(key,value) VALUES ('auto_mode_enabled','0')")
         conn.execute("INSERT OR IGNORE INTO app_config(key,value) VALUES ('auto_interval_seconds','120')")
@@ -238,6 +278,7 @@ def init_db():
         _migrate_vote_schema(conn)
         _migrate_vote_boosts_amount()
         _migrate_shop_preorder()
+        _migrate_shop_item_images()
 
 
 def get_config(conn) -> dict:

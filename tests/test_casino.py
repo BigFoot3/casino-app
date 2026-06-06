@@ -12,6 +12,8 @@ Bogues app documentés :
     session (multi-bet frontend intentionnel). Marqué xfail strict.
 """
 
+import io
+import tempfile
 import threading
 from unittest.mock import patch
 
@@ -887,6 +889,18 @@ class TestShop:
                                'lines':      [{'variant_id': variant_id, 'quantity': quantity}],
                            })
 
+    def _upload_image(self, admin_client, item_id, filename='test.jpg'):
+        """Upload une image factice — patche _SHOP_DIR vers un dossier temporaire."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with patch('routes.shop._SHOP_DIR', tmpdir):
+                r = admin_client.post(
+                    f'/api/admin/shop/items/{item_id}/image',
+                    data={'image': (io.BytesIO(b'fake-image-data'), filename)},
+                    content_type='multipart/form-data',
+                    headers={'X-CSRFToken': 'test'}
+                )
+        return r.status_code, r.get_json()
+
     # ── Tests ─────────────────────────────────────────────────────────────────
 
     def test_shop_disabled_by_default(self, app, client):
@@ -1312,4 +1326,117 @@ class TestShop:
                               headers={'X-CSRFToken': 'test'})
         assert r.status_code == 400
         assert r.get_json()['ok'] is False
+
+    def test_upload_first_image_sets_primary(self, app, admin_client):
+        """Premier upload → is_primary=1 en DB, image_path de shop_items mis à jour."""
+        item_id = self._create_item(admin_client, 'Article Image Test')
+        status, data = self._upload_image(admin_client, item_id)
+        assert status == 200
+        assert data['ok'] is True
+        img = data['image']
+        assert img['is_primary'] == 1
+        with db_conn() as conn:
+            row = conn.execute(
+                "SELECT is_primary FROM shop_item_images WHERE id=?", (img['id'],)
+            ).fetchone()
+            assert row['is_primary'] == 1
+            item_row = conn.execute(
+                "SELECT image_path FROM shop_items WHERE id=?", (item_id,)
+            ).fetchone()
+            assert item_row['image_path'] == img['image_path']
+
+    def test_upload_max_5_images(self, app, admin_client):
+        """5 uploads réussis → 200 ; 6ème → 400."""
+        item_id = self._create_item(admin_client, 'Article 5 Photos')
+        for i in range(5):
+            status, data = self._upload_image(admin_client, item_id, f'img{i}.jpg')
+            assert status == 200, f"Upload {i + 1}/5 échoué : {data}"
+        status, data = self._upload_image(admin_client, item_id, 'img5.jpg')
+        assert status == 400
+        assert data['ok'] is False
+
+    def test_delete_primary_image_promotes_next(self, app, admin_client):
+        """Suppression de l'image principale → la suivante promue principale,
+        image_path de shop_items mis à jour."""
+        item_id = self._create_item(admin_client, 'Article Promo')
+        _, d1 = self._upload_image(admin_client, item_id, 'first.jpg')
+        _, d2 = self._upload_image(admin_client, item_id, 'second.jpg')
+        id1 = d1['image']['id']
+        id2 = d2['image']['id']
+
+        r = admin_client.post(f'/api/admin/shop/images/{id1}/delete',
+                              json={}, headers={'X-CSRFToken': 'test'})
+        assert r.status_code == 200
+        data = r.get_json()
+        assert data['ok'] is True
+        assert data['new_primary_id'] == id2
+
+        with db_conn() as conn:
+            assert conn.execute(
+                "SELECT is_primary FROM shop_item_images WHERE id=?", (id2,)
+            ).fetchone()['is_primary'] == 1
+            img2_path = conn.execute(
+                "SELECT image_path FROM shop_item_images WHERE id=?", (id2,)
+            ).fetchone()['image_path']
+            assert conn.execute(
+                "SELECT image_path FROM shop_items WHERE id=?", (item_id,)
+            ).fetchone()['image_path'] == img2_path
+
+    def test_delete_last_image_clears_image_path(self, app, admin_client):
+        """Suppression de la seule image → image_path=NULL dans shop_items."""
+        item_id = self._create_item(admin_client, 'Article Seul')
+        _, d = self._upload_image(admin_client, item_id, 'solo.jpg')
+        img_id = d['image']['id']
+
+        r = admin_client.post(f'/api/admin/shop/images/{img_id}/delete',
+                              json={}, headers={'X-CSRFToken': 'test'})
+        assert r.status_code == 200
+        assert r.get_json()['ok'] is True
+        with db_conn() as conn:
+            assert conn.execute(
+                "SELECT image_path FROM shop_items WHERE id=?", (item_id,)
+            ).fetchone()['image_path'] is None
+
+    def test_set_primary_image(self, app, admin_client):
+        """POST /images/<id2>/set_primary → is_primary=1 sur id2, 0 sur id1,
+        image_path de shop_items mis à jour."""
+        item_id = self._create_item(admin_client, 'Article Set Primary')
+        _, d1 = self._upload_image(admin_client, item_id, 'img1.jpg')
+        _, d2 = self._upload_image(admin_client, item_id, 'img2.jpg')
+        id1 = d1['image']['id']
+        id2 = d2['image']['id']
+
+        r = admin_client.post(f'/api/admin/shop/images/{id2}/set_primary',
+                              json={}, headers={'X-CSRFToken': 'test'})
+        assert r.status_code == 200
+        assert r.get_json()['ok'] is True
+
+        with db_conn() as conn:
+            assert conn.execute(
+                "SELECT is_primary FROM shop_item_images WHERE id=?", (id1,)
+            ).fetchone()['is_primary'] == 0
+            assert conn.execute(
+                "SELECT is_primary FROM shop_item_images WHERE id=?", (id2,)
+            ).fetchone()['is_primary'] == 1
+            img2_path = conn.execute(
+                "SELECT image_path FROM shop_item_images WHERE id=?", (id2,)
+            ).fetchone()['image_path']
+            assert conn.execute(
+                "SELECT image_path FROM shop_items WHERE id=?", (item_id,)
+            ).fetchone()['image_path'] == img2_path
+
+    def test_images_included_in_shop_items_response(self, app, admin_client, client):
+        """GET /api/shop/items → images[] présent et non vide après upload."""
+        self._enable_shop(admin_client)
+        item_id = self._create_item(admin_client, 'Article Images API')
+        self._upload_image(admin_client, item_id, 'api.jpg')
+
+        r = client.get('/api/shop/items')
+        assert r.status_code == 200
+        items = r.get_json()
+        target = next((i for i in items if i['id'] == item_id), None)
+        assert target is not None
+        assert 'images' in target
+        assert len(target['images']) == 1
+        assert target['images'][0]['is_primary'] == 1
 

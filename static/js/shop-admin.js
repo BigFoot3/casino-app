@@ -247,36 +247,6 @@ function buildItemBlock(item) {
   const actions = document.createElement('div');
   actions.className = 'd-flex gap-1 flex-wrap align-items-center';
 
-  // Upload image (input caché)
-  const fileInput    = document.createElement('input');
-  fileInput.type     = 'file';
-  fileInput.accept   = '.jpg,.jpeg,.png,.webp';
-  fileInput.style.display = 'none';
-
-  const btnUpload      = document.createElement('button');
-  btnUpload.type       = 'button';
-  btnUpload.className  = 'btn btn-sm btn-outline-secondary';
-  btnUpload.textContent = '🖼 Image';
-  btnUpload.addEventListener('click', () => fileInput.click());
-  fileInput.addEventListener('change', async () => {
-    if (!fileInput.files[0]) return;
-    await shopAction(btnUpload, async () => {
-      const fd = new FormData();
-      fd.append('image', fileInput.files[0]);
-      const r = await fetch(`/api/admin/shop/items/${item.id}/image`, {
-        method:  'POST',
-        headers: {'X-CSRFToken': CSRF},
-        body:    fd,
-      });
-      const d = await r.json();
-      if (r.ok && d.ok) { await loadItems(); }
-      else { showError('items-error', d.error || 'Erreur upload'); }
-    });
-    fileInput.value = '';
-  });
-  actions.appendChild(btnUpload);
-  actions.appendChild(fileInput);
-
   // Toggle actif/inactif
   const btnToggle      = document.createElement('button');
   btnToggle.type       = 'button';
@@ -341,10 +311,151 @@ function buildItemBlock(item) {
   row.appendChild(actions);
   wrap.appendChild(row);
 
+  // ── Images ──
+  wrap.appendChild(buildImagesSection(item));
+
   // ── Variantes ──
   wrap.appendChild(buildVariantsSection(item));
 
   return wrap;
+}
+
+function buildImagesSection(item) {
+  const section = document.createElement('div');
+  section.className = 'mt-2';
+
+  const gallery = document.createElement('div');
+  gallery.style.cssText = 'display:flex;flex-wrap:wrap;gap:6px;margin-bottom:6px;';
+
+  function updateGalleryBorders() {
+    for (const img of item.images) {
+      const el = gallery.querySelector(`[data-image-id="${img.id}"]`);
+      if (!el) continue;
+      el.style.borderColor = img.is_primary === 1 ? 'var(--mg-flame)' : 'var(--mg-velvet)';
+      const btnStar = el.querySelector('.img-btn-star');
+      if (btnStar) btnStar.disabled = img.is_primary === 1;
+    }
+  }
+
+  function buildThumb(img) {
+    const thumbWrap = document.createElement('div');
+    thumbWrap.dataset.imageId = img.id;
+    thumbWrap.style.cssText = 'position:relative;width:60px;height:60px;border-radius:4px;' +
+      'overflow:hidden;flex-shrink:0;border:2px solid ' +
+      (img.is_primary === 1 ? 'var(--mg-flame)' : 'var(--mg-velvet)') + ';';
+
+    const imgEl = document.createElement('img');
+    imgEl.src           = img.image_path;
+    imgEl.alt           = '';
+    imgEl.style.cssText = 'width:100%;height:100%;object-fit:cover;display:block;';
+    thumbWrap.appendChild(imgEl);
+
+    const overlay = document.createElement('div');
+    overlay.style.cssText = 'position:absolute;inset:0;display:flex;flex-direction:column;' +
+      'justify-content:space-between;padding:2px;pointer-events:none;';
+
+    const btnStar = document.createElement('button');
+    btnStar.type        = 'button';
+    btnStar.className   = 'img-btn-star';
+    btnStar.style.cssText = 'pointer-events:auto;background:rgba(14,4,5,0.72);' +
+      'color:var(--mg-ivory);border:none;border-radius:2px;font-size:0.6rem;' +
+      'line-height:1;padding:2px 4px;cursor:pointer;align-self:flex-start;';
+    btnStar.textContent = '★';
+    btnStar.disabled    = img.is_primary === 1;
+    btnStar.title       = 'Définir comme principale';
+    btnStar.addEventListener('click', async function () {
+      const [s, d] = await shopAction(this, () =>
+        apiPost(`/api/admin/shop/images/${img.id}/set_primary`)
+      );
+      if (s === 200 && d.ok) {
+        for (const i of item.images) i.is_primary = 0;
+        img.is_primary   = 1;
+        item.image_path  = img.image_path;
+        updateGalleryBorders();
+      } else {
+        showError('items-error', d && d.error ? d.error : 'Erreur');
+      }
+    });
+
+    const btnDel = document.createElement('button');
+    btnDel.type        = 'button';
+    btnDel.style.cssText = 'pointer-events:auto;background:rgba(14,4,5,0.72);' +
+      'color:var(--mg-ember);border:none;border-radius:2px;font-size:0.75rem;' +
+      'line-height:1;padding:2px 4px;cursor:pointer;align-self:flex-end;';
+    btnDel.textContent = '×';
+    btnDel.title       = 'Supprimer';
+    btnDel.addEventListener('click', async function () {
+      const [s, d] = await shopAction(this, () =>
+        apiPost(`/api/admin/shop/images/${img.id}/delete`)
+      );
+      if (s === 200 && d.ok) {
+        thumbWrap.remove();
+        const idx = item.images.findIndex(i => i.id === img.id);
+        if (idx !== -1) item.images.splice(idx, 1);
+        if (d.new_primary_id !== null) {
+          for (const i of item.images) i.is_primary = (i.id === d.new_primary_id ? 1 : 0);
+          const np = item.images.find(i => i.id === d.new_primary_id);
+          if (np) item.image_path = np.image_path;
+        } else {
+          item.image_path = null;
+        }
+        updateGalleryBorders();
+        if (item.images.length < 5) btnAdd.style.display = '';
+      } else {
+        showError('items-error', d && d.error ? d.error : 'Erreur suppression image');
+      }
+    });
+
+    overlay.appendChild(btnStar);
+    overlay.appendChild(btnDel);
+    thumbWrap.appendChild(overlay);
+    return thumbWrap;
+  }
+
+  for (const img of item.images) {
+    gallery.appendChild(buildThumb(img));
+  }
+  section.appendChild(gallery);
+
+  const fileInput   = document.createElement('input');
+  fileInput.type    = 'file';
+  fileInput.accept  = '.jpg,.jpeg,.png,.webp';
+  fileInput.style.display = 'none';
+
+  const btnAdd      = document.createElement('button');
+  btnAdd.type       = 'button';
+  btnAdd.className  = 'btn btn-sm btn-outline-light';
+  btnAdd.textContent = '+ Photo';
+  if (item.images.length >= 5) btnAdd.style.display = 'none';
+  btnAdd.addEventListener('click', () => fileInput.click());
+
+  fileInput.addEventListener('change', async () => {
+    if (!fileInput.files[0]) return;
+    await shopAction(btnAdd, async () => {
+      const fd = new FormData();
+      fd.append('image', fileInput.files[0]);
+      const r = await fetch(`/api/admin/shop/items/${item.id}/image`, {
+        method:  'POST',
+        headers: {'X-CSRFToken': CSRF},
+        body:    fd,
+      });
+      const d = await r.json();
+      if (r.ok && d.ok) {
+        const newImg = d.image;
+        item.images.push(newImg);
+        if (newImg.is_primary === 1) item.image_path = newImg.image_path;
+        gallery.appendChild(buildThumb(newImg));
+        if (item.images.length >= 5) btnAdd.style.display = 'none';
+      } else {
+        showError('items-error', d.error || 'Erreur upload');
+      }
+    });
+    fileInput.value = '';
+  });
+
+  section.appendChild(btnAdd);
+  section.appendChild(fileInput);
+  return section;
 }
 
 function buildVariantsSection(item) {
