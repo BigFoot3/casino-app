@@ -943,11 +943,30 @@ function buildOrderRow(order) {
   tdPhone.textContent      = order.phone;
   tr.appendChild(tdPhone);
 
-  const tdLines          = document.createElement('td');
-  tdLines.style.fontSize = '0.82rem';
-  tdLines.textContent    = order.lines
-    .map(l => l.item_name + ' ' + l.size_label + ' ×' + l.quantity)
-    .join(', ');
+  const tdLines = document.createElement('td');
+  const ul      = document.createElement('ul');
+  ul.className  = 'order-lines-list';
+  for (const l of order.lines) {
+    const li   = document.createElement('li');
+    li.className = 'order-lines-list__item';
+
+    const bullet = document.createElement('span');
+    bullet.className  = 'order-lines-list__bullet';
+    bullet.textContent = '•';
+
+    const nameEl = document.createElement('span');
+    nameEl.textContent = l.item_name;
+
+    const meta = document.createElement('span');
+    meta.className  = 'order-lines-list__meta';
+    meta.textContent = ' — ' + l.size_label + ' ×' + l.quantity;
+
+    li.appendChild(bullet);
+    li.appendChild(nameEl);
+    li.appendChild(meta);
+    ul.appendChild(li);
+  }
+  tdLines.appendChild(ul);
   tr.appendChild(tdLines);
 
   const tdStatus    = document.createElement('td');
@@ -957,8 +976,9 @@ function buildOrderRow(order) {
   tdStatus.appendChild(statusBadge);
   tr.appendChild(tdStatus);
 
-  const tdAct     = document.createElement('td');
-  tdAct.className = 'd-flex gap-1 flex-wrap';
+  const tdAct    = document.createElement('td');
+  const actWrap  = document.createElement('div');
+  actWrap.className = 'd-flex flex-column gap-1';
 
   if (order.status !== 'confirmed') {
     const btnOk       = document.createElement('button');
@@ -972,7 +992,7 @@ function buildOrderRow(order) {
       if (s === 200 && d.ok) await loadOrders();
       else showError('orders-error', d && d.error ? d.error : 'Erreur');
     });
-    tdAct.appendChild(btnOk);
+    actWrap.appendChild(btnOk);
   }
 
   if (order.status !== 'cancelled') {
@@ -987,9 +1007,10 @@ function buildOrderRow(order) {
       if (s === 200 && d.ok) await loadOrders();
       else showError('orders-error', d && d.error ? d.error : 'Erreur');
     });
-    tdAct.appendChild(btnKo);
+    actWrap.appendChild(btnKo);
   }
 
+  tdAct.appendChild(actWrap);
   tr.appendChild(tdAct);
   return tr;
 }
