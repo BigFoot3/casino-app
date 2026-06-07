@@ -127,6 +127,15 @@
   <img id="screamer-img" src="{{ url_for('static', filename='shop/modo_serio_gratteur.webp') }}" alt="">
 </div>
 
+<!-- Lightbox photo plein écran -->
+<div id="shop-lightbox" style="display:none" role="dialog" aria-modal="true" aria-label="Photo agrandie">
+  <div id="shop-lightbox-backdrop"></div>
+  <button type="button" id="shop-lightbox-close" aria-label="Fermer">×</button>
+  <button type="button" id="shop-lightbox-prev" aria-label="Image précédente" style="display:none">‹</button>
+  <img id="shop-lightbox-img" src="" alt="Photo agrandie">
+  <button type="button" id="shop-lightbox-next" aria-label="Image suivante" style="display:none">›</button>
+</div>
+
 <!-- FAB panier (fixe) -->
 <button type="button" id="btn-cart" class="cart-fab" aria-label="Panier">
   <svg width="22" height="22" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24" aria-hidden="true">
@@ -232,6 +241,7 @@ function renderGrid() {
       imgEl.src         = images[idx].image_path;
       imgEl.alt         = '';
       imgEl.className   = 'shop-card__img';
+      imgEl.addEventListener('click', () => openLightbox(images, idx));
       imgWrap.appendChild(imgEl);
 
       if (images.length > 1) {
@@ -521,6 +531,66 @@ btnPlaceOrder.addEventListener('click', async () => {
     btnPlaceOrder.textContent = origText;
   }
 });
+
+// ── Lightbox ─────────────────────────────────────────────────────────────────
+
+let lbImages = [];
+let lbIdx    = 0;
+
+const lightbox    = document.getElementById('shop-lightbox');
+const lbImg       = document.getElementById('shop-lightbox-img');
+const lbPrev      = document.getElementById('shop-lightbox-prev');
+const lbNext      = document.getElementById('shop-lightbox-next');
+const lbClose     = document.getElementById('shop-lightbox-close');
+const lbBackdrop  = document.getElementById('shop-lightbox-backdrop');
+
+function openLightbox(images, startIdx) {
+  lbImages = images;
+  lbIdx    = startIdx;
+  lbImg.setAttribute('src', lbImages[lbIdx].image_path);
+  const multi = lbImages.length > 1;
+  lbPrev.style.display = multi ? '' : 'none';
+  lbNext.style.display = multi ? '' : 'none';
+  lightbox.style.display = '';
+  document.body.style.overflow = 'hidden';
+}
+
+function closeLightbox() {
+  lightbox.style.display = 'none';
+  document.body.style.overflow = '';
+}
+
+lbClose.addEventListener('click', closeLightbox);
+lbBackdrop.addEventListener('click', closeLightbox);
+
+lbPrev.addEventListener('click', () => {
+  lbIdx = (lbIdx - 1 + lbImages.length) % lbImages.length;
+  lbImg.setAttribute('src', lbImages[lbIdx].image_path);
+});
+lbNext.addEventListener('click', () => {
+  lbIdx = (lbIdx + 1) % lbImages.length;
+  lbImg.setAttribute('src', lbImages[lbIdx].image_path);
+});
+
+document.addEventListener('keydown', e => {
+  if (lightbox.style.display === 'none') return;
+  if (e.key === 'Escape') { closeLightbox(); return; }
+  if (lbImages.length < 2) return;
+  if (e.key === 'ArrowLeft')  { lbIdx = (lbIdx - 1 + lbImages.length) % lbImages.length; lbImg.setAttribute('src', lbImages[lbIdx].image_path); }
+  if (e.key === 'ArrowRight') { lbIdx = (lbIdx + 1) % lbImages.length; lbImg.setAttribute('src', lbImages[lbIdx].image_path); }
+});
+
+let lbTouchStartX = 0;
+lightbox.addEventListener('touchstart', e => { lbTouchStartX = e.changedTouches[0].clientX; }, {passive: true});
+lightbox.addEventListener('touchend', e => {
+  if (lbImages.length < 2) return;
+  const dx = e.changedTouches[0].clientX - lbTouchStartX;
+  if (Math.abs(dx) < 40) return;
+  lbIdx = dx < 0
+    ? (lbIdx + 1) % lbImages.length
+    : (lbIdx - 1 + lbImages.length) % lbImages.length;
+  lbImg.setAttribute('src', lbImages[lbIdx].image_path);
+}, {passive: true});
 
 // ── Init ─────────────────────────────────────────────────────────────────────
 loadItems();

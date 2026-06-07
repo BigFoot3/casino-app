@@ -388,6 +388,10 @@ locust -f tests/locustfile.py --host=http://127.0.0.1:5000
 | 12 (2026-06-07) | `routes/api.py` | leaderboard() : sous-requête corélée soustrait `SUM(vote_boosts.amount)` du net P&L pour chaque joueur — cohérence avec docstring et CLAUDE.md |
 | 12 (2026-06-07) | `routes/player.py` | Ajout endpoint `GET /health` → `{"status": "ok"}` sans auth, sans DB, pour monitoring uptime |
 | 12 (2026-06-07) | `routes/api.py` | `@limiter.limit('60 per minute')` sur `/api/leaderboard`, `/api/history`, `/api/session/status`, `/api/session/bets` |
+| 13 (2026-06-07) | `templates/shop.html` | Lightbox plein écran : `#shop-lightbox` + backdrop + nav ‹ › — clic sur photo ouvre `openLightbox(images, idx)` |
+| 13 (2026-06-07) | `static/css/midnight-gala.css` | Section SHOP — Lightbox : `#shop-lightbox`, `#shop-lightbox-img`, close/prev/next, backdrop rgba ; `.shop-card__img { cursor:pointer }` |
+| 13 (2026-06-07) | `static/css/midnight-gala.css` | Section ADMIN SHOP — Commandes : `.order-lines-list`, `.order-lines-list__item`, `.order-lines-list__bullet`, `.order-lines-list__meta` |
+| 13 (2026-06-07) | `static/js/shop-admin.js` | `buildOrderRow()` : `tdLines` refactorisé en `<ul class="order-lines-list">` (bullet flame, meta rosewood) ; `tdAct` : suppression `d-flex` direct sur `<td>` → wrapper `<div class="d-flex flex-column gap-1">` (anti-pattern documenté) |
 
 ---
 
