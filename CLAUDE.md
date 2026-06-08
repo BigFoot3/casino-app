@@ -194,10 +194,10 @@ flask --app "app:create_app()" run
 **Tests:**
 ```bash
 cd /root/casino && source venv/bin/activate
-pytest tests/ -v --tb=short                  # 101 tests (100 passed + 1 xfail)
+pytest tests/ -v --tb=short                  # 114 passed + 1 xfailed
 pytest tests/ --cov=. --cov-report=term-missing
 ```
-Suite: conftest.py (fixtures: app, client, admin_client, player_client, player2_client, open_session) · test_casino.py (12 test classes)
+Suite: conftest.py (fixtures: app, client, admin_client, player_client, player2_client, open_session) · test_casino.py (13 test classes)
 xfail: test_no_double_bet_same_session (multi-bet allowed by frontend).
 
 **Load testing (Locust):**
@@ -392,6 +392,12 @@ locust -f tests/locustfile.py --host=http://127.0.0.1:5000
 | 13 (2026-06-07) | `static/css/midnight-gala.css` | Section SHOP — Lightbox : `#shop-lightbox`, `#shop-lightbox-img`, close/prev/next, backdrop rgba ; `.shop-card__img { cursor:pointer }` |
 | 13 (2026-06-07) | `static/css/midnight-gala.css` | Section ADMIN SHOP — Commandes : `.order-lines-list`, `.order-lines-list__item`, `.order-lines-list__bullet`, `.order-lines-list__meta` |
 | 13 (2026-06-07) | `static/js/shop-admin.js` | `buildOrderRow()` : `tdLines` refactorisé en `<ul class="order-lines-list">` (bullet flame, meta rosewood) ; `tdAct` : suppression `d-flex` direct sur `<td>` → wrapper `<div class="d-flex flex-column gap-1">` (anti-pattern documenté) |
+| 14 (2026-06-09) | `tests/test_casino.py` | Audit Phase 1 (3 axes) — rapport priorités généré |
+| 14 (2026-06-09) | `tests/test_casino.py` | `test_spin_session_admin` : assertion `0 <= winning_number <= 36` → `== 15` (vacuously true corrigée) |
+| 14 (2026-06-09) | `tests/test_casino.py` | `TestVoteState` +2 : `test_vote_display_state_public_no_auth` + `test_vote_display_state_with_active_session` — invariant public display-state couvert |
+| 14 (2026-06-09) | `tests/test_casino.py` | `TestAdminActions` +4 : `test_create_user_invalid_charset` (@parametrize 4 cas) — invariant XSS charset username |
+| 14 (2026-06-09) | `tests/test_casino.py` | `TestLeaderboard` +1 : `test_leaderboard_deducts_vote_boost_from_net` — invariant net P&L = bets − vote_boosts |
+| 14 (2026-06-09) | `tests/test_casino.py` | `TestAdminActions` +3 : `test_delete_superadmin_self_forbidden`, `test_delete_admin_by_regular_admin_forbidden`, `test_set_role_by_non_superadmin_forbidden` — invariants super-admin |
 
 ---
 

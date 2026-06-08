@@ -180,7 +180,7 @@ class TestRoulette:
                 (open_session,)
             ).fetchone()
         assert row['status'] == 'closed'
-        assert 0 <= row['winning_number'] <= 36
+        assert row['winning_number'] == 15
 
     def test_spin_forbidden_player(self, player_client, open_session):
         """Player → 403."""
@@ -387,6 +387,27 @@ class TestLeaderboard:
         assert len(d['winners']) >= 1
         assert d['winners'][0]['net'] > 0
 
+    def test_leaderboard_deducts_vote_boost_from_net(self, app, player_client, admin_client):
+        """vote_boosts soustrait du net P&L : net = (payout-amount) - boost."""
+        # Bet gagné : net brut = 150 - 50 = 100
+        _insert_closed_session_with_bet('player1', 'color', 'red', 50, 150, 3)
+        # Insérer un boost de 50 avec des IDs valides (FK active)
+        cid   = _create_category(admin_client, 'BoostCat')
+        vs_id = _open_vote(admin_client)
+        with db_conn() as conn:
+            uid = conn.execute(
+                'SELECT id FROM users WHERE username=?', ('player1',)
+            ).fetchone()['id']
+            conn.execute(
+                'INSERT INTO vote_boosts(session_id, user_id, category_id, amount) VALUES (?,?,?,?)',
+                (vs_id, uid, cid, 50)
+            )
+            conn.commit()
+        r = player_client.get('/api/leaderboard')
+        d = r.get_json()
+        assert len(d['top_winners']) >= 1
+        assert d['top_winners'][0]['net'] == 50  # 100 - 50
+
 # ═══════════════════════════════════════════════════════════════════════════════
 # TestAdminActions
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -440,6 +461,47 @@ class TestAdminActions:
                            data={'username': 'player1', 'password': new_pw},
                            follow_redirects=False)
             assert r_new.status_code == 302
+
+    def test_delete_superadmin_self_forbidden(self, app, admin_client):
+        """Super-admin tente de supprimer son propre compte (username='admin') → 403."""
+        with db_conn() as conn:
+            uid = conn.execute(
+                "SELECT id FROM users WHERE username='admin'"
+            ).fetchone()['id']
+        r = admin_client.post(f'/api/admin/users/{uid}/delete',
+                              json={}, headers={'X-CSRFToken': 'test'})
+        assert r.status_code == 403
+
+    def test_delete_admin_by_regular_admin_forbidden(self, app, admin_client):
+        """Admin non-super tente de supprimer un compte admin → 403."""
+        _create_user(db_module.DATABASE, 'admin2', 'admin2pass', 'admin')
+        with db_conn() as conn:
+            uid = conn.execute(
+                "SELECT id FROM users WHERE username='admin'"
+            ).fetchone()['id']
+        with app.test_client() as c:
+            _login(c, 'admin2', 'admin2pass')
+            r = c.post(f'/api/admin/users/{uid}/delete',
+                       json={}, headers={'X-CSRFToken': 'test'})
+        assert r.status_code == 403
+
+    def test_set_role_by_non_superadmin_forbidden(self, app, admin_client, player_client):
+        """Admin non-super tente POST set-role → 403."""
+        _create_user(db_module.DATABASE, 'admin2', 'admin2pass', 'admin')
+        uid = self._player_id()
+        with app.test_client() as c:
+            _login(c, 'admin2', 'admin2pass')
+            r = c.post(f'/api/admin/users/{uid}/set-role',
+                       json={'role': 'admin'}, headers={'X-CSRFToken': 'test'})
+        assert r.status_code == 403
+
+    @pytest.mark.parametrize('bad_name', ['<script>', 'user name', 'a' * 33, ''])
+    def test_create_user_invalid_charset(self, app, admin_client, bad_name):
+        """Nom invalide → 400 (invariant XSS : re.match r'^[a-zA-Z0-9_-]{1,32}$')."""
+        r = admin_client.post('/api/admin/users/create',
+                              json={'username': bad_name, 'role': 'player'},
+                              headers={'X-CSRFToken': 'test'})
+        assert r.status_code == 400
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -784,6 +846,27 @@ class TestVoteState:
         assert d['session']['status'] == 'open'
         cat = d['categories'][0]
         assert len(cat['user_rankings']) == 2
+
+    def test_vote_display_state_public_no_auth(self, app, client):
+        """GET /api/vote/display-state sans login → 200 (endpoint public, jamais 401)."""
+        r = client.get('/api/vote/display-state')
+        assert r.status_code == 200
+        d = r.get_json()
+        assert 'session' in d
+        assert 'display_category' in d
+
+    def test_vote_display_state_with_active_session(self, app, client, admin_client):
+        """Catégorie projetée via display-category → display_category retourné sans auth."""
+        cid = _create_category(admin_client, 'DisplayTest')
+        _add_film(admin_client, 'Film D', cid)
+        _open_vote(admin_client)
+        admin_client.post('/api/admin/vote/display-category',
+                          json={'category_id': cid}, headers={'X-CSRFToken': 'test'})
+        r = client.get('/api/vote/display-state')
+        assert r.status_code == 200
+        d = r.get_json()
+        assert d['session'] is not None
+        assert d['display_category']['id'] == cid
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
