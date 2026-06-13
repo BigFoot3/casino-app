@@ -904,7 +904,7 @@ function renderOrders(orders) {
 
   const thead   = document.createElement('thead');
   const headRow = document.createElement('tr');
-  for (const label of ['Date', 'Prénom', 'Nom', 'Téléphone', 'Articles', 'Statut', '']) {
+  for (const label of ['Date', 'Prénom', 'Nom', 'Téléphone', 'Articles', 'Montant', 'Statut', '']) {
     const th       = document.createElement('th');
     th.textContent = label;
     headRow.appendChild(th);
@@ -969,6 +969,13 @@ function buildOrderRow(order) {
   tdLines.appendChild(ul);
   tr.appendChild(tdLines);
 
+  const tdTotal = document.createElement('td');
+  tdTotal.style.fontFamily = 'var(--mg-font-mono)';
+  tdTotal.style.fontSize   = '0.78rem';
+  tdTotal.style.textAlign  = 'right';
+  tdTotal.textContent = (order.total != null) ? order.total.toFixed(2) + ' €' : '—';
+  tr.appendChild(tdTotal);
+
   const tdStatus    = document.createElement('td');
   const statusBadge = document.createElement('span');
   statusBadge.className   = 'badge ' + statusBadgeClass(order.status);
@@ -979,6 +986,15 @@ function buildOrderRow(order) {
   const tdAct    = document.createElement('td');
   const actWrap  = document.createElement('div');
   actWrap.className = 'd-flex flex-column gap-1';
+
+  if (order.status !== 'cancelled') {
+    const btnEdit       = document.createElement('button');
+    btnEdit.type        = 'button';
+    btnEdit.className   = 'btn btn-sm btn-outline-light text-nowrap';
+    btnEdit.textContent = '✏ Éditer';
+    btnEdit.addEventListener('click', () => openEditOrderModal(order));
+    actWrap.appendChild(btnEdit);
+  }
 
   if (order.status !== 'confirmed') {
     const btnOk       = document.createElement('button');
@@ -1020,6 +1036,146 @@ function statusBadgeClass(status) {
   if (status === 'cancelled') return 'bg-danger';
   return 'bg-secondary';
 }
+
+// ── Modale édition commande ───────────────────────────────────────────────────
+
+const modalEditOrderEl = document.getElementById('modal-edit-order');
+const modalEditOrder   = new bootstrap.Modal(modalEditOrderEl);
+let   currentEditOrder = null;
+
+function _buildVariantOptions(itemId) {
+  const it = items.find(i => i.id === itemId);
+  return it ? it.variants : [];
+}
+
+function _addEditOrderLine(container, variantId, quantity) {
+  const row = document.createElement('div');
+  row.className = 'd-flex gap-2 mb-2 align-items-center edit-order-line-row';
+
+  const selItem = document.createElement('select');
+  selItem.className = 'form-select form-select-sm';
+  for (const it of items) {
+    const opt = document.createElement('option');
+    opt.value       = it.id;
+    opt.textContent = it.name;
+    selItem.appendChild(opt);
+  }
+
+  const selVariant = document.createElement('select');
+  selVariant.className = 'form-select form-select-sm';
+
+  function refreshVariants(selectedVariantId) {
+    selVariant.replaceChildren();
+    const vs = _buildVariantOptions(parseInt(selItem.value, 10));
+    for (const v of vs) {
+      const opt = document.createElement('option');
+      opt.value       = v.id;
+      opt.textContent = v.size_label;
+      if (v.id === selectedVariantId) opt.selected = true;
+      selVariant.appendChild(opt);
+    }
+  }
+
+  // Pre-select item from variantId
+  if (variantId) {
+    for (const it of items) {
+      if (it.variants.some(v => v.id === variantId)) {
+        selItem.value = it.id;
+        break;
+      }
+    }
+  }
+  refreshVariants(variantId || null);
+  selItem.addEventListener('change', () => refreshVariants(null));
+
+  const qtyInput = document.createElement('input');
+  qtyInput.type      = 'number';
+  qtyInput.min       = '1';
+  qtyInput.value     = quantity || 1;
+  qtyInput.className = 'form-control form-control-sm';
+  qtyInput.style.width = '70px';
+
+  const btnDel = document.createElement('button');
+  btnDel.type        = 'button';
+  btnDel.className   = 'btn btn-sm btn-outline-danger';
+  btnDel.textContent = '×';
+  btnDel.addEventListener('click', () => row.remove());
+
+  row.appendChild(selItem);
+  row.appendChild(selVariant);
+  row.appendChild(qtyInput);
+  row.appendChild(btnDel);
+  container.appendChild(row);
+}
+
+function openEditOrderModal(order) {
+  currentEditOrder = order;
+  document.getElementById('edit-order-first-name').value = order.first_name;
+  document.getElementById('edit-order-last-name').value  = order.last_name;
+  document.getElementById('edit-order-phone').value      = order.phone;
+  document.getElementById('edit-order-error').style.display = 'none';
+
+  const container = document.getElementById('edit-order-lines');
+  container.replaceChildren();
+
+  // Rebuild lines from order.lines using variant matching
+  for (const l of order.lines) {
+    // Find variant_id from item + size_label
+    let variantId = null;
+    for (const it of items) {
+      const v = it.variants.find(v => v.size_label === l.size_label);
+      if (v && it.name === l.item_name) { variantId = v.id; break; }
+    }
+    _addEditOrderLine(container, variantId, l.quantity);
+  }
+
+  modalEditOrder.show();
+}
+
+document.getElementById('btn-edit-order-add-line').addEventListener('click', () => {
+  _addEditOrderLine(document.getElementById('edit-order-lines'), null, 1);
+});
+
+document.getElementById('btn-submit-edit-order').addEventListener('click', async function () {
+  if (!currentEditOrder) return;
+  const errEl = document.getElementById('edit-order-error');
+  errEl.style.display = 'none';
+
+  const lines = [];
+  for (const row of document.querySelectorAll('#edit-order-lines .edit-order-line-row')) {
+    const sels = row.querySelectorAll('select');
+    const qty  = parseInt(row.querySelector('input[type=number]').value, 10);
+    const variantId = parseInt(sels[1].value, 10);
+    if (!variantId || !qty || qty < 1) continue;
+    lines.push({variant_id: variantId, quantity: qty});
+  }
+
+  if (lines.length === 0) {
+    errEl.textContent    = 'Au moins un article requis.';
+    errEl.style.display  = '';
+    return;
+  }
+
+  const [s, d] = await shopAction(this, () =>
+    apiPost('/api/admin/shop/orders/' + currentEditOrder.id + '/edit', {
+      first_name: document.getElementById('edit-order-first-name').value.trim(),
+      last_name:  document.getElementById('edit-order-last-name').value.trim(),
+      phone:      document.getElementById('edit-order-phone').value.trim(),
+      lines,
+    })
+  );
+  if (s === 200 && d.ok) {
+    modalEditOrder.hide();
+    await loadOrders();
+  } else {
+    errEl.textContent   = (d && d.error) ? d.error : 'Erreur lors de la sauvegarde.';
+    errEl.style.display = '';
+  }
+});
+
+modalEditOrderEl.addEventListener('hidden.bs.modal', () => {
+  currentEditOrder = null;
+});
 
 // ── Init ─────────────────────────────────────────────────────────────────────
 

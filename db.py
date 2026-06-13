@@ -140,6 +140,18 @@ def _migrate_shop_item_images():
         print('DB migration: shop_item_images created.', flush=True)
 
 
+def _migrate_shop_order_lines_price():
+    """Add unit_price column to shop_order_lines if missing."""
+    with db_conn() as conn:
+        cols = [r[1] for r in conn.execute('PRAGMA table_info(shop_order_lines)').fetchall()]
+        if 'unit_price' in cols:
+            return
+        conn.execute('BEGIN IMMEDIATE')
+        conn.execute('ALTER TABLE shop_order_lines ADD COLUMN unit_price REAL')
+        conn.execute('COMMIT')
+        print('DB migration: shop_order_lines.unit_price added.', flush=True)
+
+
 def _migrate_shop_preorder():
     """Add preorder column to shop_items if missing."""
     with db_conn() as conn:
@@ -279,6 +291,7 @@ def init_db():
         _migrate_vote_boosts_amount()
         _migrate_shop_preorder()
         _migrate_shop_item_images()
+        _migrate_shop_order_lines_price()
 
 
 def get_config(conn) -> dict:

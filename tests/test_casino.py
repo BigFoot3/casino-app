@@ -1596,3 +1596,139 @@ class TestShop:
         assert len(target['images']) == 1
         assert target['images'][0]['is_primary'] == 1
 
+
+class TestEditOrder:
+    """Tests pour POST /api/admin/shop/orders/<id>/edit."""
+
+    def _setup(self, admin_client, client):
+        admin_client.post('/api/admin/shop/shop_enabled', json={'enabled': True},
+                          headers={'X-CSRFToken': 'test'})
+        r = admin_client.post('/api/admin/shop/items',
+                              json={'name': 'T-Shirt', 'price': 20.0, 'variants': []},
+                              headers={'X-CSRFToken': 'test'})
+        item_id = r.get_json()['item_id']
+        r_v1 = admin_client.post('/api/admin/shop/variants',
+                                 json={'item_id': item_id, 'size_label': 'S', 'stock': 5},
+                                 headers={'X-CSRFToken': 'test'})
+        r_v2 = admin_client.post('/api/admin/shop/variants',
+                                 json={'item_id': item_id, 'size_label': 'L', 'stock': 5},
+                                 headers={'X-CSRFToken': 'test'})
+        v1 = r_v1.get_json()['variant_id']
+        v2 = r_v2.get_json()['variant_id']
+        r_o = client.post('/api/shop/order',
+                          json={'first_name': 'Alice', 'last_name': 'Martin', 'phone': '0600000001',
+                                'lines': [{'variant_id': v1, 'quantity': 2}]})
+        order_id = r_o.get_json()['order_id']
+        return item_id, v1, v2, order_id
+
+    def test_edit_order_contact(self, app, admin_client, client):
+        """Modifier prénom/nom/téléphone met bien à jour shop_orders."""
+        item_id, v1, v2, order_id = self._setup(admin_client, client)
+        r = admin_client.post(f'/api/admin/shop/orders/{order_id}/edit',
+                              json={'first_name': 'Bob', 'last_name': 'Dupont',
+                                    'phone': '0611111111',
+                                    'lines': [{'variant_id': v1, 'quantity': 1}]},
+                              headers={'X-CSRFToken': 'test'})
+        assert r.status_code == 200
+        assert r.get_json()['ok'] is True
+        with db_conn() as conn:
+            row = conn.execute("SELECT first_name, last_name, phone FROM shop_orders WHERE id=?",
+                               (order_id,)).fetchone()
+        assert row['first_name'] == 'Bob'
+        assert row['last_name']  == 'Dupont'
+        assert row['phone']      == '0611111111'
+
+    def test_edit_order_lines_stock_reconciled(self, app, admin_client, client):
+        """Changer de variante restitue le stock de l'ancienne et décrémente la nouvelle."""
+        item_id, v1, v2, order_id = self._setup(admin_client, client)
+        # v1 avait stock=5, on a commandé qty=2 → stock v1 doit être 3 après _setup
+        # On édite : on remplace v1 par v2 qty=1
+        r = admin_client.post(f'/api/admin/shop/orders/{order_id}/edit',
+                              json={'first_name': 'Alice', 'last_name': 'Martin',
+                                    'phone': '0600000001',
+                                    'lines': [{'variant_id': v2, 'quantity': 1}]},
+                              headers={'X-CSRFToken': 'test'})
+        assert r.status_code == 200
+        with db_conn() as conn:
+            s1 = conn.execute("SELECT stock FROM shop_variants WHERE id=?", (v1,)).fetchone()['stock']
+            s2 = conn.execute("SELECT stock FROM shop_variants WHERE id=?", (v2,)).fetchone()['stock']
+        assert s1 == 5   # restitué intégralement
+        assert s2 == 4   # décrémenté de 1
+
+    def test_edit_order_cancelled_forbidden(self, app, admin_client, client):
+        """Éditer une commande annulée renvoie 400."""
+        item_id, v1, v2, order_id = self._setup(admin_client, client)
+        # Annuler la commande
+        admin_client.post(f'/api/admin/shop/orders/{order_id}/status',
+                          json={'status': 'cancelled'},
+                          headers={'X-CSRFToken': 'test'})
+        r = admin_client.post(f'/api/admin/shop/orders/{order_id}/edit',
+                              json={'first_name': 'X', 'last_name': 'Y', 'phone': '0600000000',
+                                    'lines': [{'variant_id': v1, 'quantity': 1}]},
+                              headers={'X-CSRFToken': 'test'})
+        assert r.status_code == 400
+        assert 'annulée' in r.get_json().get('error', '')
+
+
+class TestOrderUnitPrice:
+    """Vérifie que unit_price est capturé à la commande et renvoyé dans le total admin."""
+
+    def _setup(self, app, admin_client, client):
+        """Crée boutique + article + variante, active la boutique."""
+        admin_client.post('/api/admin/shop/shop_enabled', json={'enabled': True},
+                          headers={'X-CSRFToken': 'test'})
+        r = admin_client.post('/api/admin/shop/items',
+                              json={'name': 'Article Prix', 'price': 12.50, 'variants': []},
+                              headers={'X-CSRFToken': 'test'})
+        item_id = r.get_json()['item_id']
+        r2 = admin_client.post('/api/admin/shop/variants',
+                               json={'item_id': item_id, 'size_label': 'L', 'stock': 10},
+                               headers={'X-CSRFToken': 'test'})
+        variant_id = r2.get_json()['variant_id']
+        return item_id, variant_id
+
+    def test_order_captures_unit_price(self, app, admin_client, client):
+        """POST /api/shop/order stocke unit_price=12.50 dans shop_order_lines."""
+        item_id, variant_id = self._setup(app, admin_client, client)
+        r = client.post('/api/shop/order',
+                        json={'first_name': 'A', 'last_name': 'B', 'phone': '0600000000',
+                              'lines': [{'variant_id': variant_id, 'quantity': 2}]})
+        assert r.status_code == 200
+        order_id = r.get_json()['order_id']
+        with db_conn() as conn:
+            row = conn.execute(
+                "SELECT unit_price, quantity FROM shop_order_lines WHERE order_id=?",
+                (order_id,)
+            ).fetchone()
+        assert row['unit_price'] == 12.50
+        assert row['quantity'] == 2
+
+    def test_order_total_in_admin_list(self, app, admin_client, client):
+        """GET /api/admin/shop/orders renvoie total=25.0 pour une commande avec unit_price renseigné."""
+        item_id, variant_id = self._setup(app, admin_client, client)
+        client.post('/api/shop/order',
+                    json={'first_name': 'C', 'last_name': 'D', 'phone': '0611111111',
+                          'lines': [{'variant_id': variant_id, 'quantity': 2}]})
+        r = admin_client.get('/api/admin/shop/orders')
+        assert r.status_code == 200
+        orders = r.get_json()
+        latest = next((o for o in orders if o['first_name'] == 'C'), None)
+        assert latest is not None
+        assert latest['total'] == 25.0
+
+
+class TestOrderDateTimezone:
+    """Vérifie que created_at des commandes est converti en heure de Paris (Europe/Paris)."""
+
+    def test_to_paris_summer_cest(self):
+        """UTC 13:39 → CEST 15:39 (UTC+2, heure d'été)."""
+        from routes.shop import _to_paris
+        result = _to_paris("2026-06-13 13:39:00")
+        assert result == "2026-06-13 15:39"
+
+    def test_to_paris_winter_cet(self):
+        """UTC 10:00 → CET 11:00 (UTC+1, heure d'hiver)."""
+        from routes.shop import _to_paris
+        result = _to_paris("2026-01-15 10:00:00")
+        assert result == "2026-01-15 11:00"
+

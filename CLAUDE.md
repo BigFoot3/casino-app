@@ -284,6 +284,10 @@ locust -f tests/locustfile.py --host=http://127.0.0.1:5000
 - ⚠️ **admin users** — collapsible list (collapse show by default) + live filter + scroll 5 rows.
 - ⚠️ **vote tracking closed** — #vote-tracking-section visible when app_mode='closed' (admin can review results before palmares/reset-mode decision).
 - ⚠️ **shop td d-flex** — never set `display:flex` directly on a `<td>` (Bootstrap/browser vertical-align breaks). Always wrap buttons in an inner `<div class="d-flex …">` inside the td.
+- ⚠️ **_to_paris()** — parses the SQLite naive UTC string `"YYYY-MM-DD HH:MM:SS"`, attaches `timezone.utc`, converts via `ZoneInfo("Europe/Paris")`. Never use `timedelta(hours=N)` (breaks in winter CET=UTC+1).
+- ⚠️ **shop_order_lines.unit_price** — NULL on orders created before session 15 (pre-migration). `admin_list_orders` returns `total=None` → displayed as `"—"` in JS. Never assume `unit_price IS NOT NULL`.
+- ⚠️ **openEditOrderModal** — rebuilds lines by matching `item_name + size_label` → `variant_id` in `items[]`. If an item or variant was deleted since the order was placed, the select will be empty.
+- ⚠️ **POST /api/admin/shop/orders/<id>/edit** — forbidden if `status='cancelled'` (400). Stock reconciliation: restores old variant stock **before** decrementing new one, all in `BEGIN IMMEDIATE`.
 
 **Roulette & Session State:**
 - ⚠️ **APScheduler** — game_tick() runs only in Gunicorn master (preload_app=True). Do NOT run in `flask run`.
@@ -398,6 +402,16 @@ locust -f tests/locustfile.py --host=http://127.0.0.1:5000
 | 14 (2026-06-09) | `tests/test_casino.py` | `TestAdminActions` +4 : `test_create_user_invalid_charset` (@parametrize 4 cas) — invariant XSS charset username |
 | 14 (2026-06-09) | `tests/test_casino.py` | `TestLeaderboard` +1 : `test_leaderboard_deducts_vote_boost_from_net` — invariant net P&L = bets − vote_boosts |
 | 14 (2026-06-09) | `tests/test_casino.py` | `TestAdminActions` +3 : `test_delete_superadmin_self_forbidden`, `test_delete_admin_by_regular_admin_forbidden`, `test_set_role_by_non_superadmin_forbidden` — invariants super-admin |
+| 15 (2026-06-13) | `routes/shop.py` | `_to_paris()` + `ZoneInfo("Europe/Paris")` — `created_at` commandes converti UTC→Paris dans `admin_list_orders()` |
+| 15 (2026-06-13) | `templates/shop.html` | Panier : `price` ajouté à `cart[]`, prix ligne + total `.cart-total` en bas de sidebar |
+| 15 (2026-06-13) | `static/css/midnight-gala.css` | `.cart-line__price`, `.cart-total` |
+| 15 (2026-06-13) | `db.py` | `_migrate_shop_order_lines_price()` — `shop_order_lines.unit_price REAL` (NULL sur existantes) |
+| 15 (2026-06-13) | `routes/shop.py` | `POST /api/shop/order` capture `unit_price` depuis `shop_items.price` au moment de la commande |
+| 15 (2026-06-13) | `routes/shop.py` | `admin_list_orders` : calcule `total = SUM(unit_price × quantity)`, `None` si toutes NULL |
+| 15 (2026-06-13) | `static/js/shop-admin.js` | `buildOrderRow()` : colonne Montant + bouton ✏ Éditer (si non-annulée) + `openEditOrderModal()` |
+| 15 (2026-06-13) | `templates/admin/shop.html` | Modale `#modal-edit-order` (contact + lignes dynamiques) |
+| 15 (2026-06-13) | `routes/shop.py` | Nouvelle route `POST /api/admin/shop/orders/<id>/edit` — réconciliation stock complète |
+| 15 (2026-06-13) | `tests/test_casino.py` | +5 tests (timezone Paris, unit_price capturé, total admin, édition commande ×3) — 121 passed + 1 xfailed |
 
 ---
 

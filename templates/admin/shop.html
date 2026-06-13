@@ -166,6 +166,37 @@
   </div>
 </div>
 
+<!-- Modale édition commande -->
+<div class="modal fade" id="modal-edit-order" tabindex="-1">
+  <div class="modal-dialog modal-dialog-centered modal-lg">
+    <div class="modal-content p-4">
+      <h5 class="modal-title mb-3">Modifier la commande</h5>
+      <div class="row g-2 mb-3">
+        <div class="col-sm-4">
+          <label class="form-label" for="edit-order-first-name">Prénom</label>
+          <input type="text" id="edit-order-first-name" class="form-control form-control-sm">
+        </div>
+        <div class="col-sm-4">
+          <label class="form-label" for="edit-order-last-name">Nom</label>
+          <input type="text" id="edit-order-last-name" class="form-control form-control-sm">
+        </div>
+        <div class="col-sm-4">
+          <label class="form-label" for="edit-order-phone">Téléphone</label>
+          <input type="tel" id="edit-order-phone" class="form-control form-control-sm">
+        </div>
+      </div>
+      <label class="form-label">Articles</label>
+      <div id="edit-order-lines" class="mb-2"></div>
+      <button type="button" class="btn btn-sm btn-outline-secondary mb-3" id="btn-edit-order-add-line">+ Ajouter un article</button>
+      <div id="edit-order-error" class="small mb-2" style="display:none;color:var(--mg-ember)"></div>
+      <div class="d-flex gap-2">
+        <button type="button" class="btn btn-secondary btn-sm flex-fill" data-bs-dismiss="modal">Annuler</button>
+        <button type="button" class="btn btn-primary btn-sm flex-fill" id="btn-submit-edit-order">Enregistrer</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <!-- Page header -->
 <div class="mg-page-head mb-3">
   <div>

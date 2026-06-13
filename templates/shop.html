@@ -394,6 +394,7 @@ btnAddToCart.addEventListener('click', () => {
       sizeLabel: variant.size_label,
       quantity:  qty,
       maxStock:  variant.stock,
+      price:     currentItem.price,
     });
   }
 
@@ -440,6 +441,13 @@ function renderCartLines() {
     sizeEl.textContent = line.sizeLabel + ' × ' + line.quantity;
     info.appendChild(sizeEl);
 
+    if (line.price != null) {
+      const priceEl = document.createElement('span');
+      priceEl.className = 'cart-line__price';
+      priceEl.textContent = (line.price * line.quantity).toFixed(2) + ' €';
+      info.appendChild(priceEl);
+    }
+
     const del = document.createElement('button');
     del.type = 'button';
     del.className = 'cart-line__del';
@@ -456,6 +464,15 @@ function renderCartLines() {
     row.appendChild(info);
     row.appendChild(del);
     cartLines.appendChild(row);
+  }
+
+  const linesWithPrice = cart.filter(l => l.price != null);
+  if (linesWithPrice.length > 0) {
+    const totalVal = linesWithPrice.reduce((s, l) => s + l.price * l.quantity, 0);
+    const totalEl = document.createElement('div');
+    totalEl.className = 'cart-total';
+    totalEl.textContent = 'Total : ' + totalVal.toFixed(2) + ' €';
+    cartLines.appendChild(totalEl);
   }
 }
 

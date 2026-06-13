@@ -1317,6 +1317,21 @@ a:hover { color: var(--mg-ivory); }
   color: var(--mg-rosewood);
 }
 
+.cart-line__price {
+  font-family: var(--mg-font-mono);
+  font-size: 0.78rem;
+  color: var(--mg-rosewood);
+}
+
+.cart-total {
+  padding: 10px 20px;
+  font-weight: 700;
+  color: var(--mg-ivory);
+  border-top: 1px solid var(--mg-border-strong);
+  text-align: right;
+  font-size: 0.9rem;
+}
+
 .cart-line__del {
   color: var(--mg-rosewood);
   border: none;

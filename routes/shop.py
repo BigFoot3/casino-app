@@ -1,6 +1,8 @@
 import os
 import re
 import time
+from datetime import datetime, timezone
+from zoneinfo import ZoneInfo
 
 from PIL import Image as _PIL_Image
 from flask import (Blueprint, jsonify, request, session as flask_session, abort)
@@ -92,6 +94,7 @@ def shop_order():
             conn.execute('ROLLBACK')
             return jsonify({'ok': False, 'error': 'La boutique est fermée'}), 400
         preorder_variants = set()
+        variant_prices = {}
         for line in lines:
             variant_id = line.get('variant_id')
             quantity   = line.get('quantity')
@@ -99,7 +102,8 @@ def shop_order():
                 conn.execute('ROLLBACK')
                 return jsonify({'ok': False, 'error': 'Ligne invalide'}), 400
             row = conn.execute(
-                """SELECT sv.stock, sv.size_label, si.name AS item_name, si.preorder AS item_preorder
+                """SELECT sv.stock, sv.size_label, si.name AS item_name,
+                          si.preorder AS item_preorder, si.price AS item_price
                    FROM shop_variants sv
                    JOIN shop_items si ON si.id = sv.item_id
                    WHERE sv.id=?""",
@@ -108,6 +112,7 @@ def shop_order():
             if not row:
                 conn.execute('ROLLBACK')
                 return jsonify({'ok': False, 'error': f'Variante {variant_id} introuvable'}), 400
+            variant_prices[variant_id] = row['item_price']
             if row['item_preorder']:
                 preorder_variants.add(variant_id)
             elif row['stock'] < quantity:
@@ -127,9 +132,10 @@ def shop_order():
         for line in lines:
             variant_id = line['variant_id']
             quantity   = line['quantity']
+            unit_price = variant_prices.get(variant_id)
             conn.execute(
-                "INSERT INTO shop_order_lines(order_id, variant_id, quantity) VALUES (?,?,?)",
-                (order_id, variant_id, quantity)
+                "INSERT INTO shop_order_lines(order_id, variant_id, quantity, unit_price) VALUES (?,?,?,?)",
+                (order_id, variant_id, quantity, unit_price)
             )
             if variant_id not in preorder_variants:
                 conn.execute(
@@ -595,6 +601,14 @@ def admin_delete_variant(variant_id):
     return jsonify({'ok': True})
 
 
+_PARIS = ZoneInfo("Europe/Paris")
+
+def _to_paris(dt_str: str) -> str:
+    """Convert a naive UTC datetime string (SQLite datetime('now')) to Europe/Paris, formatted YYYY-MM-DD HH:MM."""
+    dt = datetime.strptime(dt_str, "%Y-%m-%d %H:%M:%S").replace(tzinfo=timezone.utc)
+    return dt.astimezone(_PARIS).strftime("%Y-%m-%d %H:%M")
+
+
 @shop_bp.route('/api/admin/shop/orders')
 def admin_list_orders():
     _require_admin()
@@ -623,20 +637,23 @@ def admin_list_orders():
         result = []
         for o in orders:
             lines = conn.execute(
-                """SELECT si.name AS item_name, sv.size_label, sol.quantity
+                """SELECT si.name AS item_name, sv.size_label, sol.quantity, sol.unit_price
                    FROM shop_order_lines sol
                    JOIN shop_variants sv ON sv.id = sol.variant_id
                    JOIN shop_items    si ON si.id = sv.item_id
                    WHERE sol.order_id = ?""",
                 (o['id'],)
             ).fetchall()
+            has_price = any(l['unit_price'] is not None for l in lines)
+            total = sum(l['unit_price'] * l['quantity'] for l in lines if l['unit_price'] is not None) if has_price else None
             result.append({
                 'id':         o['id'],
-                'created_at': o['created_at'],
+                'created_at': _to_paris(o['created_at']),
                 'status':     o['status'],
                 'first_name': o['first_name'],
                 'last_name':  o['last_name'],
                 'phone':      o['phone'],
+                'total':      total,
                 'lines': [
                     {'item_name': l['item_name'], 'size_label': l['size_label'], 'quantity': l['quantity']}
                     for l in lines
@@ -710,6 +727,91 @@ def admin_update_order_status(order_id):
                     )
 
         conn.execute("UPDATE shop_orders SET status=? WHERE id=?", (new_status, order_id))
+        conn.execute('COMMIT')
+    return jsonify({'ok': True})
+
+
+@shop_bp.route('/api/admin/shop/orders/<int:order_id>/edit', methods=['POST'])
+def admin_edit_order(order_id):
+    _require_admin()
+    data       = request.get_json(force=True) or {}
+    first_name = (data.get('first_name') or '').strip()
+    last_name  = (data.get('last_name')  or '').strip()
+    phone      = (data.get('phone')      or '').strip()
+    new_lines  = data.get('lines', [])
+
+    if not first_name or not last_name or not phone:
+        return jsonify({'ok': False, 'error': 'Prénom, nom et téléphone requis'}), 400
+    if not isinstance(new_lines, list) or len(new_lines) == 0:
+        return jsonify({'ok': False, 'error': 'Au moins une ligne requise'}), 400
+    for l in new_lines:
+        if not isinstance(l.get('variant_id'), int) or not isinstance(l.get('quantity'), int) or l['quantity'] < 1:
+            return jsonify({'ok': False, 'error': 'Ligne invalide'}), 400
+
+    with db_conn() as conn:
+        conn.execute('BEGIN IMMEDIATE')
+        order = conn.execute(
+            "SELECT id, status FROM shop_orders WHERE id=?", (order_id,)
+        ).fetchone()
+        if not order:
+            conn.execute('ROLLBACK')
+            return jsonify({'ok': False, 'error': 'Commande introuvable'}), 404
+        if order['status'] == 'cancelled':
+            conn.execute('ROLLBACK')
+            return jsonify({'ok': False, 'error': 'Impossible de modifier une commande annulée'}), 400
+
+        # Restituer le stock des anciennes lignes non-preorder
+        old_lines = conn.execute(
+            """SELECT sol.variant_id, sol.quantity, si.preorder AS item_preorder
+               FROM shop_order_lines sol
+               JOIN shop_variants sv ON sv.id = sol.variant_id
+               JOIN shop_items si ON si.id = sv.item_id
+               WHERE sol.order_id = ?""",
+            (order_id,)
+        ).fetchall()
+        for ol in old_lines:
+            if not ol['item_preorder']:
+                conn.execute(
+                    "UPDATE shop_variants SET stock = stock + ? WHERE id=?",
+                    (ol['quantity'], ol['variant_id'])
+                )
+        conn.execute("DELETE FROM shop_order_lines WHERE order_id=?", (order_id,))
+
+        # Insérer les nouvelles lignes
+        for line in new_lines:
+            variant_id = line['variant_id']
+            quantity   = line['quantity']
+            row = conn.execute(
+                """SELECT sv.stock, sv.size_label, si.name AS item_name,
+                          si.preorder AS item_preorder, si.price AS item_price
+                   FROM shop_variants sv
+                   JOIN shop_items si ON si.id = sv.item_id
+                   WHERE sv.id=?""",
+                (variant_id,)
+            ).fetchone()
+            if not row:
+                conn.execute('ROLLBACK')
+                return jsonify({'ok': False, 'error': f'Variante {variant_id} introuvable'}), 400
+            if not row['item_preorder'] and row['stock'] < quantity:
+                conn.execute('ROLLBACK')
+                return jsonify({
+                    'ok': False,
+                    'error': f'Stock insuffisant pour {row["item_name"]} ({row["size_label"]})',
+                }), 400
+            conn.execute(
+                "INSERT INTO shop_order_lines(order_id, variant_id, quantity, unit_price) VALUES (?,?,?,?)",
+                (order_id, variant_id, quantity, row['item_price'])
+            )
+            if not row['item_preorder']:
+                conn.execute(
+                    "UPDATE shop_variants SET stock = stock - ? WHERE id=?",
+                    (quantity, variant_id)
+                )
+
+        conn.execute(
+            "UPDATE shop_orders SET first_name=?, last_name=?, phone=? WHERE id=?",
+            (first_name, last_name, phone, order_id)
+        )
         conn.execute('COMMIT')
     return jsonify({'ok': True})
 
